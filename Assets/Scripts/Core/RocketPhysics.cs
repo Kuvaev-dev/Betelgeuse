@@ -3,10 +3,17 @@ using UnityEngine;
 [RequireComponent(typeof(DataLogger))]
 public class RocketPhysics : MonoBehaviour
 {
+    [Header("Основні параметри")]
     public SimulationParameters parameters;
 
     public RocketState state = new RocketState();
     private DataLogger logger;
+
+    private PIDController pitchPID = new PIDController();
+    private PIDController yawPID = new PIDController();
+
+    private ParticleSystem engineFlame;
+    private ParticleSystem engineSmoke;
 
     private float currentTime = 0f;
 
@@ -14,6 +21,10 @@ public class RocketPhysics : MonoBehaviour
     {
         logger = GetComponent<DataLogger>();
         logger.Initialize();
+
+        engineFlame = transform.Find("EngineFlame")?.GetComponent<ParticleSystem>();
+        engineSmoke = transform.Find("EngineSmoke")?.GetComponent<ParticleSystem>();
+
         InitializeSimulation();
     }
 
@@ -21,6 +32,7 @@ public class RocketPhysics : MonoBehaviour
     {
         if (parameters == null)
         {
+            Debug.LogError("SimulationParameters не призначено на RocketPhysics!");
             return;
         }
 
@@ -34,6 +46,8 @@ public class RocketPhysics : MonoBehaviour
 
         transform.position = state.position;
         transform.rotation = state.rotation;
+
+        Debug.Log($"Ракета ініціалізована. Висота: {state.position.y} м");
     }
 
     void FixedUpdate()
@@ -48,15 +62,43 @@ public class RocketPhysics : MonoBehaviour
 
         logger.Log(state);
 
-        state.currentThrust = CalculateThrust();
+        UpdateControl();
 
         if (state.position.y <= 0.1f)
             FinishLanding();
     }
 
+    private void UpdateControl()
+    {
+        // Стабілізація
+        Vector3 up = state.rotation * Vector3.up;
+        float pitchError = Vector3.SignedAngle(up, Vector3.up, Vector3.right);
+        float yawError = Vector3.SignedAngle(up, Vector3.up, Vector3.forward);
+
+        float pitchCorrection = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
+        float yawCorrection = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
+
+        Quaternion targetGimbal = Quaternion.Euler(pitchCorrection * 0.8f, 0, yawCorrection * 0.8f);
+        state.thrustDirection = targetGimbal * Vector3.up;
+
+        state.currentThrust = CalculateThrust();
+
+        // Візуалізація двигуна
+        bool engineOn = state.currentThrust > 10000f;
+        if (engineFlame != null)
+        {
+            var em = engineFlame.emission;
+            em.enabled = engineOn;
+        }
+        if (engineSmoke != null)
+        {
+            var em = engineSmoke.emission;
+            em.enabled = engineOn;
+        }
+    }
+
     private void RungeKutta4Step(float dt)
     {
-        // Повноцінний RK4
         Vector3 k1v = state.velocity;
         Vector3 k1a = CalculateAcceleration();
 
@@ -72,7 +114,6 @@ public class RocketPhysics : MonoBehaviour
         state.velocity += (k1a + 2 * k2a + 2 * k3a + k4a) * (dt / 6f);
         state.position += (k1v + 2 * k2v + 2 * k3v + k4v) * (dt / 6f);
 
-        // Витрата палива
         if (state.currentFuelMass > 0 && state.currentThrust > 0)
         {
             float massFlow = state.currentThrust / (parameters.isp * 9.81f);
@@ -96,21 +137,16 @@ public class RocketPhysics : MonoBehaviour
         float density = AtmosphereModel.GetDensity(pos.y);
         float drag = 0.5f * density * vel.sqrMagnitude * 8.5f;
         if (vel.sqrMagnitude > 0.1f)
-        {
             acc -= vel.normalized * (drag / state.TotalMass);
-        }
 
         return acc;
     }
 
     private float CalculateThrust()
     {
-        if (state.position.y < 1000f)
-        {
-            return state.TotalMass * 9.81f * 1.75f; // Suicide burn
-        }
-
-        return state.TotalMass * 9.81f * 1.1f;
+        if (state.position.y < 1200f)
+            return state.TotalMass * 9.81f * 1.85f;
+        return state.TotalMass * 9.81f * 1.05f;
     }
 
     private void FinishLanding()
