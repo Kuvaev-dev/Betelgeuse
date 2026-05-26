@@ -15,6 +15,8 @@ public class RocketPhysics : MonoBehaviour
     private ParticleSystem engineFlame;
     private ParticleSystem engineSmoke;
 
+    public FuzzyLandingController fuzzyController;
+
     private float currentTime = 0f;
 
     void Start()
@@ -24,6 +26,9 @@ public class RocketPhysics : MonoBehaviour
 
         engineFlame = transform.Find("EngineFlame")?.GetComponent<ParticleSystem>();
         engineSmoke = transform.Find("EngineSmoke")?.GetComponent<ParticleSystem>();
+
+        if (fuzzyController == null)
+            fuzzyController = GetComponent<FuzzyLandingController>();
 
         InitializeSimulation();
     }
@@ -47,7 +52,7 @@ public class RocketPhysics : MonoBehaviour
         transform.position = state.position;
         transform.rotation = state.rotation;
 
-        Debug.Log($"Ракета ініціалізована. Висота: {state.position.y} м");
+        Debug.Log($"Ракета ініціалізована на висоті: {state.position.y:F1} м");
     }
 
     void FixedUpdate()
@@ -70,18 +75,33 @@ public class RocketPhysics : MonoBehaviour
 
     private void UpdateControl()
     {
-        // Стабілізація
+        if (parameters == null) return;
+
         Vector3 up = state.rotation * Vector3.up;
         float pitchError = Vector3.SignedAngle(up, Vector3.up, Vector3.right);
         float yawError = Vector3.SignedAngle(up, Vector3.up, Vector3.forward);
 
-        float pitchCorrection = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
-        float yawCorrection = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
+        if (fuzzyController != null && fuzzyController.isActive)
+        {
+            state.currentThrust = fuzzyController.CalculateThrust(
+                state.position.y,
+                state.velocity.y,
+                state.TotalMass);
 
-        Quaternion targetGimbal = Quaternion.Euler(pitchCorrection * 0.8f, 0, yawCorrection * 0.8f);
-        state.thrustDirection = targetGimbal * Vector3.up;
+            Vector3 fuzzyGimbal = fuzzyController.CalculateGimbal(pitchError, yawError);
+            state.thrustDirection = Quaternion.Euler(fuzzyGimbal) * Vector3.up;
+        }
+        else
+        {
+            // Резервний PID
+            float pitchCorrection = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
+            float yawCorrection = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
 
-        state.currentThrust = CalculateThrust();
+            Quaternion targetGimbal = Quaternion.Euler(pitchCorrection * 0.8f, 0, yawCorrection * 0.8f);
+            state.thrustDirection = targetGimbal * Vector3.up;
+
+            state.currentThrust = CalculateThrust();
+        }
 
         // Візуалізація двигуна
         bool engineOn = state.currentThrust > 10000f;
