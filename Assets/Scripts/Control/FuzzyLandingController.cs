@@ -2,63 +2,49 @@ using UnityEngine;
 
 public class FuzzyLandingController : MonoBehaviour
 {
-    [Header("Налаштування Fuzzy Logic")]
-    [Range(0.5f, 3f)] public float heightImportance = 1.8f;
-    [Range(0.5f, 3f)] public float velocityImportance = 1.4f;
+    [Header("Fuzzy Logic - Налаштування")]
+    [Range(0.5f, 4f)] public float heightGain = 2.0f;
+    [Range(0.5f, 4f)] public float velocityGain = 1.6f;
 
-    [Header("Режим")]
     public bool isActive = true;
 
-    /// <summary>
-    /// Основний метод нечіткої логіки для розрахунку тяги
-    /// </summary>
-    public float CalculateThrust(float currentHeight, float verticalVelocity, float currentMass)
+    public float CalculateThrust(float height, float verticalVelocity, float mass)
     {
         if (!isActive)
-            return currentMass * 9.81f * 1.1f;
+            return mass * 9.81f * 1.1f;
 
-        // Нормалізація вхідних величин
-        float normalizedHeight = Mathf.Clamp01(currentHeight / 2500f);
-        float normalizedVelocity = Mathf.Clamp(verticalVelocity / -80f, -1f, 1f); // негативна = падаємо
+        float normHeight = Mathf.Clamp01(height / 3000f);
+        float normVel = Mathf.Clamp(verticalVelocity / -100f, -1.5f, 1f);
 
-        float thrustMultiplier = 1.1f;
+        float thrustMult = 1.1f;
 
-        // Нечіткі правила (спрощена Mamdani-подібна логіка)
-        if (normalizedHeight > 0.65f) // Високо — економимо паливо
+        // Покращена нечітка логіка
+        if (normHeight > 0.7f)                    // Високо
+            thrustMult = 1.05f;
+        else if (normHeight > 0.4f)               // Середня висота
+            thrustMult = 1.3f + normVel * 0.5f;
+        else                                      // Низько — посадка
         {
-            thrustMultiplier = 1.05f;
-        }
-        else if (normalizedHeight > 0.35f) // Середня висота
-        {
-            thrustMultiplier = 1.25f + normalizedVelocity * 0.4f;
-        }
-        else // Низько — критична фаза посадки
-        {
-            if (normalizedVelocity < -0.75f)        // Дуже швидко падаємо
-                thrustMultiplier = 2.3f;
-            else if (normalizedVelocity < -0.4f)    // Середня швидкість падіння
-                thrustMultiplier = 1.85f;
+            if (normVel < -1.0f)                  // Дуже швидке падіння
+                thrustMult = 2.4f;
+            else if (normVel < -0.6f)
+                thrustMult = 1.95f;
+            else if (normVel < -0.3f)
+                thrustMult = 1.6f;
             else
-                thrustMultiplier = 1.45f;
+                thrustMult = 1.25f;
         }
 
-        return Mathf.Clamp(currentMass * 9.81f * thrustMultiplier, 0f, state.maxThrust * 1.1f);
+        return Mathf.Clamp(mass * 9.81f * thrustMult, 0f, 1200000f);
     }
 
-    /// <summary>
-    /// Нечітке керування вектором тяги (gimbal)
-    /// </summary>
     public Vector3 CalculateGimbal(float pitchError, float yawError)
     {
-        if (!isActive)
-            return Vector3.zero;
+        if (!isActive) return Vector3.zero;
 
-        // Розмиття помилок
-        float pitchCorr = Mathf.Clamp(pitchError * 1.1f, -28f, 28f);
-        float yawCorr = Mathf.Clamp(yawError * 1.1f, -28f, 28f);
+        float pitchCorr = Mathf.Clamp(pitchError * 1.15f, -30f, 30f);
+        float yawCorr = Mathf.Clamp(yawError * 1.15f, -30f, 30f);
 
         return new Vector3(pitchCorr, 0, yawCorr);
     }
-
-    [HideInInspector] public RocketState state;
 }

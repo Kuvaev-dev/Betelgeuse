@@ -6,6 +6,11 @@ public class RocketPhysics : MonoBehaviour
     [Header("Основні параметри")]
     public SimulationParameters parameters;
 
+    public enum ControlMode { PID, Fuzzy }
+
+    [Header("Режим керування")]
+    public ControlMode controlMode = ControlMode.Fuzzy;
+
     public RocketState state = new RocketState();
     private DataLogger logger;
 
@@ -81,19 +86,17 @@ public class RocketPhysics : MonoBehaviour
         float pitchError = Vector3.SignedAngle(up, Vector3.up, Vector3.right);
         float yawError = Vector3.SignedAngle(up, Vector3.up, Vector3.forward);
 
-        if (fuzzyController != null && fuzzyController.isActive)
+        if (controlMode == ControlMode.Fuzzy && fuzzyController != null && fuzzyController.isActive)
         {
-            state.currentThrust = fuzzyController.CalculateThrust(
-                state.position.y,
-                state.velocity.y,
-                state.TotalMass);
+            // Fuzzy Logic
+            state.currentThrust = fuzzyController.CalculateThrust(state.position.y, state.velocity.y, state.TotalMass);
 
             Vector3 fuzzyGimbal = fuzzyController.CalculateGimbal(pitchError, yawError);
             state.thrustDirection = Quaternion.Euler(fuzzyGimbal) * Vector3.up;
         }
         else
         {
-            // Резервний PID
+            // PID
             float pitchCorrection = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
             float yawCorrection = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
 
