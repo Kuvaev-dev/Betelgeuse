@@ -22,6 +22,9 @@ public class RocketPhysics : MonoBehaviour
 
     public FuzzyLandingController fuzzyController;
 
+    public LandingMetrics metrics = new LandingMetrics();
+    private float maxHeightRecorded = 0f;
+
     private float currentTime = 0f;
 
     void Start()
@@ -63,6 +66,7 @@ public class RocketPhysics : MonoBehaviour
     void FixedUpdate()
     {
         if (state.isLanded || state.simulationFinished) return;
+        if (state.position.y > maxHeightRecorded) maxHeightRecorded = state.position.y;
 
         currentTime += parameters.fixedTimeStep;
         state.time = currentTime;
@@ -174,16 +178,43 @@ public class RocketPhysics : MonoBehaviour
 
     private void FinishLanding()
     {
-        state.position.y = 0;
+        state.position.y = 0f;
         state.velocity = Vector3.zero;
         state.isLanded = true;
         state.simulationFinished = true;
+
+        // Заповнення метрик
+        metrics.touchdownVelocity = Mathf.Abs(state.velocity.y);
+        metrics.landingAngleError = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
+        metrics.fuelRemaining = state.currentFuelMass;
+        metrics.maxAltitude = maxHeightRecorded;
+        metrics.totalFlightTime = state.time;
+        metrics.isSuccessfulLanding = (metrics.touchdownVelocity < 3f) && (metrics.landingAngleError < 8f);
+
         logger.Save();
+
+        string algorithm = (controlMode == ControlMode.Fuzzy) ? "Fuzzy Logic" : "PID";
+        metrics.PrintResults(algorithm);
     }
 
     private void ApplyToTransform()
     {
         transform.position = state.position;
         transform.rotation = state.rotation;
+    }
+
+    public void ResetSimulation()
+    {
+        state.isLanded = false;
+        state.simulationFinished = false;
+        currentTime = 0f;
+        maxHeightRecorded = 0f;
+        metrics = new LandingMetrics();
+
+        pitchPID.Reset();
+        yawPID.Reset();
+
+        InitializeSimulation();
+        logger.Initialize(); // новий лог
     }
 }
