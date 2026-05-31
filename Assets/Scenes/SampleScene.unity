@@ -538,6 +538,7 @@ GameObject:
   - component: {fileID: 239954546}
   - component: {fileID: 239954545}
   - component: {fileID: 239954547}
+  - component: {fileID: 239954548}
   m_Layer: 0
   m_Name: Rocket
   m_TagString: Untagged
@@ -697,6 +698,13 @@ MonoBehaviour:
     isLanded: 0
     simulationFinished: 0
   fuzzyController: {fileID: 0}
+  metrics:
+    touchdownVelocity: 0
+    landingAngleError: 0
+    fuelRemaining: 0
+    maxAltitude: 0
+    totalFlightTime: 0
+    isSuccessfulLanding: 0
 --- !u!114 &239954546
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -724,6 +732,22 @@ MonoBehaviour:
   heightGain: 2
   velocityGain: 1.6
   isActive: 1
+--- !u!114 &239954548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 239954537}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6465a3455af6e2941829f5a3081132d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SimulationManager
+  rocketPhysics: {fileID: 0}
+  testsPerMode: 15
+  delayBetweenTests: 0.5
+  startBatchTest: 1
 --- !u!1 &254621107
 GameObject:
   m_ObjectHideFlags: 0
