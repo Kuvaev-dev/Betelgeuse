@@ -103,11 +103,13 @@ public class RocketPhysics : MonoBehaviour
         }
         else if (controlMode == ControlMode.Neural && neuralController != null && neuralController.isActive)
         {
+            float angleError = Vector3.SignedAngle(up, Vector3.up, Vector3.right);
             state.currentThrust = neuralController.CalculateThrust(
                 state.position.y,
                 state.velocity.y,
                 state.TotalMass,
-                state.currentThrust);
+                state.currentThrust,
+                angleError);
 
             Vector3 g = neuralController.CalculateGimbal(pitchError, yawError);
             state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
@@ -198,7 +200,12 @@ public class RocketPhysics : MonoBehaviour
 
         logger.Save();
 
-        string algorithm = (controlMode == ControlMode.Fuzzy) ? "Fuzzy Logic" : "PID";
+        string algorithm = controlMode switch
+        {
+            ControlMode.Fuzzy => "Fuzzy Logic",
+            ControlMode.Neural => "Neural Network",
+            _ => "PID"
+        };
         metrics.PrintResults(algorithm);
     }
 

@@ -20,6 +20,7 @@ public class SimulationManager : MonoBehaviour
 
     private List<LandingMetrics> pidResults = new List<LandingMetrics>();
     private List<LandingMetrics> fuzzyResults = new List<LandingMetrics>();
+    private List<LandingMetrics> neuralResults = new List<LandingMetrics>();
 
     [Header("Запуск")]
     public bool runFullExperiment = false;
@@ -50,6 +51,10 @@ public class SimulationManager : MonoBehaviour
         // Тест Fuzzy
         rocketPhysics.controlMode = RocketPhysics.ControlMode.Fuzzy;
         yield return StartCoroutine(RunTestsWithNoise("Fuzzy Logic", fuzzyResults));
+
+        // Тест Neural
+        rocketPhysics.controlMode = RocketPhysics.ControlMode.Neural;
+        yield return StartCoroutine(RunTestsWithNoise("Neural Network", neuralResults));
 
         ShowAdvancedComparison();
         SaveAdvancedCSV();
