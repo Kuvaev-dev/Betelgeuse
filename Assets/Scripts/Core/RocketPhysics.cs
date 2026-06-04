@@ -6,7 +6,7 @@ public class RocketPhysics : MonoBehaviour
     [Header("Основні параметри")]
     public SimulationParameters parameters;
 
-    public enum ControlMode { PID, Fuzzy }
+    public enum ControlMode { PID, Fuzzy, Neural }
 
     [Header("Режим керування")]
     public ControlMode controlMode = ControlMode.Fuzzy;
@@ -21,6 +21,8 @@ public class RocketPhysics : MonoBehaviour
     private ParticleSystem engineSmoke;
 
     public FuzzyLandingController fuzzyController;
+
+    public NeuralController neuralController;
 
     public LandingMetrics metrics = new LandingMetrics();
     private float maxHeightRecorded = 0f;
@@ -37,6 +39,9 @@ public class RocketPhysics : MonoBehaviour
 
         if (fuzzyController == null)
             fuzzyController = GetComponent<FuzzyLandingController>();
+
+        if (neuralController == null)
+            neuralController = GetComponent<NeuralController>();
 
         InitializeSimulation();
     }
@@ -92,11 +97,20 @@ public class RocketPhysics : MonoBehaviour
 
         if (controlMode == ControlMode.Fuzzy && fuzzyController != null && fuzzyController.isActive)
         {
-            // Fuzzy Logic
             state.currentThrust = fuzzyController.CalculateThrust(state.position.y, state.velocity.y, state.TotalMass);
+            Vector3 g = fuzzyController.CalculateGimbal(pitchError, yawError);
+            state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
+        }
+        else if (controlMode == ControlMode.Neural && neuralController != null && neuralController.isActive)
+        {
+            state.currentThrust = neuralController.CalculateThrust(
+                state.position.y,
+                state.velocity.y,
+                state.TotalMass,
+                state.currentThrust);
 
-            Vector3 fuzzyGimbal = fuzzyController.CalculateGimbal(pitchError, yawError);
-            state.thrustDirection = Quaternion.Euler(fuzzyGimbal) * Vector3.up;
+            Vector3 g = neuralController.CalculateGimbal(pitchError, yawError);
+            state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
         }
         else
         {
@@ -106,22 +120,13 @@ public class RocketPhysics : MonoBehaviour
 
             Quaternion targetGimbal = Quaternion.Euler(pitchCorrection * 0.8f, 0, yawCorrection * 0.8f);
             state.thrustDirection = targetGimbal * Vector3.up;
-
             state.currentThrust = CalculateThrust();
         }
 
         // Візуалізація двигуна
         bool engineOn = state.currentThrust > 10000f;
-        if (engineFlame != null)
-        {
-            var em = engineFlame.emission;
-            em.enabled = engineOn;
-        }
-        if (engineSmoke != null)
-        {
-            var em = engineSmoke.emission;
-            em.enabled = engineOn;
-        }
+        if (engineFlame != null) { var em = engineFlame.emission; em.enabled = engineOn; }
+        if (engineSmoke != null) { var em = engineSmoke.emission; em.enabled = engineOn; }
     }
 
     private void RungeKutta4Step(float dt)
