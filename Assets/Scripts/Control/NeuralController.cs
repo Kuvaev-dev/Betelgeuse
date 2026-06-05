@@ -2,12 +2,19 @@ using UnityEngine;
 
 public class NeuralController : MonoBehaviour
 {
-    [Header("Neural Network Controller (Demo)")]
+    [Header("Neural Network (з навчанням)")]
     public bool isActive = true;
+    public bool enableTraining = true;
 
-    // Вага
-    private float[] weights = { 0.8f, -1.2f, 0.6f, 1.1f };
-    private float[] outputWeights = { 1.3f, -0.9f };
+    // Вага (можна буде навчати)
+    [Header("Ваги мережі")]
+    public float[] weightsInputHidden = { 0.8f, -1.2f, 0.6f, 1.1f };
+    public float[] weightsHiddenOutput = { 1.3f, -0.9f };
+
+    [Header("Параметри навчання")]
+    public float learningRate = 0.05f;
+
+    private float lastError = 0f;
 
     public float CalculateThrust(float height, float verticalVelocity, float mass, float currentThrust, float angleError)
     {
@@ -18,10 +25,12 @@ public class NeuralController : MonoBehaviour
         float a = Mathf.Clamp01(Mathf.Abs(angleError) / 45f);
         float t = currentThrust / (mass * 9.81f);
 
-        float hidden = h * weights[0] + v * weights[1] + a * weights[2] + t * weights[3];
+        float hidden = h * weightsInputHidden[0] + v * weightsInputHidden[1] +
+                       a * weightsInputHidden[2] + t * weightsInputHidden[3];
+
         hidden = (float)System.Math.Tanh(hidden);
 
-        float output = hidden * outputWeights[0] + outputWeights[1];
+        float output = hidden * weightsHiddenOutput[0] + weightsHiddenOutput[1];
         float thrustMult = Mathf.Clamp(output + 1.2f, 0.8f, 2.8f);
 
         return mass * 9.81f * thrustMult;
@@ -31,5 +40,27 @@ public class NeuralController : MonoBehaviour
     {
         if (!isActive) return Vector3.zero;
         return new Vector3(pitchError * 0.9f, 0, yawError * 0.9f);
+    }
+
+    /// <summary>
+    /// Просте навчання на основі помилки посадки
+    /// </summary>
+    public void Train(float touchdownVelocity, float angleError, float fuelRemaining)
+    {
+        if (!enableTraining) return;
+
+        float error = touchdownVelocity * 0.6f + angleError * 0.3f + (5000f - fuelRemaining) / 1000f * 0.1f;
+
+        // Якщо помилка менша за попередню — підкріплюємо ваги
+        if (error < lastError)
+        {
+            for (int i = 0; i < weightsInputHidden.Length; i++)
+                weightsInputHidden[i] += (Random.value - 0.5f) * learningRate;
+
+            for (int i = 0; i < weightsHiddenOutput.Length; i++)
+                weightsHiddenOutput[i] += (Random.value - 0.5f) * learningRate * 0.5f;
+        }
+
+        lastError = error;
     }
 }

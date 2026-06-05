@@ -207,6 +207,15 @@ public class RocketPhysics : MonoBehaviour
             _ => "PID"
         };
         metrics.PrintResults(algorithm);
+
+        if (controlMode == ControlMode.Neural && neuralController != null)
+        {
+            neuralController.Train(
+                metrics.touchdownVelocity,
+                metrics.landingAngleError,
+                metrics.fuelRemaining
+            );
+        }
     }
 
     private void ApplyToTransform()

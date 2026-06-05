@@ -4,12 +4,14 @@ using TMPro;
 
 public class ExperimentDashboard : MonoBehaviour
 {
+    [Header("Посилання")]
     public SimulationManager simulationManager;
     public RocketPhysics rocketPhysics;
 
     [Header("Кнопки")]
     public Button btnRunPID;
     public Button btnRunFuzzy;
+    public Button btnRunNeural;
     public Button btnRunFullTest;
     public Button btnReset;
 
@@ -17,37 +19,33 @@ public class ExperimentDashboard : MonoBehaviour
     public TMP_InputField testsCountInput;
     public Toggle noiseToggle;
     public Slider windSlider;
+    public Toggle enableNeuralTrainingToggle;
 
     [Header("Статистика")]
-    public TMP_Text pidSuccessText;
-    public TMP_Text fuzzySuccessText;
-    public TMP_Text comparisonText;
+    public TMP_Text pidStatsText;
+    public TMP_Text fuzzyStatsText;
+    public TMP_Text neuralStatsText;
+    public TMP_Text winnerText;
 
     private void Start()
     {
         // Прив'язка кнопок
-        if (btnRunPID != null) btnRunPID.onClick.AddListener(RunPIDTest);
-        if (btnRunFuzzy != null) btnRunFuzzy.onClick.AddListener(RunFuzzyTest);
-        if (btnRunFullTest != null) btnRunFullTest.onClick.AddListener(RunFullExperiment);
-        if (btnReset != null) btnReset.onClick.AddListener(ResetAll);
+        if (btnRunPID) btnRunPID.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.PID));
+        if (btnRunFuzzy) btnRunFuzzy.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.Fuzzy));
+        if (btnRunNeural) btnRunNeural.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.Neural));
+        if (btnRunFullTest) btnRunFullTest.onClick.AddListener(RunFullExperiment);
+        if (btnReset) btnReset.onClick.AddListener(ResetSimulation);
 
-        if (testsCountInput != null)
+        if (testsCountInput)
             testsCountInput.text = simulationManager.testsPerAlgorithm.ToString();
     }
 
-    private void RunPIDTest()
+    private void RunSingleTest(RocketPhysics.ControlMode mode)
     {
         if (rocketPhysics == null) return;
-        rocketPhysics.controlMode = RocketPhysics.ControlMode.PID;
-        Debug.Log("▶ Запуск одиночної симуляції PID");
-        rocketPhysics.ResetSimulation();
-    }
 
-    private void RunFuzzyTest()
-    {
-        if (rocketPhysics == null) return;
-        rocketPhysics.controlMode = RocketPhysics.ControlMode.Fuzzy;
-        Debug.Log("▶ Запуск одиночної симуляції Fuzzy Logic");
+        rocketPhysics.controlMode = mode;
+        Debug.Log($"▶ Запуск симуляції: {mode}");
         rocketPhysics.ResetSimulation();
     }
 
@@ -55,33 +53,40 @@ public class ExperimentDashboard : MonoBehaviour
     {
         if (simulationManager == null) return;
 
-        if (testsCountInput != null && int.TryParse(testsCountInput.text, out int count))
+        // Оновлюємо параметри
+        if (testsCountInput && int.TryParse(testsCountInput.text, out int count))
             simulationManager.testsPerAlgorithm = count;
 
-        simulationManager.enableNoise = noiseToggle.isOn;
-        simulationManager.windStrength = windSlider.value;
+        simulationManager.enableNoise = noiseToggle != null && noiseToggle.isOn;
+        simulationManager.windStrength = windSlider != null ? windSlider.value : 10f;
 
+        // Запускаємо повний експеримент
         simulationManager.runFullExperiment = true;
-        Debug.Log("🚀 Запущено повний порівняльний експеримент");
+        Debug.Log("🚀 Запущено повний порівняльний експеримент (PID vs Fuzzy vs Neural)");
     }
 
-    private void ResetAll()
+    private void ResetSimulation()
     {
         if (rocketPhysics != null)
             rocketPhysics.ResetSimulation();
     }
 
-    public void UpdateComparisonUI(float pidSuccess, float fuzzySuccess)
+    /// <summary>
+    /// Оновлює статистику на Dashboard
+    /// </summary>
+    public void UpdateStatistics(float pidSuccess, float fuzzySuccess, float neuralSuccess)
     {
-        if (pidSuccessText != null)
-            pidSuccessText.text = $"PID: {pidSuccess:F1}% успішності";
+        if (pidStatsText) pidStatsText.text = $"PID: {pidSuccess:F1}%";
+        if (fuzzyStatsText) fuzzyStatsText.text = $"Fuzzy: {fuzzySuccess:F1}%";
+        if (neuralStatsText) neuralStatsText.text = $"Neural: {neuralSuccess:F1}%";
 
-        if (fuzzySuccessText != null)
-            fuzzySuccessText.text = $"Fuzzy: {fuzzySuccess:F1}% успішності";
+        string winner = "Neural Network";
+        float max = Mathf.Max(pidSuccess, fuzzySuccess, neuralSuccess);
 
-        if (comparisonText != null)
-            comparisonText.text = fuzzySuccess > pidSuccess ?
-                "Fuzzy Logic кращий у цій серії" :
-                "PID кращий у цій серії";
+        if (max == fuzzySuccess) winner = "Fuzzy Logic";
+        else if (max == pidSuccess) winner = "PID";
+
+        if (winnerText)
+            winnerText.text = $"🏆 Найкращий: {winner}";
     }
 }

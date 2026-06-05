@@ -6,138 +6,206 @@ using System.IO;
 public class SimulationManager : MonoBehaviour
 {
     [Header("Основні посилання")]
+    [Tooltip("Якщо не призначено — шукає автоматично")]
     public RocketPhysics rocketPhysics;
 
     [Header("Налаштування експерименту")]
-    public int testsPerAlgorithm = 30;
-    public float delay = 0.6f;
+    public int testsPerAlgorithm = 25;
+    public float delayBetweenTests = 0.7f;
 
     [Header("Невизначеність (Monte-Carlo)")]
     public bool enableNoise = true;
-    [Range(0f, 20f)] public float windStrength = 8f;
-    [Range(0f, 10f)] public float massVariation = 5f;      // %
-    [Range(0f, 8f)] public float angleVariation = 6f;      // градуси
+    [Range(0f, 25f)] public float windStrength = 10f;
+    [Range(0f, 15f)] public float massVariationPercent = 6f;
+    [Range(0f, 10f)] public float angleVariationDegrees = 7f;
 
     private List<LandingMetrics> pidResults = new List<LandingMetrics>();
     private List<LandingMetrics> fuzzyResults = new List<LandingMetrics>();
     private List<LandingMetrics> neuralResults = new List<LandingMetrics>();
 
-    [Header("Запуск")]
+    [Header("Запуск тестів")]
+    [Tooltip("Постав галочку і натисни Play, щоб запустити повний експеримент")]
     public bool runFullExperiment = false;
 
-    void Awake()
+    private float originalFuelMass;
+
+    private void Awake()
     {
         if (rocketPhysics == null)
             rocketPhysics = FindObjectOfType<RocketPhysics>();
+
+        if (rocketPhysics != null && rocketPhysics.parameters != null)
+            originalFuelMass = rocketPhysics.parameters.fuelMass;
     }
 
-    void Update()
+    private void Update()
     {
         if (runFullExperiment)
         {
             runFullExperiment = false;
-            StartCoroutine(RunAdvancedExperiment());
+            StartCoroutine(RunFullComparisonExperiment());
         }
     }
 
-    private IEnumerator RunAdvancedExperiment()
+    private IEnumerator RunFullComparisonExperiment()
     {
-        Debug.Log("🔬 ПОЧАТОК РОЗШИРЕНОГО ЕКСПЕРИМЕНТУ З НЕВИЗНАЧЕНІСТЮ");
+        Debug.Log("══════════════════════════════════════════════════════════════");
+        Debug.Log("🚀 ПОЧАТОК ПОВНОГО ПОРІВНЯЛЬНОГО ЕКСПЕРИМЕНТУ (PID vs Fuzzy vs Neural)");
+        Debug.Log("══════════════════════════════════════════════════════════════");
 
-        // Тест PID
+        // === PID ===
         rocketPhysics.controlMode = RocketPhysics.ControlMode.PID;
-        yield return StartCoroutine(RunTestsWithNoise("PID", pidResults));
+        yield return StartCoroutine(RunTestsForAlgorithm("PID", pidResults));
 
-        // Тест Fuzzy
+        // === Fuzzy Logic ===
         rocketPhysics.controlMode = RocketPhysics.ControlMode.Fuzzy;
-        yield return StartCoroutine(RunTestsWithNoise("Fuzzy Logic", fuzzyResults));
+        yield return StartCoroutine(RunTestsForAlgorithm("Fuzzy Logic", fuzzyResults));
 
-        // Тест Neural
+        // === Neural Network ===
         rocketPhysics.controlMode = RocketPhysics.ControlMode.Neural;
-        yield return StartCoroutine(RunTestsWithNoise("Neural Network", neuralResults));
+        yield return StartCoroutine(RunTestsForAlgorithm("Neural Network", neuralResults));
 
-        ShowAdvancedComparison();
-        SaveAdvancedCSV();
-    }
+        // Показати результати
+        ShowFinalComparison();
 
-    private IEnumerator RunTestsWithNoise(string modeName, List<LandingMetrics> results)
-    {
-        results.Clear();
-        for (int i = 0; i < testsPerAlgorithm; i++)
+        // Оновлюємо Dashboard
+        if (FindObjectOfType<ExperimentDashboard>() != null)
         {
-            ApplyRandomNoise();
-            rocketPhysics.ResetSimulation();
+            float pid = GetSuccessRate(pidResults);
+            float fuzzy = GetSuccessRate(fuzzyResults);
+            float neural = GetSuccessRate(neuralResults);
 
-            yield return new WaitForSeconds(delay);
-
-            while (!rocketPhysics.state.simulationFinished)
-                yield return null;
-
-            results.Add(rocketPhysics.metrics);
-            Debug.Log($"[{modeName}] Тест {i + 1}/{testsPerAlgorithm} | Успіх: {rocketPhysics.metrics.isSuccessfulLanding}");
+            FindObjectOfType<ExperimentDashboard>().UpdateStatistics(pid, fuzzy, neural);
         }
-    }
 
-    private void ApplyRandomNoise()
-    {
-        if (!enableNoise || rocketPhysics == null) return;
+        // Зберегти в CSV
+        SaveComparisonToCSV();
 
-        // Випадковий вітер (бічний вплив)
-        rocketPhysics.state.velocity += new Vector3(
-            Random.Range(-windStrength, windStrength),
-            0,
-            Random.Range(-windStrength * 0.6f, windStrength * 0.6f)
-        );
-
-        // Розкид маси палива
-        float massNoise = Random.Range(-massVariation, massVariation);
-        rocketPhysics.parameters.fuelMass = rocketPhysics.parameters.fuelMass * (1 + massNoise / 100f);
-
-        // Розкид початкового кута
-        Vector3 currentEuler = rocketPhysics.parameters.startEulerAngles;
-        currentEuler.z += Random.Range(-angleVariation, angleVariation);
-        rocketPhysics.parameters.startEulerAngles = currentEuler;
-    }
-
-    private void ShowAdvancedComparison()
-    {
-        Debug.Log("══════════════════════════════════════════════");
-        Debug.Log("       РЕЗУЛЬТАТИ ЕКСПЕРИМЕНТУ З НЕВИЗНАЧЕНІСТЮ");
-        Debug.Log("══════════════════════════════════════════════");
-        PrintStats("PID", pidResults);
-        PrintStats("Fuzzy Logic", fuzzyResults);
-    }
-
-    private void PrintStats(string name, List<LandingMetrics> list)
-    {
-        float success = list.Count > 0 ? (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f : 0;
-        float avgScore = list.Count > 0 ? GetAverage(list, m => m.SuccessScore) : 0;
-
-        Debug.Log($"📈 {name} → Успішність: {success:F1}% | Середня оцінка: {avgScore:F1}/100");
-    }
-
-    private float GetAverage(List<LandingMetrics> list, System.Func<LandingMetrics, float> selector)
-    {
-        float sum = 0;
-        foreach (var m in list) sum += selector(m);
-        return sum / list.Count;
-    }
-
-    private void SaveAdvancedCSV()
-    {
-        string path = Path.Combine(Application.dataPath, "..", "SimulationLogs",
-            $"Experiment_With_Noise_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
-
-        var lines = new List<string> { "Algorithm,Tests,SuccessRate(%),AvgScore" };
-        lines.Add($"PID,{testsPerAlgorithm},{GetSuccessRate(pidResults):F2},{GetAverage(pidResults, m => m.SuccessScore):F2}");
-        lines.Add($"Fuzzy,{testsPerAlgorithm},{GetSuccessRate(fuzzyResults):F2},{GetAverage(fuzzyResults, m => m.SuccessScore):F2}");
-
-        File.WriteAllLines(path, lines);
-        Debug.Log($"💾 Розширений експеримент збережений: {path}");
+        Debug.Log("🎉 ЕКСПЕРИМЕНТ ЗАВЕРШЕНО");
     }
 
     private float GetSuccessRate(List<LandingMetrics> list)
     {
         return list.Count > 0 ? (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f : 0;
+    }
+
+    private IEnumerator RunTestsForAlgorithm(string algorithmName, List<LandingMetrics> resultsList)
+    {
+        resultsList.Clear();
+        Debug.Log($"\n▶ Запуск {testsPerAlgorithm} симуляцій для {algorithmName}...");
+
+        for (int i = 0; i < testsPerAlgorithm; i++)
+        {
+            // Відновлюємо оригінальну масу палива перед кожним тестом
+            if (rocketPhysics != null && rocketPhysics.parameters != null)
+                rocketPhysics.parameters.fuelMass = originalFuelMass;
+
+            if (enableNoise)
+                ApplyRandomNoise();
+
+            rocketPhysics.ResetSimulation();
+
+            yield return new WaitForSeconds(delayBetweenTests);
+
+            while (!rocketPhysics.state.simulationFinished)
+                yield return null;
+
+            resultsList.Add(rocketPhysics.metrics);
+            Debug.Log($"   [{algorithmName}] Тест {i + 1}/{testsPerAlgorithm} | Успіх: {rocketPhysics.metrics.isSuccessfulLanding}");
+        }
+    }
+
+    private void ApplyRandomNoise()
+    {
+        if (rocketPhysics == null) return;
+
+        // Випадковий бічний вітер
+        rocketPhysics.state.velocity += new Vector3(
+            Random.Range(-windStrength, windStrength),
+            0,
+            Random.Range(-windStrength * 0.5f, windStrength * 0.5f)
+        );
+
+        // Розкид маси палива
+        float massNoise = Random.Range(-massVariationPercent, massVariationPercent) / 100f;
+        rocketPhysics.parameters.fuelMass *= (1f + massNoise);
+
+        // Розкид початкового кута нахилу
+        Vector3 euler = rocketPhysics.parameters.startEulerAngles;
+        euler.z += Random.Range(-angleVariationDegrees, angleVariationDegrees);
+        rocketPhysics.parameters.startEulerAngles = euler;
+    }
+
+    private void ShowFinalComparison()
+    {
+        Debug.Log("\n══════════════════════════════════════════════════════════════");
+        Debug.Log("                    ФІНАЛЬНЕ ПОРІВНЯННЯ АЛГОРИТМІВ");
+        Debug.Log("══════════════════════════════════════════════════════════════");
+
+        PrintStats("PID", pidResults);
+        PrintStats("Fuzzy Logic", fuzzyResults);
+        PrintStats("Neural Network", neuralResults);
+
+        Debug.Log("══════════════════════════════════════════════════════════════\n");
+    }
+
+    private void PrintStats(string name, List<LandingMetrics> list)
+    {
+        if (list.Count == 0) return;
+
+        float successRate = (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f;
+        float avgVelocity = GetAverage(list, m => m.touchdownVelocity);
+        float avgAngle = GetAverage(list, m => m.landingAngleError);
+        float avgFuel = GetAverage(list, m => m.fuelRemaining);
+        float avgScore = GetAverage(list, m => m.SuccessScore);
+
+        Debug.Log($"📊 {name.ToUpper()}");
+        Debug.Log($"   Успішність:          {successRate:F1}%");
+        Debug.Log($"   Сер. швидкість:      {avgVelocity:F2} м/с");
+        Debug.Log($"   Сер. кут нахилу:     {avgAngle:F2}°");
+        Debug.Log($"   Сер. залишок палива: {avgFuel:F1} кг");
+        Debug.Log($"   Сер. оцінка:         {avgScore:F1}/100");
+        Debug.Log("──────────────────────────────────────────────────────────────");
+    }
+
+    private float GetAverage(List<LandingMetrics> list, System.Func<LandingMetrics, float> selector)
+    {
+        if (list.Count == 0) return 0f;
+        float sum = 0f;
+        foreach (var item in list) sum += selector(item);
+        return sum / list.Count;
+    }
+
+    private void SaveComparisonToCSV()
+    {
+        string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string path = Path.Combine(Application.dataPath, "..", "SimulationLogs",
+            $"Final_Comparison_PID_vs_Fuzzy_vs_Neural_{timestamp}.csv");
+
+        var lines = new List<string>
+        {
+            "Algorithm,Tests,SuccessRate(%),AvgTouchdownVelocity,AvgAngleError,AvgFuelRemaining,AvgSuccessScore"
+        };
+
+        lines.Add(CreateCSVLine("PID", pidResults));
+        lines.Add(CreateCSVLine("Fuzzy Logic", fuzzyResults));
+        lines.Add(CreateCSVLine("Neural Network", neuralResults));
+
+        File.WriteAllLines(path, lines);
+        Debug.Log($"💾 Порівняльна таблиця збережена: {path}");
+    }
+
+    private string CreateCSVLine(string name, List<LandingMetrics> list)
+    {
+        if (list.Count == 0)
+            return $"{name},0,0,0,0,0,0";
+
+        float success = (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f;
+        float vel = GetAverage(list, m => m.touchdownVelocity);
+        float angle = GetAverage(list, m => m.landingAngleError);
+        float fuel = GetAverage(list, m => m.fuelRemaining);
+        float score = GetAverage(list, m => m.SuccessScore);
+
+        return $"{name},{list.Count},{success:F2},{vel:F2},{angle:F2},{fuel:F2},{score:F2}";
     }
 }
