@@ -7,28 +7,20 @@ using UnityEngine;
 [System.Serializable]
 public class RocketState
 {
-    [Header("Лінійний рух")]
-    public Vector3 position; // Позиція у світових координатах (м)
-    public Vector3 velocity; // Лінійна швидкість (м/с)
+    public Vector3 position;
+    public Vector3 velocity;
+    public Quaternion rotation;
+    public Vector3 angularVelocity;
 
-    [Header("Кутовий рух")]
-    public Quaternion rotation; // Орієнтація ракети
-    public Vector3 angularVelocity; // Кутова швидкість (рад/с)
-
-    [Header("Маса та двигун")]
-    public float dryMass; // Маса порожньої ракети (кг)
-    public float currentFuelMass; // Поточна маса палива (кг)
-    public float currentThrust; // Поточна тяга двигуна (Н)
-    public float maxThrust; // Максимальна тяга двигуна (Н)
-    public Vector3 thrustDirection; // Напрямок вектора тяги (локальні координати)
-
-    [Header("Час та статус")]
-    public float time; // Час симуляції (с)
-    public bool isLanded; // Чи приземлилася ракета
-    public bool simulationFinished; // Чи завершена симуляція
-
-    /// <summary>
-    /// Повна поточна маса ракети (суха маса + паливо).
-    /// </summary>
+    public float dryMass;
+    public float currentFuelMass;
     public float TotalMass => dryMass + currentFuelMass;
+
+    public float currentThrust;
+    public float maxThrust;
+    public Vector3 thrustDirection = Vector3.up;
+
+    public float time = 0f;
+    public bool isLanded = false;
+    public bool simulationFinished = false;
 }

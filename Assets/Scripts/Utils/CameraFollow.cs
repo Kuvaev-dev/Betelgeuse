@@ -10,21 +10,19 @@ public class CameraFollow : MonoBehaviour
     public Transform target;
 
     [Header("Налаштування камери")]
-    [Tooltip("Зміщення камери відносно цілі")]
     public Vector3 offset = new Vector3(0, 80f, -150f);
-
-    [Tooltip("Швидкість плавного слідкування")]
     public float smoothSpeed = 2f;
 
     void LateUpdate()
     {
-        if (target == null)
-            return;
+        if (target == null) return;
 
         Vector3 desiredPosition = target.position + offset;
         Vector3 smoothedPosition = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed * Time.deltaTime);
 
         transform.position = smoothedPosition;
-        transform.LookAt(target);
+
+        Vector3 targetCenter = target.position + target.up * 15f;
+        transform.LookAt(targetCenter);
     }
 }

@@ -9,8 +9,6 @@ public class TrajectoryVisualizer : MonoBehaviour
 {
     public RocketPhysics rocketPhysics;
     public LineRenderer lineRenderer;
-
-    [Tooltip("Максимальна кількість точок траєкторії")]
     public int maxPoints = 500;
 
     private List<Vector3> points = new List<Vector3>();
@@ -25,20 +23,18 @@ public class TrajectoryVisualizer : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (rocketPhysics == null || rocketPhysics.state.simulationFinished)
-            return;
+        if (rocketPhysics == null || rocketPhysics.state.simulationFinished) return;
 
         if (points.Count < maxPoints)
         {
-            points.Add(rocketPhysics.state.position);
+            Vector3 currentPos = rocketPhysics.state.position;
+            points.Add(currentPos);
             lineRenderer.positionCount = points.Count;
-            lineRenderer.SetPositions(points.ToArray());
+
+            lineRenderer.SetPosition(points.Count - 1, currentPos);
         }
     }
 
-    /// <summary>
-    /// Очищає поточну траєкторію (викликається перед новим тестом).
-    /// </summary>
     public void Clear()
     {
         points.Clear();
