@@ -873,6 +873,8 @@ GameObject:
   - component: {fileID: 239954547}
   - component: {fileID: 239954548}
   - component: {fileID: 239954549}
+  - component: {fileID: 239954551}
+  - component: {fileID: 239954550}
   m_Layer: 0
   m_Name: Rocket
   m_TagString: Untagged
@@ -1031,8 +1033,8 @@ MonoBehaviour:
     time: 0
     isLanded: 0
     simulationFinished: 0
-  fuzzyController: {fileID: 0}
-  neuralController: {fileID: 0}
+  fuzzyController: {fileID: 239954547}
+  neuralController: {fileID: 239954549}
   metrics:
     touchdownVelocity: 0
     landingAngleError: 0
@@ -1077,13 +1079,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6465a3455af6e2941829f5a3081132d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SimulationManager
-  rocketPhysics: {fileID: 0}
+  rocketPhysics: {fileID: 239954545}
   testsPerAlgorithm: 30
-  delay: 0.6
+  delayBetweenTests: 0.7
   enableNoise: 1
   windStrength: 8
-  massVariation: 5
-  angleVariation: 6
+  massVariationPercent: 6
+  angleVariationDegrees: 7
   runFullExperiment: 0
 --- !u!114 &239954549
 MonoBehaviour:
@@ -1098,6 +1100,139 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NeuralController
   isActive: 1
+  enableTraining: 1
+  weightsInputHidden:
+  - 0.8
+  - -1.2
+  - 0.6
+  - 1.1
+  weightsHiddenOutput:
+  - 1.3
+  - -0.9
+  learningRate: 0.05
+--- !u!114 &239954550
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 239954537}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5388a9a7664e944ca2a0ec4088f5378, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrajectoryVisualizer
+  rocketPhysics: {fileID: 239954545}
+  lineRenderer: {fileID: 239954551}
+  maxPoints: 500
+--- !u!120 &239954551
+LineRenderer:
+  serializedVersion: 3
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 239954537}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 0
+  m_LightProbeUsage: 0
+  m_ReflectionProbeUsage: 0
+  m_RayTracingMode: 0
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 0}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_MaskInteraction: 0
+  m_Positions: []
+  m_Parameters:
+    serializedVersion: 3
+    widthMultiplier: 0.8
+    widthCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    colorGradient:
+      serializedVersion: 2
+      key0: {r: 1, g: 1, b: 1, a: 1}
+      key1: {r: 1, g: 1, b: 1, a: 1}
+      key2: {r: 0, g: 0, b: 0, a: 0}
+      key3: {r: 0, g: 0, b: 0, a: 0}
+      key4: {r: 0, g: 0, b: 0, a: 0}
+      key5: {r: 0, g: 0, b: 0, a: 0}
+      key6: {r: 0, g: 0, b: 0, a: 0}
+      key7: {r: 0, g: 0, b: 0, a: 0}
+      ctime0: 0
+      ctime1: 65535
+      ctime2: 0
+      ctime3: 0
+      ctime4: 0
+      ctime5: 0
+      ctime6: 0
+      ctime7: 0
+      atime0: 0
+      atime1: 65535
+      atime2: 0
+      atime3: 0
+      atime4: 0
+      atime5: 0
+      atime6: 0
+      atime7: 0
+      m_Mode: 0
+      m_ColorSpace: -1
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    numCornerVertices: 0
+    numCapVertices: 0
+    alignment: 0
+    textureMode: 0
+    textureScale: {x: 1, y: 1}
+    shadowBias: 0.5
+    generateLightingData: 0
+  m_UseWorldSpace: 1
+  m_Loop: 0
+  m_ApplyActiveColorSpace: 1
 --- !u!1 &254621107
 GameObject:
   m_ObjectHideFlags: 0
@@ -13287,14 +13422,17 @@ MonoBehaviour:
   rocketPhysics: {fileID: 0}
   btnRunPID: {fileID: 991216961}
   btnRunFuzzy: {fileID: 1480702967}
+  btnRunNeural: {fileID: 0}
   btnRunFullTest: {fileID: 2068487433}
   btnReset: {fileID: 143671104}
   testsCountInput: {fileID: 2055785453}
   noiseToggle: {fileID: 859897204}
   windSlider: {fileID: 494223540}
-  pidSuccessText: {fileID: 84753640}
-  fuzzySuccessText: {fileID: 394577320}
-  comparisonText: {fileID: 1308530862}
+  enableNeuralTrainingToggle: {fileID: 0}
+  pidStatsText: {fileID: 0}
+  fuzzyStatsText: {fileID: 0}
+  neuralStatsText: {fileID: 0}
+  winnerText: {fileID: 0}
 --- !u!114 &1686001927
 MonoBehaviour:
   m_ObjectHideFlags: 0

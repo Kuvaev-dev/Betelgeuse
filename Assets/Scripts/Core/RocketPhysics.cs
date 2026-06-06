@@ -43,6 +43,9 @@ public class RocketPhysics : MonoBehaviour
         if (neuralController == null)
             neuralController = GetComponent<NeuralController>();
 
+        if (neuralController != null)
+            neuralController.LoadBestWeights();
+
         InitializeSimulation();
     }
 
