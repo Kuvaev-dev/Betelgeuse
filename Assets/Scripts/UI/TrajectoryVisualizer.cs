@@ -1,10 +1,16 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+/// <summary>
+/// Візуалізатор траєкторії польоту ракети за допомогою LineRenderer.
+/// Автоматично малює лінію шляху ракети під час симуляції.
+/// </summary>
 public class TrajectoryVisualizer : MonoBehaviour
 {
     public RocketPhysics rocketPhysics;
     public LineRenderer lineRenderer;
+
+    [Tooltip("Максимальна кількість точок траєкторії")]
     public int maxPoints = 500;
 
     private List<Vector3> points = new List<Vector3>();
@@ -19,7 +25,8 @@ public class TrajectoryVisualizer : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (rocketPhysics == null || rocketPhysics.state.simulationFinished) return;
+        if (rocketPhysics == null || rocketPhysics.state.simulationFinished)
+            return;
 
         if (points.Count < maxPoints)
         {
@@ -29,6 +36,9 @@ public class TrajectoryVisualizer : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Очищає поточну траєкторію (викликається перед новим тестом).
+    /// </summary>
     public void Clear()
     {
         points.Clear();

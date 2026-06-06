@@ -1,10 +1,15 @@
 using UnityEngine;
 using TMPro;
 
+/// <summary>
+/// HUD (Heads-Up Display) для відображення телеметрії ракети в реальному часі.
+/// Показує висоту, швидкість, тягу, кут нахилу та поточний режим керування.
+/// </summary>
 public class TelemetryHUD : MonoBehaviour
 {
     public RocketPhysics rocketPhysics;
 
+    [Header("Текстові елементи UI")]
     public TMP_Text heightText;
     public TMP_Text velocityText;
     public TMP_Text thrustText;
@@ -19,23 +24,18 @@ public class TelemetryHUD : MonoBehaviour
         var s = rocketPhysics.state;
 
         if (heightText)
-            heightText.text =
-                $"Висота: {s.position.y:F1} м";
+            heightText.text = $"Висота: {s.position.y:F1} м";
 
         if (velocityText)
-            velocityText.text =
-                $"Швидкість: {s.velocity.y:F1} м/с";
+            velocityText.text = $"Швидкість: {s.velocity.y:F1} м/с";
 
         if (thrustText)
-            thrustText.text =
-                $"Тяга: {(s.currentThrust / 1000f):F0} кН";
+            thrustText.text = $"Тяга: {(s.currentThrust / 1000f):F0} кН";
 
         if (angleText)
-            angleText.text =
-                $"Нахил: {Vector3.Angle(s.rotation * Vector3.up, Vector3.up):F1}°";
+            angleText.text = $"Нахил: {Vector3.Angle(s.rotation * Vector3.up, Vector3.up):F1}°";
 
         if (controlModeText)
-            controlModeText.text =
-                $"Режим: {rocketPhysics.controlMode}";
+            controlModeText.text = $"Режим: {rocketPhysics.controlMode}";
     }
 }

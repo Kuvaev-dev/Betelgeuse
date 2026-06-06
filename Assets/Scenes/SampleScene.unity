@@ -6529,12 +6529,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cef6ee060312ef542935fb8121cc910b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TelemetryHUD
-  rocketPhysics: {fileID: 0}
-  heightText: {fileID: 0}
-  velocityText: {fileID: 0}
-  thrustText: {fileID: 0}
-  angleText: {fileID: 0}
-  controlModeText: {fileID: 0}
+  rocketPhysics: {fileID: 239954545}
+  heightText: {fileID: 73908039}
+  velocityText: {fileID: 981081649}
+  thrustText: {fileID: 1402236012}
+  angleText: {fileID: 73733366}
+  controlModeText: {fileID: 1854539041}
 --- !u!114 &448005282
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -13418,8 +13418,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 162e6c2cd6e865746bde540991ec498a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExperimentDashboard
-  simulationManager: {fileID: 0}
-  rocketPhysics: {fileID: 0}
+  simulationManager: {fileID: 239954548}
+  rocketPhysics: {fileID: 239954545}
   btnRunPID: {fileID: 991216961}
   btnRunFuzzy: {fileID: 1480702967}
   btnRunNeural: {fileID: 0}
@@ -13428,11 +13428,11 @@ MonoBehaviour:
   testsCountInput: {fileID: 2055785453}
   noiseToggle: {fileID: 859897204}
   windSlider: {fileID: 494223540}
-  enableNeuralTrainingToggle: {fileID: 0}
-  pidStatsText: {fileID: 0}
-  fuzzyStatsText: {fileID: 0}
-  neuralStatsText: {fileID: 0}
-  winnerText: {fileID: 0}
+  enableNeuralTrainingToggle: {fileID: 859897204}
+  pidStatsText: {fileID: 345624592}
+  fuzzyStatsText: {fileID: 1871054441}
+  neuralStatsText: {fileID: 1315982473}
+  winnerText: {fileID: 831711834}
 --- !u!114 &1686001927
 MonoBehaviour:
   m_ObjectHideFlags: 0
