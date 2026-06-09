@@ -200,6 +200,8 @@ public class RocketPhysics : MonoBehaviour
         };
         metrics.PrintResults(algorithm);
 
+        FindObjectOfType<TrajectoryVisualizer>()?.OnSimulationFinished(metrics.isSuccessfulLanding);
+
         if (controlMode == ControlMode.Neural && neuralController != null)
         {
             neuralController.Train(metrics.touchdownVelocity, metrics.landingAngleError, metrics.fuelRemaining);
