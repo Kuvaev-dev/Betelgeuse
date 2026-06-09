@@ -181,7 +181,7 @@ public class RocketPhysics : MonoBehaviour
         state.isLanded = true;
         state.simulationFinished = true;
 
-        metrics.touchdownVelocity = state.velocity.magnitude;
+        metrics.touchdownVelocity = Mathf.Abs(state.velocity.y);
         metrics.landingAngleError = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
         metrics.fuelRemaining = state.currentFuelMass;
         metrics.maxAltitude = maxHeightRecorded;

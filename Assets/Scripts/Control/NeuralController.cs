@@ -45,7 +45,7 @@ public class NeuralController : MonoBehaviour
         float hidden = h * weightsInputHidden[0] + v * weightsInputHidden[1] +
                        a * weightsInputHidden[2] + t * weightsInputHidden[3];
 
-        hidden = (float)System.Math.Tanh(hidden);
+        hidden = System.MathF.Tanh(hidden);
         float output = hidden * weightsHiddenOutput[0] + weightsHiddenOutput[1];
         float thrustMult = Mathf.Clamp(output + 1.2f, 0.8f, 2.8f);
         return mass * 9.81f * thrustMult;
@@ -75,11 +75,16 @@ public class NeuralController : MonoBehaviour
             bestWeightsInputHidden = (float[])weightsInputHidden.Clone();
             bestWeightsHiddenOutput = (float[])weightsHiddenOutput.Clone();
             SaveBestWeights();
-            Debug.Log($"Знайдено кращу конфігурацію ваг! Помилка: {bestError:F4}");
+        }
+        else
+        {
+            weightsInputHidden = (float[])bestWeightsInputHidden.Clone();
+            weightsHiddenOutput = (float[])bestWeightsHiddenOutput.Clone();
         }
 
         for (int i = 0; i < weightsInputHidden.Length; i++)
             weightsInputHidden[i] = bestWeightsInputHidden[i] + (Random.value - 0.5f) * learningRate;
+
         for (int i = 0; i < weightsHiddenOutput.Length; i++)
             weightsHiddenOutput[i] = bestWeightsHiddenOutput[i] + (Random.value - 0.5f) * learningRate * 0.5f;
     }

@@ -30,10 +30,15 @@ public class SimulationManager : MonoBehaviour
     [Header("Запуск тестів")]
     public bool runFullExperiment = false;
 
+    private float originalFuelMass;
+
     private void Awake()
     {
         if (rocketPhysics == null)
             rocketPhysics = FindObjectOfType<RocketPhysics>();
+
+        if (rocketPhysics != null && rocketPhysics.parameters != null)
+            originalFuelMass = rocketPhysics.parameters.fuelMass;
     }
 
     private void Update()
@@ -80,10 +85,13 @@ public class SimulationManager : MonoBehaviour
     private IEnumerator RunTestsForAlgorithm(string algorithmName, List<LandingMetrics> resultsList)
     {
         resultsList.Clear();
-        Debug.Log($"\nЗапуск {testsPerAlgorithm} симуляцій для {algorithmName}...");
+        Debug.Log($"\n▶ Запуск {testsPerAlgorithm} симуляцій для {algorithmName}...");
 
         for (int i = 0; i < testsPerAlgorithm; i++)
         {
+            if (rocketPhysics != null && rocketPhysics.parameters != null)
+                rocketPhysics.parameters.fuelMass = originalFuelMass;
+
             rocketPhysics.ResetSimulation();
 
             var visualizer = FindObjectOfType<TrajectoryVisualizer>();
@@ -98,7 +106,6 @@ public class SimulationManager : MonoBehaviour
                 yield return null;
 
             resultsList.Add(rocketPhysics.metrics);
-            Debug.Log($"   [{algorithmName}] Тест {i + 1}/{testsPerAlgorithm} | Успіх: {rocketPhysics.metrics.isSuccessfulLanding}");
         }
     }
 
