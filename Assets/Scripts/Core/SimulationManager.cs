@@ -4,157 +4,219 @@ using System.Collections.Generic;
 using System.IO;
 
 /// <summary>
-/// Менеджер порівняльних експериментів.
-/// Дозволяє запускати серії тестів для PID, Fuzzy Logic та Neural Network
-/// з урахуванням випадкового шуму (Monte-Carlo) для оцінки стійкості алгоритмів.
+/// Порівняльні Monte-Carlo експерименти: PID / Fuzzy / Neural / Hybrid.
 /// </summary>
 public class SimulationManager : MonoBehaviour
 {
     [Header("Основні посилання")]
     public RocketPhysics rocketPhysics;
+    public ExperimentDashboard dashboard;
 
     [Header("Налаштування експерименту")]
     public int testsPerAlgorithm = 25;
-    public float delayBetweenTests = 0.7f;
+    public float delayBetweenTests = 0.05f;
+    public bool includeHybrid = true;
+    [Range(1f, 50f)] public float experimentTimeScale = 20f;
 
     [Header("Невизначеність (Monte-Carlo)")]
     public bool enableNoise = true;
     [Range(0f, 25f)] public float windStrength = 10f;
     [Range(0f, 15f)] public float massVariationPercent = 6f;
     [Range(0f, 10f)] public float angleVariationDegrees = 7f;
+    public bool continuousWind = true;
 
-    private List<LandingMetrics> pidResults = new List<LandingMetrics>();
-    private List<LandingMetrics> fuzzyResults = new List<LandingMetrics>();
-    private List<LandingMetrics> neuralResults = new List<LandingMetrics>();
+    [Header("Запуск")]
+    public bool runFullExperiment;
 
-    [Header("Запуск тестів")]
-    public bool runFullExperiment = false;
+    readonly List<LandingMetrics> pidResults = new();
+    readonly List<LandingMetrics> fuzzyResults = new();
+    readonly List<LandingMetrics> neuralResults = new();
+    readonly List<LandingMetrics> hybridResults = new();
 
-    private float originalFuelMass;
+    float originalFuelMass;
+    bool experimentRunning;
+    TrajectoryVisualizer visualizer;
 
-    private void Awake()
+    void Awake()
     {
         if (rocketPhysics == null)
-            rocketPhysics = FindObjectOfType<RocketPhysics>();
+            rocketPhysics = FindFirstObjectByType<RocketPhysics>();
+        if (dashboard == null)
+            dashboard = FindFirstObjectByType<ExperimentDashboard>();
+        visualizer = FindFirstObjectByType<TrajectoryVisualizer>();
 
         if (rocketPhysics != null && rocketPhysics.parameters != null)
             originalFuelMass = rocketPhysics.parameters.fuelMass;
     }
 
-    private void Update()
+    void Update()
     {
-        if (runFullExperiment)
-        {
-            runFullExperiment = false;
-            StartCoroutine(RunFullComparisonExperiment());
-        }
+        if (!runFullExperiment || experimentRunning) return;
+        runFullExperiment = false;
+        StartCoroutine(RunFullComparisonExperiment());
     }
 
-    private IEnumerator RunFullComparisonExperiment()
+    IEnumerator RunFullComparisonExperiment()
     {
-        Debug.Log("Початок повного порівняльного експерименту (PID vs Fuzzy vs Neural)");
+        experimentRunning = true;
+        float prevScale = Time.timeScale;
+        float prevFixed = Time.fixedDeltaTime;
+
+        // Прискорення batch: timeScale↑, fixedDeltaTime = крок інтегратора
+        float step = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
+        Time.timeScale = Mathf.Clamp(experimentTimeScale, 1f, 50f);
+        Time.fixedDeltaTime = step;
+
+        Debug.Log("══ Повний порівняльний експеримент (PID · Fuzzy · Neural · Hybrid) ══");
 
         rocketPhysics.controlMode = RocketPhysics.ControlMode.PID;
-        yield return StartCoroutine(RunTestsForAlgorithm("PID", pidResults));
+        yield return RunTestsForAlgorithm("PID", pidResults);
 
         rocketPhysics.controlMode = RocketPhysics.ControlMode.Fuzzy;
-        yield return StartCoroutine(RunTestsForAlgorithm("Fuzzy Logic", fuzzyResults));
+        yield return RunTestsForAlgorithm("Fuzzy Sugeno", fuzzyResults);
 
         rocketPhysics.controlMode = RocketPhysics.ControlMode.Neural;
-        yield return StartCoroutine(RunTestsForAlgorithm("Neural Network", neuralResults));
+        yield return RunTestsForAlgorithm("Neural ES", neuralResults);
+
+        if (includeHybrid)
+        {
+            rocketPhysics.controlMode = RocketPhysics.ControlMode.Hybrid;
+            yield return RunTestsForAlgorithm("Hybrid Neuro-Fuzzy", hybridResults);
+        }
 
         ShowFinalComparison();
 
-        if (FindObjectOfType<ExperimentDashboard>() != null)
-        {
-            float pid = GetSuccessRate(pidResults);
-            float fuzzy = GetSuccessRate(fuzzyResults);
-            float neural = GetSuccessRate(neuralResults);
-            FindObjectOfType<ExperimentDashboard>().UpdateStatistics(pid, fuzzy, neural);
-        }
+        float pid = GetSuccessRate(pidResults);
+        float fuzzy = GetSuccessRate(fuzzyResults);
+        float neural = GetSuccessRate(neuralResults);
+        float hybrid = GetSuccessRate(hybridResults);
+
+        if (dashboard != null)
+            dashboard.UpdateStatistics(pid, fuzzy, neural, hybrid);
+        else
+            FindFirstObjectByType<ExperimentDashboard>()
+                ?.UpdateStatistics(pid, fuzzy, neural, hybrid);
+
+        if (MissionControlUI.Instance != null)
+            MissionControlUI.Instance.UpdateStatistics(pid, fuzzy, neural, hybrid);
 
         SaveComparisonToCSV();
-        Debug.Log("Експеримент завершено");
+
+        Time.timeScale = prevScale;
+        Time.fixedDeltaTime = prevFixed;
+        experimentRunning = false;
+        Debug.Log("══ Експеримент завершено ══");
     }
 
-    private float GetSuccessRate(List<LandingMetrics> list)
-    {
-        return list.Count > 0 ? (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f : 0;
-    }
+    float GetSuccessRate(List<LandingMetrics> list)
+        => list.Count > 0
+            ? (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f
+            : 0f;
 
-    private IEnumerator RunTestsForAlgorithm(string algorithmName, List<LandingMetrics> resultsList)
+    IEnumerator RunTestsForAlgorithm(string algorithmName, List<LandingMetrics> resultsList)
     {
         resultsList.Clear();
-        Debug.Log($"\n▶ Запуск {testsPerAlgorithm} симуляцій для {algorithmName}...");
+        Debug.Log($"▶ {algorithmName}: {testsPerAlgorithm} симуляцій...");
+
+        float maxT = rocketPhysics.parameters != null
+            ? rocketPhysics.parameters.maxSimulationTime + 5f
+            : 420f;
 
         for (int i = 0; i < testsPerAlgorithm; i++)
         {
-            if (rocketPhysics != null && rocketPhysics.parameters != null)
+            if (rocketPhysics.parameters != null)
                 rocketPhysics.parameters.fuelMass = originalFuelMass;
 
             rocketPhysics.ResetSimulation();
-
-            var visualizer = FindObjectOfType<TrajectoryVisualizer>();
-            if (visualizer != null) visualizer.Clear();
+            visualizer?.Clear();
 
             if (enableNoise)
                 ApplyRandomNoiseToState();
 
-            yield return new WaitForSeconds(delayBetweenTests);
+            if (delayBetweenTests > 0f)
+                yield return new WaitForSeconds(delayBetweenTests);
 
-            while (!rocketPhysics.state.simulationFinished)
+            float waited = 0f;
+            while (!rocketPhysics.state.simulationFinished && waited < maxT)
+            {
+                waited += Time.deltaTime;
                 yield return null;
+            }
 
-            resultsList.Add(rocketPhysics.metrics);
+            if (!rocketPhysics.state.simulationFinished)
+            {
+                // safety stop
+                rocketPhysics.state.simulationFinished = true;
+                rocketPhysics.state.isLanded = true;
+            }
+
+            // deep copy metrics
+            resultsList.Add(CloneMetrics(rocketPhysics.metrics));
         }
     }
 
-    private void ApplyRandomNoiseToState()
+    static LandingMetrics CloneMetrics(LandingMetrics m)
     {
-        if (rocketPhysics == null || rocketPhysics.state == null) return;
+        return new LandingMetrics
+        {
+            touchdownVelocity = m.touchdownVelocity,
+            landingAngleError = m.landingAngleError,
+            fuelRemaining = m.fuelRemaining,
+            maxAltitude = m.maxAltitude,
+            totalFlightTime = m.totalFlightTime,
+            horizontalMiss = m.horizontalMiss,
+            horizontalSpeed = m.horizontalSpeed,
+            timedOut = m.timedOut,
+            isSuccessfulLanding = m.isSuccessfulLanding
+        };
+    }
 
-        rocketPhysics.state.velocity += new Vector3(
+    void ApplyRandomNoiseToState()
+    {
+        if (rocketPhysics?.state == null) return;
+
+        Vector3 windKick = new Vector3(
             Random.Range(-windStrength, windStrength),
             0f,
-            Random.Range(-windStrength * 0.5f, windStrength * 0.5f)
-        );
+            Random.Range(-windStrength * 0.5f, windStrength * 0.5f));
 
-        float massNoiseMultiplier = 1f + Random.Range(-massVariationPercent, massVariationPercent) / 100f;
-        rocketPhysics.state.currentFuelMass = Mathf.Max(0f, rocketPhysics.state.currentFuelMass * massNoiseMultiplier);
+        rocketPhysics.state.velocity += windKick;
 
-        float angleNoiseX = Random.Range(-angleVariationDegrees, angleVariationDegrees);
-        float angleNoiseZ = Random.Range(-angleVariationDegrees, angleVariationDegrees);
-        rocketPhysics.state.rotation *= Quaternion.Euler(angleNoiseX, 0f, angleNoiseZ);
+        if (continuousWind)
+            rocketPhysics.windVelocity = windKick * 0.35f;
+        else
+            rocketPhysics.windVelocity = Vector3.zero;
 
+        float massNoise = 1f + Random.Range(-massVariationPercent, massVariationPercent) / 100f;
+        rocketPhysics.state.currentFuelMass = Mathf.Max(0f, rocketPhysics.state.currentFuelMass * massNoise);
+
+        float ax = Random.Range(-angleVariationDegrees, angleVariationDegrees);
+        float az = Random.Range(-angleVariationDegrees, angleVariationDegrees);
+        rocketPhysics.state.rotation *= Quaternion.Euler(ax, 0f, az);
         rocketPhysics.SyncTransformWithState();
     }
 
-    private void ShowFinalComparison()
+    void ShowFinalComparison()
     {
-        Debug.Log("Фінальне порівняння алгоритмів");
+        Debug.Log("── Фінальне порівняння ──");
         PrintStats("PID", pidResults);
-        PrintStats("Fuzzy Logic", fuzzyResults);
-        PrintStats("Neural Network", neuralResults);
+        PrintStats("Fuzzy Sugeno", fuzzyResults);
+        PrintStats("Neural ES", neuralResults);
+        if (includeHybrid) PrintStats("Hybrid Neuro-Fuzzy", hybridResults);
     }
 
-    private void PrintStats(string name, List<LandingMetrics> list)
+    void PrintStats(string name, List<LandingMetrics> list)
     {
         if (list.Count == 0) return;
-        float successRate = (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f;
-        float avgVelocity = GetAverage(list, m => m.touchdownVelocity);
-        float avgAngle = GetAverage(list, m => m.landingAngleError);
-        float avgFuel = GetAverage(list, m => m.fuelRemaining);
-        float avgScore = GetAverage(list, m => m.SuccessScore);
-
-        Debug.Log($"{name.ToUpper()}");
-        Debug.Log($"Успішність: {successRate:F1}%");
-        Debug.Log($"Сер. швидкість: {avgVelocity:F2} м/с");
-        Debug.Log($"Сер. кут нахилу: {avgAngle:F2}°");
-        Debug.Log($"Сер. залишок палива: {avgFuel:F1} кг");
-        Debug.Log($"Сер. оцінка: {avgScore:F1}/100");
+        float successRate = GetSuccessRate(list);
+        Debug.Log($"{name.ToUpperInvariant()} | success={successRate:F1}% | " +
+                  $"V={GetAverage(list, m => m.touchdownVelocity):F2} | " +
+                  $"∠={GetAverage(list, m => m.landingAngleError):F2}° | " +
+                  $"miss={GetAverage(list, m => m.horizontalMiss):F1}m | " +
+                  $"score={GetAverage(list, m => m.SuccessScore):F1}");
     }
 
-    private float GetAverage(List<LandingMetrics> list, System.Func<LandingMetrics, float> selector)
+    float GetAverage(List<LandingMetrics> list, System.Func<LandingMetrics, float> selector)
     {
         if (list.Count == 0) return 0f;
         float sum = 0f;
@@ -162,28 +224,34 @@ public class SimulationManager : MonoBehaviour
         return sum / list.Count;
     }
 
-    private void SaveComparisonToCSV()
+    void SaveComparisonToCSV()
     {
-        string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        string path = Path.Combine(Application.dataPath, "..", "SimulationLogs", $"Final_Comparison_{timestamp}.csv");
+        string dir = Path.Combine(Application.dataPath, "..", "SimulationLogs");
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, $"Final_Comparison_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
 
-        var lines = new List<string> { "Algorithm,Tests,SuccessRate(%),AvgTouchdownVelocity,AvgAngleError,AvgFuelRemaining,AvgSuccessScore" };
+        var lines = new List<string>
+        {
+            "Algorithm,Tests,SuccessRate(%),AvgTouchdownVelocity,AvgAngleError,AvgHorizontalMiss,AvgFuelRemaining,AvgSuccessScore"
+        };
         lines.Add(CreateCSVLine("PID", pidResults));
-        lines.Add(CreateCSVLine("Fuzzy Logic", fuzzyResults));
-        lines.Add(CreateCSVLine("Neural Network", neuralResults));
+        lines.Add(CreateCSVLine("Fuzzy Sugeno", fuzzyResults));
+        lines.Add(CreateCSVLine("Neural ES", neuralResults));
+        if (includeHybrid)
+            lines.Add(CreateCSVLine("Hybrid Neuro-Fuzzy", hybridResults));
 
         File.WriteAllLines(path, lines);
-        Debug.Log($"Порівняльну таблиця збережена: {path}");
+        Debug.Log($"CSV: {path}");
     }
 
-    private string CreateCSVLine(string name, List<LandingMetrics> list)
+    string CreateCSVLine(string name, List<LandingMetrics> list)
     {
-        if (list.Count == 0) return $"{name},0,0,0,0,0,0";
-        float success = (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f;
-        float vel = GetAverage(list, m => m.touchdownVelocity);
-        float angle = GetAverage(list, m => m.landingAngleError);
-        float fuel = GetAverage(list, m => m.fuelRemaining);
-        float score = GetAverage(list, m => m.SuccessScore);
-        return $"{name},{list.Count},{success:F2},{vel:F2},{angle:F2},{fuel:F2},{score:F2}";
+        if (list.Count == 0) return $"{name},0,0,0,0,0,0,0";
+        return $"{name},{list.Count},{GetSuccessRate(list):F2}," +
+               $"{GetAverage(list, m => m.touchdownVelocity):F2}," +
+               $"{GetAverage(list, m => m.landingAngleError):F2}," +
+               $"{GetAverage(list, m => m.horizontalMiss):F2}," +
+               $"{GetAverage(list, m => m.fuelRemaining):F2}," +
+               $"{GetAverage(list, m => m.SuccessScore):F2}";
     }
 }

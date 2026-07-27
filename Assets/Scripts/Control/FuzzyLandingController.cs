@@ -1,80 +1,151 @@
 using UnityEngine;
 
 /// <summary>
-/// Нечіткий контролер посадки ракети на основі логіки Сугено (Sugeno).
-/// Використовує фазифікацію висоти та вертикальної швидкості для обчислення необхідної тяги двигуна.
+/// Нечіткий контролер посадки: zero-order Sugeno (TSK-0).
+/// Канали: тяга (висота × |V_y|) та gimbal (помилка кута × |ω|).
+/// AND = product; дефазифікація = зважене середнє чітких консеквентів.
 /// </summary>
 public class FuzzyLandingController : MonoBehaviour
 {
-    [Header("Fuzzy Logic")]
+    [Header("Fuzzy Logic (Sugeno 0-order)")]
     public bool isActive = true;
 
-    /// <summary>
-    /// Обчислює необхідну тягу двигуна на основі поточної висоти, вертикальної швидкості та маси ракети.
-    /// Використовує нечітку логіку з функціями належності та дефазифікацією методом Сугено (зважене середнє).
-    /// </summary>
-    /// <param name="height">Поточна висота над поверхнею (м)</param>
-    /// <param name="verticalVelocity">Вертикальна швидкість (м/с, від'ємна при падінні)</param>
-    /// <param name="mass">Поточна маса ракети (кг)</param>
-    /// <returns>Необхідна тяга двигуна (Н)</returns>
+    [Header("Межі фазифікації")]
+    public float heightScale = 3000f;
+    public float velocityScale = 120f;
+    public float maxGimbalDeg = 28f;
+
+    // Консеквенти тяги (множник до mg) — 5×5 правило
+    // Рядки: VL, L, M, H, VH висота; стовпці: VS, S, M, F, VF швидкість спуску
+    static readonly float[,] ThrustTable =
+    {
+        { 1.05f, 1.35f, 1.90f, 2.45f, 2.85f }, // Very Low
+        { 1.08f, 1.40f, 1.85f, 2.30f, 2.70f }, // Low
+        { 1.02f, 1.25f, 1.55f, 2.00f, 2.40f }, // Medium
+        { 0.95f, 1.10f, 1.35f, 1.70f, 2.10f }, // High
+        { 0.88f, 0.98f, 1.15f, 1.45f, 1.85f }  // Very High
+    };
+
+    // Консеквенти gimbal (градуси абсолютної корекції)
+    static readonly float[,] GimbalTable =
+    {
+        { 0f,  4f, 10f, 18f, 26f }, // мала помилка кута
+        { 2f,  8f, 14f, 22f, 28f },
+        { 6f, 12f, 18f, 24f, 30f },
+        { 10f, 16f, 22f, 28f, 32f },
+        { 14f, 20f, 26f, 30f, 34f } // велика помилка
+    };
+
     public float CalculateThrust(float height, float verticalVelocity, float mass)
     {
-        if (!isActive) return mass * 9.81f * 1.1f;
+        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
+        if (!isActive) return mass * g * 1.1f;
 
-        // 1. Фазифікація (Нормалізація та визначення ступеня належності)
-        float normHeight = Mathf.Clamp01(height / 3000f);
-        float normVel = Mathf.Clamp(verticalVelocity / -120f, 0f, 2f); // 0 - спокій, 1 - номінал, >1 - небезпечно
+        float h = Mathf.Clamp01(height / heightScale);
+        // 0 = майже зависання, 1 = номінальний спуск, >1 небезпечно швидко
+        float v = Mathf.Clamp(Mathf.Abs(Mathf.Min(0f, verticalVelocity)) / velocityScale, 0f, 1.5f);
 
-        // Функції належності для Висоти (Low, Medium, High)
-        float hLow = Mathf.Clamp01(1f - normHeight / 0.3f);
-        float hMedium = Mathf.Max(0f, 1f - Mathf.Abs(normHeight - 0.5f) / 0.25f);
-        float hHigh = Mathf.Clamp01((normHeight - 0.6f) / 0.4f);
+        float[] muH = Membership5(h, 0f, 0.12f, 0.28f, 0.50f, 0.72f, 1f);
+        float[] muV = Membership5(Mathf.Clamp01(v), 0f, 0.15f, 0.35f, 0.55f, 0.78f, 1f);
 
-        // Функції належності для Швидкості (Slow, Medium, Fast)
-        float vSlow = Mathf.Clamp01(1f - normVel / 0.5f);
-        float vMedium = Mathf.Max(0f, 1f - Mathf.Abs(normVel - 1.0f) / 0.5f);
-        float vFast = Mathf.Clamp01((normVel - 1.2f) / 0.8f);
-
-        // 2. База правил (Rule Base) та Дефазифікація (Метод Сугено)
-        float sumWeights = 0f;
-        float sumOutputs = 0f;
-
-        // Локальна функція для спрощення обчислення правил
-        void EvaluateRule(float membershipValue, float outputThrustMultiplier)
+        float sumW = 0f, sumY = 0f;
+        for (int i = 0; i < 5; i++)
         {
-            if (membershipValue > 0f)
+            if (muH[i] <= 0f) continue;
+            for (int j = 0; j < 5; j++)
             {
-                sumWeights += membershipValue;
-                sumOutputs += membershipValue * outputThrustMultiplier;
+                if (muV[j] <= 0f) continue;
+                float w = muH[i] * muV[j];
+                sumW += w;
+                sumY += w * ThrustTable[i, j];
             }
         }
 
-        // Активація нечітких правил
-        EvaluateRule(hHigh, 1.02f); // Якщо високо — економимо паливо
-        EvaluateRule(hMedium * vSlow, 1.08f); // Середня висота, швидкість нормальна
-        EvaluateRule(hMedium * vMedium, 1.40f); // Середня висота, середня швидкість
-        EvaluateRule(hMedium * vFast, 1.95f); // Середня висота, падаємо занадто швидко
-        EvaluateRule(hLow * vSlow, 1.15f); // Біля землі, швидкість безпечна
-        EvaluateRule(hLow * vMedium, 1.85f); // Біля землі, швидкість помірна
-        EvaluateRule(hLow * vFast, 2.70f); // КРИТИЧНО: низько та швидко — максимальний реверс
+        float mult = sumW > 1e-6f ? sumY / sumW : 1.1f;
 
-        // Обчислення чіткого виходу (зважене середнє)
-        float thrustMult = sumWeights > 0f ? (sumOutputs / sumWeights) : 1.1f;
+        // М'який soft-landing профіль біля землі
+        if (height < 25f)
+        {
+            float targetVy = height < 6f ? -1.2f : -Mathf.Sqrt(2f * 1.4f * height);
+            float err = targetVy - verticalVelocity; // >0 якщо падаємо швидше за профіль
+            mult += Mathf.Clamp(err * 0.04f, -0.15f, 0.55f);
+        }
 
-        return mass * 9.81f * thrustMult;
+        mult = Mathf.Clamp(mult, 0.75f, 2.95f);
+        return Mathf.Min(mass * g * mult, mass * g * 2.95f);
     }
 
     /// <summary>
-    /// Обчислює необхідне відхилення вектора тяги (gimbal) для корекції кутів тангажу та рискання.
+    /// Нечіткий gimbal: фазифікація |pitch/yaw error| та |angular rate proxy|.
     /// </summary>
-    /// <param name="pitchError">Помилка тангажу (градуси)</param>
-    /// <param name="yawError">Помилка рискання (градуси)</param>
-    /// <returns>Вектор корекції кутів (pitch, 0, yaw) у градусах</returns>
-    public Vector3 CalculateGimbal(float pitchError, float yawError)
+    public Vector3 CalculateGimbal(float pitchErrorDeg, float yawErrorDeg, float pitchRateDeg = 0f, float yawRateDeg = 0f)
     {
         if (!isActive) return Vector3.zero;
-        float pitchCorr = Mathf.Clamp(pitchError * 1.2f, -30f, 30f);
-        float yawCorr = Mathf.Clamp(yawError * 1.2f, -30f, 30f);
-        return new Vector3(pitchCorr, 0, yawCorr);
+
+        float pitch = FuzzyAxis(pitchErrorDeg, pitchRateDeg);
+        float yaw = FuzzyAxis(yawErrorDeg, yawRateDeg);
+        return new Vector3(
+            Mathf.Clamp(pitch, -maxGimbalDeg, maxGimbalDeg),
+            0f,
+            Mathf.Clamp(yaw, -maxGimbalDeg, maxGimbalDeg));
+    }
+
+    // Зворотна сумісність зі старим API
+    public Vector3 CalculateGimbal(float pitchError, float yawError)
+        => CalculateGimbal(pitchError, yawError, 0f, 0f);
+
+    float FuzzyAxis(float errorDeg, float rateDeg)
+    {
+        float e = Mathf.Clamp01(Mathf.Abs(errorDeg) / 35f);
+        float r = Mathf.Clamp01(Mathf.Abs(rateDeg) / 40f);
+        float[] muE = Membership5(e, 0f, 0.12f, 0.30f, 0.50f, 0.72f, 1f);
+        float[] muR = Membership5(r, 0f, 0.15f, 0.35f, 0.55f, 0.75f, 1f);
+
+        float sumW = 0f, sumY = 0f;
+        for (int i = 0; i < 5; i++)
+        {
+            if (muE[i] <= 0f) continue;
+            for (int j = 0; j < 5; j++)
+            {
+                if (muR[j] <= 0f) continue;
+                float w = muE[i] * muR[j];
+                sumW += w;
+                sumY += w * GimbalTable[i, j];
+            }
+        }
+
+        float mag = sumW > 1e-6f ? sumY / sumW : 0f;
+        return -Mathf.Sign(errorDeg) * mag;
+    }
+
+    /// <summary>
+    /// 5 трикутних/трапецієподібних MF на [0,1]: NB-NS-Z-PS-PB стиль для скаляра.
+    /// centers: c0..c4 на відрізку [lo, hi] через p0..p5.
+    /// </summary>
+    static float[] Membership5(float x, float p0, float p1, float p2, float p3, float p4, float p5)
+    {
+        return new[]
+        {
+            Trap(x, p0 - 0.01f, p0, p1, p2),
+            Tri(x, p0, p1, p3),
+            Tri(x, p1, p2, p4),
+            Tri(x, p2, p3, p5),
+            Trap(x, p3, p4, p5, p5 + 0.01f)
+        };
+    }
+
+    static float Tri(float x, float a, float b, float c)
+    {
+        if (x <= a || x >= c) return 0f;
+        if (x == b) return 1f;
+        return x < b ? (x - a) / Mathf.Max(1e-6f, b - a) : (c - x) / Mathf.Max(1e-6f, c - b);
+    }
+
+    static float Trap(float x, float a, float b, float c, float d)
+    {
+        if (x <= a || x >= d) return 0f;
+        if (x >= b && x <= c) return 1f;
+        if (x < b) return (x - a) / Mathf.Max(1e-6f, b - a);
+        return (d - x) / Mathf.Max(1e-6f, d - c);
     }
 }

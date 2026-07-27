@@ -1,28 +1,28 @@
 using UnityEngine;
 
 /// <summary>
-/// Основний компонент фізики та керування ракетою.
-/// Реалізує:
-/// - Інтеграцію руху методом Рунге-Кутта 4-го порядку (RK4)
-/// - Три режими керування: PID, Fuzzy Logic, Neural Network
-/// - Моделювання аеродинаміки, гравітації та витрати палива
-/// - Збір метрик та логування
+/// Фізика та GNC ракетоносія:
+/// RK4 (трансляція), semi-implicit Euler (орієнтація),
+/// режими PID / Fuzzy Sugeno / Neural ES / Hybrid Neuro-Fuzzy.
 /// </summary>
 [RequireComponent(typeof(DataLogger))]
 public class RocketPhysics : MonoBehaviour
 {
     [Header("Основні параметри")]
     public SimulationParameters parameters;
-    public enum ControlMode { PID, Fuzzy, Neural }
+    public enum ControlMode { PID, Fuzzy, Neural, Hybrid }
 
     [Header("Режим керування")]
     public ControlMode controlMode = ControlMode.Fuzzy;
     public RocketState state = new RocketState();
-    private DataLogger logger;
 
+    [Header("Зовнішні збурення")]
+    public Vector3 windVelocity = Vector3.zero;
+    public bool applyContinuousWind = true;
+
+    private DataLogger logger;
     private PIDController pitchPID = new PIDController();
     private PIDController yawPID = new PIDController();
-
     private PIDController thrustPID = new PIDController() { Kp = 2.8f, Ki = 0.4f, Kd = 1.5f };
 
     private ParticleSystem engineFlame;
@@ -30,9 +30,19 @@ public class RocketPhysics : MonoBehaviour
 
     public FuzzyLandingController fuzzyController;
     public NeuralController neuralController;
+    public HybridController hybridController;
     public LandingMetrics metrics = new LandingMetrics();
-    private float maxHeightRecorded = 0f;
-    private float currentTime = 0f;
+
+    private float maxHeightRecorded;
+    private float currentTime;
+    private TrajectoryVisualizer cachedVisualizer;
+
+    const float LeverArm = 16f;
+    const float AngularDamping = 40000f;
+    const float InertiaFactor = 25f;
+    const float Cd = 0.85f;
+    const float RefArea = 8.5f;
+    const float G0 = 9.80665f;
 
     void Start()
     {
@@ -44,149 +54,212 @@ public class RocketPhysics : MonoBehaviour
 
         if (fuzzyController == null) fuzzyController = GetComponent<FuzzyLandingController>();
         if (neuralController == null) neuralController = GetComponent<NeuralController>();
+        if (hybridController == null) hybridController = GetComponent<HybridController>();
+        if (hybridController == null)
+        {
+            hybridController = gameObject.AddComponent<HybridController>();
+            hybridController.fuzzy = fuzzyController;
+            hybridController.neural = neuralController;
+        }
+
         if (neuralController != null) neuralController.LoadBestWeights();
+        cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
 
         InitializeSimulation();
     }
 
-    private void InitializeSimulation()
+    void InitializeSimulation()
     {
         if (parameters == null) return;
         state.position = parameters.startPosition;
         state.velocity = parameters.startVelocity;
         state.rotation = Quaternion.Euler(parameters.startEulerAngles);
         state.angularVelocity = Vector3.zero;
-
         state.dryMass = parameters.dryMass;
         state.currentFuelMass = parameters.fuelMass;
         state.maxThrust = parameters.maxThrust;
-
+        state.currentThrust = 0f;
+        state.thrustDirection = Vector3.up;
+        state.time = 0f;
         SyncTransformWithState();
     }
 
     void FixedUpdate()
     {
         if (state.isLanded || state.simulationFinished) return;
+        if (parameters == null) return;
+
+        float dt = parameters.fixedTimeStep;
         if (state.position.y > maxHeightRecorded) maxHeightRecorded = state.position.y;
 
-        currentTime += parameters.fixedTimeStep;
+        currentTime += dt;
         state.time = currentTime;
 
-        UpdateControl();
-        RungeKutta4Step(parameters.fixedTimeStep);
-        SyncTransformWithState(); // Використовуємо уніфіковану синхронізацію
+        if (currentTime >= parameters.maxSimulationTime)
+        {
+            FinishLanding(timeout: true);
+            return;
+        }
 
+        UpdateControl();
+        RungeKutta4Step(dt);
+        SyncTransformWithState();
         logger.Log(state);
+
         if (state.position.y <= 0.05f)
-            FinishLanding();
+            FinishLanding(timeout: false);
     }
 
-    private void UpdateControl()
+    void UpdateControl()
     {
-        if (parameters == null) return;
         Vector3 up = state.rotation * Vector3.up;
         float pitchError = Vector3.SignedAngle(up, Vector3.up, Vector3.right);
         float yawError = Vector3.SignedAngle(up, Vector3.up, Vector3.forward);
+        float pitchRate = state.angularVelocity.x * Mathf.Rad2Deg;
+        float yawRate = state.angularVelocity.z * Mathf.Rad2Deg;
+        float horizSpeed = new Vector2(state.velocity.x, state.velocity.z).magnitude;
 
-        if (controlMode == ControlMode.Fuzzy && fuzzyController != null && fuzzyController.isActive)
+        switch (controlMode)
         {
-            state.currentThrust = fuzzyController.CalculateThrust(state.position.y, state.velocity.y, state.TotalMass);
-            Vector3 g = fuzzyController.CalculateGimbal(pitchError, yawError);
-            state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
-        }
-        else if (controlMode == ControlMode.Neural && neuralController != null && neuralController.isActive)
-        {
-            state.currentThrust = neuralController.CalculateThrust(state.position.y, state.velocity.y, state.TotalMass, state.currentThrust, pitchError);
-            Vector3 g = neuralController.CalculateGimbal(pitchError, yawError);
-            state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
-        }
-        else
-        {
-            float pitchCorrection = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
-            float yawCorrection = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
-
-            Quaternion targetGimbal = Quaternion.Euler(pitchCorrection * 0.8f, 0, yawCorrection * 0.8f);
-            state.thrustDirection = targetGimbal * Vector3.up;
-            state.currentThrust = CalculateThrustPID();
+            case ControlMode.Fuzzy when fuzzyController != null && fuzzyController.isActive:
+            {
+                state.currentThrust = fuzzyController.CalculateThrust(
+                    state.position.y, state.velocity.y, state.TotalMass);
+                Vector3 g = fuzzyController.CalculateGimbal(pitchError, yawError, pitchRate, yawRate);
+                state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
+                break;
+            }
+            case ControlMode.Neural when neuralController != null && neuralController.isActive:
+            {
+                neuralController.CalculateControl(
+                    state.position.y, state.velocity.y, state.TotalMass, state.currentThrust,
+                    pitchError, yawError, horizSpeed,
+                    out state.currentThrust, out Vector3 g);
+                state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
+                break;
+            }
+            case ControlMode.Hybrid when hybridController != null && hybridController.isActive:
+            {
+                hybridController.CalculateControl(
+                    state.position.y, state.velocity.y, state.TotalMass, state.currentThrust,
+                    pitchError, yawError, pitchRate, yawRate, horizSpeed,
+                    out state.currentThrust, out Vector3 g);
+                state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
+                break;
+            }
+            default:
+            {
+                float pitchCorrection = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
+                float yawCorrection = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
+                Quaternion targetGimbal = Quaternion.Euler(
+                    Mathf.Clamp(pitchCorrection * 0.8f, -28f, 28f),
+                    0f,
+                    Mathf.Clamp(yawCorrection * 0.8f, -28f, 28f));
+                state.thrustDirection = targetGimbal * Vector3.up;
+                state.currentThrust = CalculateThrustPID();
+                break;
+            }
         }
 
         state.currentThrust = Mathf.Clamp(state.currentThrust, 0f, state.maxThrust);
+        if (state.currentFuelMass <= 0f) state.currentThrust = 0f;
+
         bool engineOn = state.currentThrust > 1000f;
         if (engineFlame != null) { var em = engineFlame.emission; em.enabled = engineOn; }
         if (engineSmoke != null) { var em = engineSmoke.emission; em.enabled = engineOn; }
     }
 
-    private void RungeKutta4Step(float dt)
+    void RungeKutta4Step(float dt)
     {
         Vector3 k1v = state.velocity;
         Vector3 k1a = CalculateAccelerationAt(state.position, state.velocity);
 
         Vector3 k2v = state.velocity + k1a * (dt * 0.5f);
         Vector3 k2a = CalculateAccelerationAt(state.position + k1v * (dt * 0.5f), k2v);
+
         Vector3 k3v = state.velocity + k2a * (dt * 0.5f);
         Vector3 k3a = CalculateAccelerationAt(state.position + k2v * (dt * 0.5f), k3v);
 
         Vector3 k4v = state.velocity + k3a * dt;
         Vector3 k4a = CalculateAccelerationAt(state.position + k3v * dt, k4v);
 
-        state.velocity += (k1a + 2 * k2a + 2 * k3a + k4a) * (dt / 6f);
-        state.position += (k1v + 2 * k2v + 2 * k3v + k4v) * (dt / 6f);
+        state.velocity += (k1a + 2f * k2a + 2f * k3a + k4a) * (dt / 6f);
+        state.position += (k1v + 2f * k2v + 2f * k3v + k4v) * (dt / 6f);
 
-        if (state.currentFuelMass > 0 && state.currentThrust > 0)
+        if (state.currentFuelMass > 0f && state.currentThrust > 0f)
         {
-            float massFlow = state.currentThrust / (parameters.isp * 9.80665f);
+            float massFlow = state.currentThrust / (parameters.isp * G0);
             state.currentFuelMass = Mathf.Max(0f, state.currentFuelMass - massFlow * dt);
         }
 
-        float leverArm = 16f;
-        Vector3 localTorque = new Vector3(-state.thrustDirection.z, 0f, state.thrustDirection.x) * state.currentThrust * leverArm;
-        localTorque -= state.angularVelocity * 40000f;
-        float momentOfInertia = state.TotalMass * 25f;
-        Vector3 angularAcceleration = localTorque / momentOfInertia;
+        // torque in body-ish frame from thrust vector offset
+        Vector3 localTorque = new Vector3(-state.thrustDirection.z, 0f, state.thrustDirection.x)
+                              * state.currentThrust * LeverArm;
+        localTorque -= state.angularVelocity * AngularDamping;
+        float I = Mathf.Max(1f, state.TotalMass * InertiaFactor);
+        Vector3 angularAcceleration = localTorque / I;
 
-        // Симплектичний метод Ейлера для кутової стабілізації (висока кутова стійкість)
         state.angularVelocity += angularAcceleration * dt;
         state.rotation *= Quaternion.Euler(state.angularVelocity * dt * Mathf.Rad2Deg);
+        state.rotation = Quaternion.Normalize(state.rotation);
     }
 
-    private Vector3 CalculateAccelerationAt(Vector3 pos, Vector3 vel)
+    Vector3 CalculateAccelerationAt(Vector3 pos, Vector3 vel)
     {
         Vector3 acc = Vector3.zero;
         acc.y -= AtmosphereModel.GetGravity(pos.y);
 
         Vector3 thrustWorld = state.rotation * state.thrustDirection * state.currentThrust;
-        acc += thrustWorld / state.TotalMass;
+        acc += thrustWorld / Mathf.Max(1f, state.TotalMass);
 
+        // drag relative to air (incl. wind)
+        Vector3 airRel = vel - (applyContinuousWind ? windVelocity : Vector3.zero);
         float density = AtmosphereModel.GetDensity(pos.y);
-        float drag = 0.5f * density * vel.sqrMagnitude * 0.85f * 8.5f;
-        if (vel.sqrMagnitude > 0.01f)
-            acc -= vel.normalized * (drag / state.TotalMass);
+        float dragMag = 0.5f * density * airRel.sqrMagnitude * Cd * RefArea;
+        if (airRel.sqrMagnitude > 0.01f)
+            acc -= airRel.normalized * (dragMag / Mathf.Max(1f, state.TotalMass));
+
         return acc;
     }
 
-    private float CalculateThrustPID()
+    float CalculateThrustPID()
     {
-        float targetVelocity = Mathf.Clamp(-Mathf.Sqrt(2f * 1.6f * state.position.y), -75f, -2.0f);
-        if (state.position.y < 6f) targetVelocity = -1.5f; // Плавний дотик на фінальних метрах
+        float h = Mathf.Max(0f, state.position.y);
+        float targetVelocity = Mathf.Clamp(-Mathf.Sqrt(2f * 1.6f * h), -75f, -2f);
+        if (h < 6f) targetVelocity = -1.5f;
 
         float pidOutput = thrustPID.Calculate(targetVelocity, state.velocity.y, parameters.fixedTimeStep);
-        float gravityCompensation = state.TotalMass * AtmosphereModel.GetGravity(state.position.y);
-
-        return gravityCompensation + pidOutput * 12000f; // Масштабування виходу під динаміку носія
+        float gravityCompensation = state.TotalMass * AtmosphereModel.GetGravity(h);
+        return gravityCompensation + pidOutput * 12000f;
     }
 
-    private void FinishLanding()
+    void FinishLanding(bool timeout)
     {
-        state.position.y = 0f;
+        if (!timeout)
+            state.position.y = 0f;
+
         state.isLanded = true;
         state.simulationFinished = true;
 
         metrics.touchdownVelocity = Mathf.Abs(state.velocity.y);
+        metrics.horizontalMiss = new Vector2(state.position.x, state.position.z).magnitude;
+        metrics.horizontalSpeed = new Vector2(state.velocity.x, state.velocity.z).magnitude;
         metrics.landingAngleError = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
         metrics.fuelRemaining = state.currentFuelMass;
         metrics.maxAltitude = maxHeightRecorded;
         metrics.totalFlightTime = state.time;
-        metrics.isSuccessfulLanding = (metrics.touchdownVelocity < 3.5f) && (metrics.landingAngleError < 7.0f);
+        metrics.timedOut = timeout;
+
+        float maxV = parameters != null ? parameters.maxTouchdownVelocity : 3.5f;
+        float maxA = parameters != null ? parameters.maxLandingAngle : 7f;
+        float maxM = parameters != null ? parameters.maxHorizontalMiss : 25f;
+        float maxH = parameters != null ? parameters.maxHorizontalSpeed : 5f;
+        metrics.isSuccessfulLanding = !timeout
+            && metrics.touchdownVelocity < maxV
+            && metrics.landingAngleError < maxA
+            && metrics.horizontalMiss < maxM
+            && metrics.horizontalSpeed < maxH;
+
         state.velocity = Vector3.zero;
         state.angularVelocity = Vector3.zero;
 
@@ -194,17 +267,25 @@ public class RocketPhysics : MonoBehaviour
 
         string algorithm = controlMode switch
         {
-            ControlMode.Fuzzy => "Fuzzy Logic (Sugeno)",
-            ControlMode.Neural => "Neural Network (Evolutionary)",
+            ControlMode.Fuzzy => "Fuzzy Logic (Sugeno-0)",
+            ControlMode.Neural => "Neural Network (ES 1+λ)",
+            ControlMode.Hybrid => "Hybrid Neuro-Fuzzy",
             _ => "PID"
         };
         metrics.PrintResults(algorithm);
 
-        FindObjectOfType<TrajectoryVisualizer>()?.OnSimulationFinished(metrics.isSuccessfulLanding);
+        if (cachedVisualizer == null)
+            cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+        cachedVisualizer?.OnSimulationFinished(metrics.isSuccessfulLanding);
 
-        if (controlMode == ControlMode.Neural && neuralController != null)
+        if ((controlMode == ControlMode.Neural || controlMode == ControlMode.Hybrid)
+            && neuralController != null)
         {
-            neuralController.Train(metrics.touchdownVelocity, metrics.landingAngleError, metrics.fuelRemaining);
+            neuralController.Train(
+                metrics.touchdownVelocity,
+                metrics.landingAngleError,
+                metrics.fuelRemaining,
+                metrics.horizontalMiss);
         }
     }
 
@@ -215,18 +296,31 @@ public class RocketPhysics : MonoBehaviour
         currentTime = 0f;
         maxHeightRecorded = 0f;
         metrics = new LandingMetrics();
+        windVelocity = Vector3.zero;
 
         pitchPID.Reset();
         yawPID.Reset();
-        thrustPID.Reset(); // Скидання ПІД вертикального каналу
+        thrustPID.Reset();
 
         InitializeSimulation();
         logger.Initialize();
+        cachedVisualizer?.Clear();
     }
 
     public void SyncTransformWithState()
     {
         transform.position = state.position;
         transform.rotation = state.rotation;
+    }
+
+    public string GetModeDisplayName()
+    {
+        return controlMode switch
+        {
+            ControlMode.Fuzzy => "FUZZY SUGENO",
+            ControlMode.Neural => "NEURAL ES",
+            ControlMode.Hybrid => "HYBRID N-F",
+            _ => "PID"
+        };
     }
 }
