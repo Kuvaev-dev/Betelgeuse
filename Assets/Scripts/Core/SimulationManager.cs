@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 
 /// <summary>
-/// Порівняльні Monte-Carlo експерименти: PID / Fuzzy / Neural / Hybrid.
+/// Порівняльні Monte-Carlo експерименти. НЕ запускається сам —
+/// лише за явним викликом RequestFullExperiment() з UI.
+/// Під час тесту алгоритми змінюються навмисно (це і є порівняння).
 /// </summary>
 public class SimulationManager : MonoBehaviour
 {
@@ -13,7 +15,7 @@ public class SimulationManager : MonoBehaviour
     public ExperimentDashboard dashboard;
 
     [Header("Налаштування експерименту")]
-    public int testsPerAlgorithm = 25;
+    public int testsPerAlgorithm = 15;
     public float delayBetweenTests = 0.05f;
     public bool includeHybrid = true;
     [Range(1f, 50f)] public float experimentTimeScale = 20f;
@@ -25,8 +27,12 @@ public class SimulationManager : MonoBehaviour
     [Range(0f, 10f)] public float angleVariationDegrees = 7f;
     public bool continuousWind = true;
 
-    [Header("Запуск")]
-    public bool runFullExperiment;
+    // Internal flag — never leave true in inspector permanently
+    [HideInInspector] public bool runFullExperiment;
+
+    public bool IsExperimentRunning { get; private set; }
+    public string ProgressLabel { get; private set; } = "";
+    public float Progress01 { get; private set; }
 
     readonly List<LandingMetrics> pidResults = new();
     readonly List<LandingMetrics> fuzzyResults = new();
@@ -34,11 +40,21 @@ public class SimulationManager : MonoBehaviour
     readonly List<LandingMetrics> hybridResults = new();
 
     float originalFuelMass;
-    bool experimentRunning;
+    bool cancelRequested;
     TrajectoryVisualizer visualizer;
+    RocketPhysics.ControlMode modeBeforeExperiment;
+    Coroutine running;
+
+    public static event System.Action OnExperimentStarted;
+    public static event System.Action OnExperimentFinished;
+    public static event System.Action<string> OnExperimentProgress;
 
     void Awake()
     {
+        // CRITICAL: never auto-start from a checked inspector box
+        runFullExperiment = false;
+        IsExperimentRunning = false;
+
         if (rocketPhysics == null)
             rocketPhysics = FindFirstObjectByType<RocketPhysics>();
         if (dashboard == null)
@@ -51,72 +67,111 @@ public class SimulationManager : MonoBehaviour
 
     void Update()
     {
-        if (!runFullExperiment || experimentRunning) return;
+        if (!runFullExperiment || IsExperimentRunning) return;
         runFullExperiment = false;
-        StartCoroutine(RunFullComparisonExperiment());
+        running = StartCoroutine(RunFullComparisonExperiment());
+    }
+
+    /// <summary>Єдиний правильний спосіб старту з UI.</summary>
+    public void RequestFullExperiment()
+    {
+        if (IsExperimentRunning) return;
+        runFullExperiment = true;
+    }
+
+    public void CancelExperiment()
+    {
+        cancelRequested = true;
+        if (!IsExperimentRunning)
+        {
+            runFullExperiment = false;
+            return;
+        }
+        // Coroutine checks cancelRequested each loop
     }
 
     IEnumerator RunFullComparisonExperiment()
     {
-        experimentRunning = true;
+        if (rocketPhysics == null)
+        {
+            Debug.LogError("[Sim] RocketPhysics missing");
+            yield break;
+        }
+
+        IsExperimentRunning = true;
+        cancelRequested = false;
+        modeBeforeExperiment = rocketPhysics.controlMode;
         float prevScale = Time.timeScale;
         float prevFixed = Time.fixedDeltaTime;
 
-        // Прискорення batch: timeScale↑, fixedDeltaTime = крок інтегратора
         float step = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
         Time.timeScale = Mathf.Clamp(experimentTimeScale, 1f, 50f);
         Time.fixedDeltaTime = step;
 
-        Debug.Log("══ Повний порівняльний експеримент (PID · Fuzzy · Neural · Hybrid) ══");
+        // Hide landing result popups during batch
+        MissionControlUI.Instance?.SetBatchMode(true);
+        OnExperimentStarted?.Invoke();
+        SetProgress("Старт авто-тесту…", 0f);
 
-        rocketPhysics.controlMode = RocketPhysics.ControlMode.PID;
-        yield return RunTestsForAlgorithm("PID", pidResults);
+        int algos = includeHybrid ? 4 : 3;
+        int doneAlgos = 0;
 
-        rocketPhysics.controlMode = RocketPhysics.ControlMode.Fuzzy;
-        yield return RunTestsForAlgorithm("Fuzzy Sugeno", fuzzyResults);
+        yield return RunAlgoBlock(RocketPhysics.ControlMode.PID, "PID", pidResults, doneAlgos, algos);
+        doneAlgos++;
+        if (cancelRequested) goto cleanup;
 
-        rocketPhysics.controlMode = RocketPhysics.ControlMode.Neural;
-        yield return RunTestsForAlgorithm("Neural ES", neuralResults);
+        yield return RunAlgoBlock(RocketPhysics.ControlMode.Fuzzy, "Нечітка логіка", fuzzyResults, doneAlgos, algos);
+        doneAlgos++;
+        if (cancelRequested) goto cleanup;
+
+        yield return RunAlgoBlock(RocketPhysics.ControlMode.Neural, "Нейромережа", neuralResults, doneAlgos, algos);
+        doneAlgos++;
+        if (cancelRequested) goto cleanup;
 
         if (includeHybrid)
         {
-            rocketPhysics.controlMode = RocketPhysics.ControlMode.Hybrid;
-            yield return RunTestsForAlgorithm("Hybrid Neuro-Fuzzy", hybridResults);
+            yield return RunAlgoBlock(RocketPhysics.ControlMode.Hybrid, "Гібрид", hybridResults, doneAlgos, algos);
+            doneAlgos++;
         }
 
-        ShowFinalComparison();
+        if (!cancelRequested)
+        {
+            ShowFinalComparison();
+            float pid = GetSuccessRate(pidResults);
+            float fuzzy = GetSuccessRate(fuzzyResults);
+            float neural = GetSuccessRate(neuralResults);
+            float hybrid = GetSuccessRate(hybridResults);
 
-        float pid = GetSuccessRate(pidResults);
-        float fuzzy = GetSuccessRate(fuzzyResults);
-        float neural = GetSuccessRate(neuralResults);
-        float hybrid = GetSuccessRate(hybridResults);
-
-        if (dashboard != null)
-            dashboard.UpdateStatistics(pid, fuzzy, neural, hybrid);
+            dashboard?.UpdateStatistics(pid, fuzzy, neural, hybrid);
+            MissionControlUI.Instance?.UpdateStatistics(pid, fuzzy, neural, hybrid);
+            SaveComparisonToCSV();
+            SetProgress("Авто-тест завершено", 1f);
+        }
         else
-            FindFirstObjectByType<ExperimentDashboard>()
-                ?.UpdateStatistics(pid, fuzzy, neural, hybrid);
+        {
+            SetProgress("Авто-тест скасовано", Progress01);
+            MissionControlUI.Instance?.NotifyInfo("Авто-тест зупинено користувачем.");
+        }
 
-        if (MissionControlUI.Instance != null)
-            MissionControlUI.Instance.UpdateStatistics(pid, fuzzy, neural, hybrid);
-
-        SaveComparisonToCSV();
-
-        Time.timeScale = prevScale;
+        cleanup:
+        // Restore user's chosen algorithm and idle state
+        rocketPhysics.controlMode = modeBeforeExperiment;
+        rocketPhysics.StopSimulation(keepPosition: false);
+        Time.timeScale = prevScale > 0.01f ? prevScale : 1f;
         Time.fixedDeltaTime = prevFixed;
-        experimentRunning = false;
-        Debug.Log("══ Експеримент завершено ══");
+        IsExperimentRunning = false;
+        running = null;
+        MissionControlUI.Instance?.SetBatchMode(false);
+        OnExperimentFinished?.Invoke();
+        Debug.Log(cancelRequested ? "══ Експеримент скасовано ══" : "══ Експеримент завершено ══");
     }
 
-    float GetSuccessRate(List<LandingMetrics> list)
-        => list.Count > 0
-            ? (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f
-            : 0f;
-
-    IEnumerator RunTestsForAlgorithm(string algorithmName, List<LandingMetrics> resultsList)
+    IEnumerator RunAlgoBlock(RocketPhysics.ControlMode mode, string label,
+        List<LandingMetrics> results, int algoIndex, int algoTotal)
     {
-        resultsList.Clear();
-        Debug.Log($"▶ {algorithmName}: {testsPerAlgorithm} симуляцій...");
+        rocketPhysics.controlMode = mode;
+        results.Clear();
+        Debug.Log($"▶ {label}: {testsPerAlgorithm} симуляцій...");
 
         float maxT = rocketPhysics.parameters != null
             ? rocketPhysics.parameters.maxSimulationTime + 5f
@@ -124,6 +179,12 @@ public class SimulationManager : MonoBehaviour
 
         for (int i = 0; i < testsPerAlgorithm; i++)
         {
+            if (cancelRequested) yield break;
+
+            float local = (i + 1f) / testsPerAlgorithm;
+            float global = (algoIndex + local) / algoTotal;
+            SetProgress($"Авто-тест: {label}  ·  запуск {i + 1}/{testsPerAlgorithm}", global);
+
             if (rocketPhysics.parameters != null)
                 rocketPhysics.parameters.fuelMass = originalFuelMass;
 
@@ -139,21 +200,33 @@ public class SimulationManager : MonoBehaviour
             float waited = 0f;
             while (!rocketPhysics.state.simulationFinished && waited < maxT)
             {
+                if (cancelRequested) yield break;
                 waited += Time.deltaTime;
                 yield return null;
             }
 
             if (!rocketPhysics.state.simulationFinished)
             {
-                // safety stop
                 rocketPhysics.state.simulationFinished = true;
                 rocketPhysics.state.isLanded = true;
             }
 
-            // deep copy metrics
-            resultsList.Add(CloneMetrics(rocketPhysics.metrics));
+            results.Add(CloneMetrics(rocketPhysics.metrics));
         }
     }
+
+    void SetProgress(string label, float p01)
+    {
+        ProgressLabel = label;
+        Progress01 = Mathf.Clamp01(p01);
+        OnExperimentProgress?.Invoke(label);
+        MissionControlUI.Instance?.SetExperimentProgress(label, p01);
+    }
+
+    float GetSuccessRate(List<LandingMetrics> list)
+        => list.Count > 0
+            ? (float)list.FindAll(m => m.isSuccessfulLanding).Count / list.Count * 100f
+            : 0f;
 
     static LandingMetrics CloneMetrics(LandingMetrics m)
     {
@@ -181,11 +254,7 @@ public class SimulationManager : MonoBehaviour
             Random.Range(-windStrength * 0.5f, windStrength * 0.5f));
 
         rocketPhysics.state.velocity += windKick;
-
-        if (continuousWind)
-            rocketPhysics.windVelocity = windKick * 0.35f;
-        else
-            rocketPhysics.windVelocity = Vector3.zero;
+        rocketPhysics.windVelocity = continuousWind ? windKick * 0.35f : Vector3.zero;
 
         float massNoise = 1f + Random.Range(-massVariationPercent, massVariationPercent) / 100f;
         rocketPhysics.state.currentFuelMass = Mathf.Max(0f, rocketPhysics.state.currentFuelMass * massNoise);

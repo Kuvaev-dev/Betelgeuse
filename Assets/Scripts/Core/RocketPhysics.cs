@@ -13,8 +13,12 @@ public class RocketPhysics : MonoBehaviour
     public enum ControlMode { PID, Fuzzy, Neural, Hybrid }
 
     [Header("Режим керування")]
-    public ControlMode controlMode = ControlMode.Fuzzy;
+    public ControlMode controlMode = ControlMode.Hybrid;
     public RocketState state = new RocketState();
+
+    [Header("Запуск")]
+    [Tooltip("false = ракета чекає кнопки «Запустити посадку»")]
+    public bool simulationArmed = false;
 
     [Header("Зовнішні збурення")]
     public Vector3 windVelocity = Vector3.zero;
@@ -24,9 +28,6 @@ public class RocketPhysics : MonoBehaviour
     private PIDController pitchPID = new PIDController();
     private PIDController yawPID = new PIDController();
     private PIDController thrustPID = new PIDController() { Kp = 2.8f, Ki = 0.4f, Kd = 1.5f };
-
-    private ParticleSystem engineFlame;
-    private ParticleSystem engineSmoke;
 
     public FuzzyLandingController fuzzyController;
     public NeuralController neuralController;
@@ -48,9 +49,6 @@ public class RocketPhysics : MonoBehaviour
     {
         logger = GetComponent<DataLogger>();
         logger.Initialize();
-
-        engineFlame = transform.Find("EngineFlame")?.GetComponent<ParticleSystem>();
-        engineSmoke = transform.Find("EngineSmoke")?.GetComponent<ParticleSystem>();
 
         if (fuzzyController == null) fuzzyController = GetComponent<FuzzyLandingController>();
         if (neuralController == null) neuralController = GetComponent<NeuralController>();
@@ -86,6 +84,7 @@ public class RocketPhysics : MonoBehaviour
 
     void FixedUpdate()
     {
+        if (!simulationArmed) return;
         if (state.isLanded || state.simulationFinished) return;
         if (parameters == null) return;
 
@@ -163,10 +162,7 @@ public class RocketPhysics : MonoBehaviour
 
         state.currentThrust = Mathf.Clamp(state.currentThrust, 0f, state.maxThrust);
         if (state.currentFuelMass <= 0f) state.currentThrust = 0f;
-
-        bool engineOn = state.currentThrust > 1000f;
-        if (engineFlame != null) { var em = engineFlame.emission; em.enabled = engineOn; }
-        if (engineSmoke != null) { var em = engineSmoke.emission; em.enabled = engineOn; }
+        // Engine VFX: RocketEngineFX (on Visual) drives flame/smoke from thrust
     }
 
     void RungeKutta4Step(float dt)
@@ -278,7 +274,9 @@ public class RocketPhysics : MonoBehaviour
             cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
         cachedVisualizer?.OnSimulationFinished(metrics.isSuccessfulLanding);
 
-        if ((controlMode == ControlMode.Neural || controlMode == ControlMode.Hybrid)
+        // Don't train during batch Monte-Carlo (SimulationManager sets timeScale high)
+        bool batch = FindFirstObjectByType<SimulationManager>() is { IsExperimentRunning: true };
+        if (!batch && (controlMode == ControlMode.Neural || controlMode == ControlMode.Hybrid)
             && neuralController != null)
         {
             neuralController.Train(
@@ -287,8 +285,13 @@ public class RocketPhysics : MonoBehaviour
                 metrics.fuelRemaining,
                 metrics.horizontalMiss);
         }
+
+        // Notify UI (single flights only — batch suppresses popup)
+        if (!batch)
+            MissionControlUI.Instance?.ShowLandingResult(metrics);
     }
 
+    /// <summary>Повне перезавантаження та старт спуску.</summary>
     public void ResetSimulation()
     {
         state.isLanded = false;
@@ -297,14 +300,78 @@ public class RocketPhysics : MonoBehaviour
         maxHeightRecorded = 0f;
         metrics = new LandingMetrics();
         windVelocity = Vector3.zero;
+        simulationArmed = true;
 
         pitchPID.Reset();
         yawPID.Reset();
         thrustPID.Reset();
 
         InitializeSimulation();
-        logger.Initialize();
+        if (logger != null) logger.Initialize();
+        if (cachedVisualizer == null)
+            cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
         cachedVisualizer?.Clear();
+        MissionControlUI.Instance?.HideLandingResult();
+        SnapCamera();
+    }
+
+    /// <summary>Лише вибір режиму — без старту.</summary>
+    public void PrepareMode(ControlMode mode)
+    {
+        controlMode = mode;
+        state.isLanded = false;
+        state.simulationFinished = false;
+        currentTime = 0f;
+        maxHeightRecorded = 0f;
+        metrics = new LandingMetrics();
+        windVelocity = Vector3.zero;
+        simulationArmed = false;
+
+        pitchPID.Reset();
+        yawPID.Reset();
+        thrustPID.Reset();
+
+        InitializeSimulation();
+        if (logger != null) logger.Initialize();
+        if (cachedVisualizer == null)
+            cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+        cachedVisualizer?.Clear();
+        MissionControlUI.Instance?.HideLandingResult();
+        SnapCamera();
+    }
+
+    /// <summary>
+    /// Зупинити політ (кнопка СТОП). Ракета замирає; режим не змінюється.
+    /// </summary>
+    public void StopSimulation(bool keepPosition = true)
+    {
+        simulationArmed = false;
+        state.simulationFinished = true;
+        state.isLanded = true;
+        state.currentThrust = 0f;
+        state.velocity = Vector3.zero;
+        state.angularVelocity = Vector3.zero;
+
+        if (!keepPosition)
+        {
+            // Return to start pad altitude for next run
+            InitializeSimulation();
+            state.simulationFinished = false;
+            state.isLanded = false;
+        }
+        else
+        {
+            SyncTransformWithState();
+        }
+
+        Time.timeScale = 1f;
+        SnapCamera();
+    }
+
+    static void SnapCamera()
+    {
+        var cam = FindFirstObjectByType<CameraFollow>();
+        cam?.SnapNow();
     }
 
     public void SyncTransformWithState()
@@ -317,10 +384,10 @@ public class RocketPhysics : MonoBehaviour
     {
         return controlMode switch
         {
-            ControlMode.Fuzzy => "FUZZY SUGENO",
-            ControlMode.Neural => "NEURAL ES",
-            ControlMode.Hybrid => "HYBRID N-F",
-            _ => "PID"
+            ControlMode.Fuzzy => "Нечітка логіка (Sugeno)",
+            ControlMode.Neural => "Нейромережа (ES)",
+            ControlMode.Hybrid => "Гібрид Neuro-Fuzzy",
+            _ => "Класичний PID"
         };
     }
 }

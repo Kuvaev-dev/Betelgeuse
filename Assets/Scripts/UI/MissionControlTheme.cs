@@ -3,21 +3,21 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Runtime Mission-Control skin: темні панелі, cyan/amber акценти, mono-телеметрія.
-/// Не ламає scene-wired посилання — лише візуальний шар.
+/// Космічна палітра Mission Control (legacy scene UI).
+/// Основний HUD будує MissionControlUI — цей клас лише для старих елементів.
 /// </summary>
 [DefaultExecutionOrder(-100)]
 public class MissionControlTheme : MonoBehaviour
 {
-    public static readonly Color Void = new(0.027f, 0.043f, 0.078f, 0.92f);
-    public static readonly Color Panel = new(0.051f, 0.082f, 0.149f, 0.88f);
-    public static readonly Color Edge = new(0.102f, 0.153f, 0.267f, 1f);
-    public static readonly Color Cyan = new(0.239f, 0.878f, 1f, 1f);
-    public static readonly Color Amber = new(1f, 0.690f, 0.125f, 1f);
-    public static readonly Color Ok = new(0.239f, 1f, 0.604f, 1f);
-    public static readonly Color Alert = new(1f, 0.302f, 0.416f, 1f);
-    public static readonly Color Text = new(0.910f, 0.941f, 1f, 1f);
-    public static readonly Color Muted = new(0.478f, 0.545f, 0.659f, 1f);
+    public static readonly Color Void = new(0.02f, 0.03f, 0.07f, 0.92f);
+    public static readonly Color Panel = new(0.03f, 0.04f, 0.09f, 0.9f);
+    public static readonly Color Edge = new(0.2f, 0.45f, 0.75f, 0.55f);
+    public static readonly Color Cyan = new(0.35f, 0.85f, 1f, 1f);
+    public static readonly Color Amber = new(1f, 0.72f, 0.25f, 1f);
+    public static readonly Color Ok = new(0.35f, 0.95f, 0.55f, 1f);
+    public static readonly Color Alert = new(1f, 0.38f, 0.42f, 1f);
+    public static readonly Color Text = new(0.92f, 0.95f, 1f, 1f);
+    public static readonly Color Muted = new(0.55f, 0.62f, 0.75f, 1f);
 
     [Header("Авто-стиль при старті")]
     public bool styleOnAwake = true;
@@ -25,8 +25,6 @@ public class MissionControlTheme : MonoBehaviour
 
     void Awake()
     {
-        // Disabled by default when MissionControlUI rebuilds the HUD.
-        // Avoid painting the old broken canvas black over the 3D view.
         if (styleOnAwake && FindFirstObjectByType<MissionControlUI>() == null)
             Apply();
     }
@@ -35,7 +33,7 @@ public class MissionControlTheme : MonoBehaviour
     public void Apply()
     {
         if (dimMainCameraBackground && Camera.main != null)
-            Camera.main.backgroundColor = new Color(0.02f, 0.035f, 0.06f);
+            Camera.main.backgroundColor = new Color(0.008f, 0.01f, 0.03f);
 
         foreach (var img in FindObjectsByType<Image>(FindObjectsSortMode.None))
         {
@@ -57,7 +55,6 @@ public class MissionControlTheme : MonoBehaviour
                      || img.GetComponentInParent<Toggle>() != null
                      || img.GetComponentInParent<TMP_InputField>() != null)
             {
-                // keep interactive chrome slightly brighter
                 if (n.Contains("fill")) img.color = Cyan * 0.85f;
                 else if (n.Contains("handle")) img.color = Amber;
                 else img.color = Edge;
@@ -75,25 +72,17 @@ public class MissionControlTheme : MonoBehaviour
                 tmp.color = Cyan;
                 tmp.fontStyle = FontStyles.Bold;
             }
-            else if (n.Contains("success") || n.Contains("stats") || n.Contains("pid")
-                     || n.Contains("fuzzy") || n.Contains("neural"))
-            {
-                tmp.color = Text;
-            }
-            // Prefer monospace if available
-            TrySetMono(tmp);
+            tmp.characterSpacing = 1.5f;
         }
 
         foreach (var btn in FindObjectsByType<Button>(FindObjectsSortMode.None))
             StyleButton(btn.targetGraphic as Image);
-
-        // Do NOT paint Canvas root black — that covers the entire 3D view.
     }
 
     static void StyleButton(Image img)
     {
         if (img == null) return;
-        img.color = new Color(0.08f, 0.14f, 0.24f, 0.95f);
+        img.color = new Color(0.07f, 0.12f, 0.22f, 0.95f);
         var btn = img.GetComponent<Button>();
         if (btn == null) return;
         var cb = btn.colors;
@@ -104,13 +93,5 @@ public class MissionControlTheme : MonoBehaviour
         cb.disabledColor = new Color(0.4f, 0.4f, 0.45f, 0.5f);
         cb.fadeDuration = 0.08f;
         btn.colors = cb;
-    }
-
-    static void TrySetMono(TMP_Text tmp)
-    {
-        // Use default TMP font; letter-spacing for instrument feel
-        tmp.characterSpacing = 2f;
-        if (tmp.fontSize > 0 && tmp.fontSize < 18f)
-            tmp.enableAutoSizing = false;
     }
 }

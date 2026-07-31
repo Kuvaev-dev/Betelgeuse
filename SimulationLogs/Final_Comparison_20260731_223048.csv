@@ -1,0 +1,5 @@
+Algorithm,Tests,SuccessRate(%),AvgTouchdownVelocity,AvgAngleError,AvgHorizontalMiss,AvgFuelRemaining,AvgSuccessScore
+PID,40,0,00,25,74,0,49,960,96,5035,30,64,32
+Fuzzy Sugeno,40,0,00,117,39,2,14,1689,19,632,08,29,72
+Neural ES,40,0,00,148,70,62,47,567,78,6378,49,17,29
+Hybrid Neuro-Fuzzy,40,0,00,155,04,73,94,389,06,7455,79,15,29

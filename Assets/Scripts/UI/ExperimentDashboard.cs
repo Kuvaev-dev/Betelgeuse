@@ -45,6 +45,18 @@ public class ExperimentDashboard : MonoBehaviour
         if (rocketPhysics == null)
             rocketPhysics = FindFirstObjectByType<RocketPhysics>();
 
+        // If modern UI is active, never wire legacy scene buttons (they caused "random" mode switches)
+        if (FindFirstObjectByType<MissionControlUI>() != null)
+        {
+            if (btnRunPID) btnRunPID.interactable = false;
+            if (btnRunFuzzy) btnRunFuzzy.interactable = false;
+            if (btnRunNeural) btnRunNeural.interactable = false;
+            if (btnRunHybrid) btnRunHybrid.interactable = false;
+            if (btnRunFullTest) btnRunFullTest.interactable = false;
+            if (btnReset) btnReset.interactable = false;
+            return;
+        }
+
         if (btnRunPID) btnRunPID.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.PID));
         if (btnRunFuzzy) btnRunFuzzy.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.Fuzzy));
         if (btnRunNeural) btnRunNeural.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.Neural));
@@ -95,7 +107,7 @@ public class ExperimentDashboard : MonoBehaviour
 
         simulationManager.enableNoise = noiseToggle == null || noiseToggle.isOn;
         simulationManager.windStrength = windSlider != null ? windSlider.value : 10f;
-        simulationManager.runFullExperiment = true;
+        simulationManager.RequestFullExperiment();
         Debug.Log("▶ Full Monte-Carlo: PID · Fuzzy · Neural · Hybrid");
     }
 

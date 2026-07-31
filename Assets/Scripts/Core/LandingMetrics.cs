@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Text;
 
 /// <summary>
 /// Метрики посадки для аналізу та Monte-Carlo порівняння алгоритмів.
@@ -16,7 +17,6 @@ public class LandingMetrics
     public bool timedOut;
     public bool isSuccessfulLanding;
 
-    /// <summary>Комплексна оцінка 0..100 (швидкість, кут, паливо, промах).</summary>
     public float SuccessScore
     {
         get
@@ -30,6 +30,40 @@ public class LandingMetrics
             return (velScore * 0.35f + angleScore * 0.25f + fuelScore * 0.15f
                     + missScore * 0.15f + hVelScore * 0.10f) * 100f;
         }
+    }
+
+    /// <summary>Людською мовою: чому успіх / невдача.</summary>
+    public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 25f, float maxH = 5f)
+    {
+        var sb = new StringBuilder();
+        if (isSuccessfulLanding)
+        {
+            sb.AppendLine("ПОСАДКУ ВИКОНАНО УСПІШНО");
+            sb.AppendLine();
+            sb.AppendLine($"• Швидкість приземлення: {touchdownVelocity:F1} м/с  (норма < {maxV})");
+            sb.AppendLine($"• Нахил корпусу: {landingAngleError:F1}°  (норма < {maxA}°)");
+            sb.AppendLine($"• Відхилення від pad: {horizontalMiss:F1} м  (норма < {maxM} м)");
+            sb.AppendLine($"• Бічна швидкість: {horizontalSpeed:F1} м/с  (норма < {maxH})");
+            sb.AppendLine($"• Оцінка: {SuccessScore:F0} / 100");
+            return sb.ToString().TrimEnd();
+        }
+
+        sb.AppendLine("ПОСАДКА НЕВДАЛА");
+        sb.AppendLine();
+        sb.AppendLine("Причини:");
+        if (timedOut)
+            sb.AppendLine("• Час симуляції вичерпано (ракета не сіла вчасно)");
+        if (touchdownVelocity >= maxV)
+            sb.AppendLine($"• Занадто швидке приземлення: {touchdownVelocity:F1} м/с  (треба < {maxV})");
+        if (landingAngleError >= maxA)
+            sb.AppendLine($"• Занадто великий нахил: {landingAngleError:F1}°  (треба < {maxA}°)");
+        if (horizontalMiss >= maxM)
+            sb.AppendLine($"• Промах повз pad: {horizontalMiss:F1} м  (треба < {maxM} м)");
+        if (horizontalSpeed >= maxH)
+            sb.AppendLine($"• Велика бічна швидкість: {horizontalSpeed:F1} м/с  (треба < {maxH})");
+        sb.AppendLine();
+        sb.AppendLine($"Оцінка: {SuccessScore:F0} / 100");
+        return sb.ToString().TrimEnd();
     }
 
     public void PrintResults(string algorithmName = "Unknown")

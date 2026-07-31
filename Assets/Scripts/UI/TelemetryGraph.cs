@@ -11,7 +11,7 @@ public class TelemetryGraph : MonoBehaviour
     public string title = "GRAPH";
     public Color lineColor = new(0.24f, 0.88f, 1f, 1f);
     public Color gridColor = new(1f, 1f, 1f, 0.08f);
-    public Color bgColor = new(0.03f, 0.05f, 0.09f, 1f);
+    public Color bgColor = new(0.015f, 0.02f, 0.045f, 1f);
     public int maxSamples = 300;
     public float minY = 0f;
     public float maxY = 1f;

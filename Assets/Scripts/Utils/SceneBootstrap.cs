@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Після завантаження сцени: візуал ракети, середовище, камера, Hybrid, UI.
+/// Після завантаження сцени: візуал, космос, камера, контролери.
 /// </summary>
 public static class SceneBootstrap
 {
@@ -11,7 +11,52 @@ public static class SceneBootstrap
         var rocket = Object.FindFirstObjectByType<RocketPhysics>();
         if (rocket == null) return;
 
-        // Controllers
+        EnsureControllers(rocket);
+
+        RocketVisualBuilder.Build(rocket);
+        EnvironmentBuilder.Build();
+
+        // Hold until user starts
+        rocket.simulationArmed = false;
+        if (rocket.parameters != null)
+        {
+            rocket.state.position = rocket.parameters.startPosition;
+            rocket.state.velocity = rocket.parameters.startVelocity;
+            rocket.state.rotation = Quaternion.Euler(rocket.parameters.startEulerAngles);
+            rocket.state.angularVelocity = Vector3.zero;
+            rocket.state.currentThrust = 0f;
+            rocket.state.currentFuelMass = rocket.parameters.fuelMass;
+            rocket.state.dryMass = rocket.parameters.dryMass;
+            rocket.state.maxThrust = rocket.parameters.maxThrust;
+            rocket.state.isLanded = false;
+            rocket.state.simulationFinished = false;
+            rocket.state.time = 0f;
+            rocket.SyncTransformWithState();
+        }
+
+        if (Object.FindFirstObjectByType<SimulationManager>() == null)
+        {
+            var smGo = new GameObject("SimulationManager");
+            var sm = smGo.AddComponent<SimulationManager>();
+            sm.rocketPhysics = rocket;
+        }
+
+        SetupCamera(rocket);
+
+        if (Object.FindFirstObjectByType<TrajectoryVisualizer>() == null)
+        {
+            var tv = new GameObject("TrajectoryVisualizer");
+            var vis = tv.AddComponent<TrajectoryVisualizer>();
+            vis.rocketPhysics = rocket;
+            vis.lineWidth = 2.8f;
+        }
+
+        foreach (var theme in Object.FindObjectsByType<MissionControlTheme>(FindObjectsSortMode.None))
+            theme.styleOnAwake = false;
+    }
+
+    static void EnsureControllers(RocketPhysics rocket)
+    {
         if (rocket.GetComponent<FuzzyLandingController>() == null)
             rocket.gameObject.AddComponent<FuzzyLandingController>();
         if (rocket.GetComponent<NeuralController>() == null)
@@ -28,36 +73,9 @@ public static class SceneBootstrap
         rocket.fuzzyController = rocket.GetComponent<FuzzyLandingController>();
         rocket.neuralController = rocket.GetComponent<NeuralController>();
         rocket.hybridController = rocket.GetComponent<HybridController>();
-
-        // Visuals
-        RocketVisualBuilder.Build(rocket);
-        EnvironmentBuilder.Build();
-
-        // Simulation manager
-        if (Object.FindFirstObjectByType<SimulationManager>() == null)
-        {
-            var smGo = new GameObject("SimulationManager");
-            var sm = smGo.AddComponent<SimulationManager>();
-            sm.rocketPhysics = rocket;
-        }
-
-        // Camera
-        SetupCamera(rocket.transform);
-
-        // Trajectory visualizer
-        if (Object.FindFirstObjectByType<TrajectoryVisualizer>() == null)
-        {
-            var tv = new GameObject("TrajectoryVisualizer");
-            var vis = tv.AddComponent<TrajectoryVisualizer>();
-            vis.rocketPhysics = rocket;
-        }
-
-        // Disable old MissionControlTheme full-screen dim on canvas
-        foreach (var theme in Object.FindObjectsByType<MissionControlTheme>(FindObjectsSortMode.None))
-            theme.styleOnAwake = false;
     }
 
-    static void SetupCamera(Transform rocket)
+    static void SetupCamera(RocketPhysics rocket)
     {
         var cam = Camera.main ?? Object.FindFirstObjectByType<Camera>();
         if (cam == null)
@@ -69,24 +87,20 @@ public static class SceneBootstrap
 
         try { cam.tag = "MainCamera"; } catch { /* tag missing */ }
 
-        cam.farClipPlane = 12000f;
-        cam.fieldOfView = 48f;
+        cam.farClipPlane = 16000f;
+        cam.fieldOfView = 46f;
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.42f, 0.6f, 0.82f);
-        cam.transform.position = new Vector3(80f, 2580f, -140f);
+        cam.backgroundColor = new Color(0.01f, 0.012f, 0.035f);
+        cam.allowHDR = true;
 
         var follow = cam.GetComponent<CameraFollow>();
         if (follow == null) follow = cam.gameObject.AddComponent<CameraFollow>();
-        follow.target = rocket;
-        follow.baseOffset = new Vector3(55f, 30f, -100f);
-
-        // Start near rocket initial altitude if params known
-        var rp = rocket.GetComponent<RocketPhysics>();
-        if (rp != null && rp.parameters != null)
-        {
-            Vector3 p = rp.parameters.startPosition;
-            cam.transform.position = p + follow.baseOffset;
-            cam.transform.LookAt(p + Vector3.up * 15f);
-        }
+        follow.rocket = rocket;
+        follow.target = rocket.transform;
+        follow.viewOffset = new Vector3(42f, 18f, -78f);
+        follow.bodyLookHeight = 18f;
+        follow.positionSharpness = 14f;
+        follow.rotationSharpness = 16f;
+        follow.SnapNow();
     }
 }
