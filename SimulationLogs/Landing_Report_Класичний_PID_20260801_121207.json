@@ -1,0 +1,24 @@
+﻿{
+  "project": "Betelgeuse",
+  "type": "single_landing",
+  "timestamp": "20260801_121207",
+  "algorithm": "Класичний PID",
+  "criteria": {
+    "maxTouchdownVelocity": 3.5,
+    "maxLandingAngle": 7,
+    "maxHorizontalMiss": 25,
+    "maxHorizontalSpeed": 5
+  },
+  "results": {
+    "successful": false,
+    "timedOut": false,
+    "touchdownVelocity_mps": 0,
+    "landingAngle_deg": 0,
+    "horizontalMiss_m": 0,
+    "horizontalSpeed_mps": 0,
+    "fuelRemaining_kg": 0,
+    "maxAltitude_m": 0,
+    "flightTime_s": 0,
+    "successScore": 85
+  }
+}

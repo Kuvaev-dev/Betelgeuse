@@ -1,7 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Після завантаження сцени: візуал, космос, камера, контролери.
+/// Автоматична ініціалізація сцени після Load (RuntimeInitializeOnLoad).
+/// Гарантує наявність контролерів GNC, 3D-візуалу, середовища, камери
+/// та TrajectoryVisualizer — навіть якщо сцена «порожня».
 /// </summary>
 public static class SceneBootstrap
 {
@@ -48,7 +50,7 @@ public static class SceneBootstrap
             var tv = new GameObject("TrajectoryVisualizer");
             var vis = tv.AddComponent<TrajectoryVisualizer>();
             vis.rocketPhysics = rocket;
-            vis.lineWidth = 2.8f;
+            vis.baseLineWidth = 6f;
         }
 
         foreach (var theme in Object.FindObjectsByType<MissionControlTheme>(FindObjectsSortMode.None))
@@ -97,10 +99,10 @@ public static class SceneBootstrap
         if (follow == null) follow = cam.gameObject.AddComponent<CameraFollow>();
         follow.rocket = rocket;
         follow.target = rocket.transform;
-        follow.viewOffset = new Vector3(42f, 18f, -78f);
         follow.bodyLookHeight = 18f;
-        follow.positionSharpness = 14f;
-        follow.rotationSharpness = 16f;
+        follow.defaultDistance = 105f;
+        follow.defaultYaw = 28f;
+        follow.defaultPitch = 22f;
         follow.SnapNow();
     }
 }

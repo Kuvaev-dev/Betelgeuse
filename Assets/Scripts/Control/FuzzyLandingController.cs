@@ -1,9 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Нечіткий контролер посадки: zero-order Sugeno (TSK-0).
-/// Канали: тяга (висота × |V_y|) та gimbal (помилка кута × |ω|).
-/// AND = product; дефазифікація = зважене середнє чітких консеквентів.
+/// Нечіткий контролер посадки: zero-order Sugeno (TSK-0), не Mamdani.
+/// Канали: тяга (фазифікація висоти × |Vy|) та gimbal (|кут| × |ω|).
+/// AND = product; дефазифікація = зважене середнє чітких консеквентів таблиці 5×5.
+/// Біля землі (&lt;25 м) — м'яка корекція під soft-landing профіль.
 /// </summary>
 public class FuzzyLandingController : MonoBehaviour
 {

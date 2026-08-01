@@ -1,7 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Полум'я / дим / іскри / світло двигуна — масштаб від тяги.
+/// Візуальні ефекти двигуна: полум'я, дим, іскри та point light.
+/// Інтенсивність пропорційна currentThrust / maxThrust (згладжено).
+/// Компонент вішається на Visual під час RocketVisualBuilder.Build.
 /// </summary>
 public class RocketEngineFX : MonoBehaviour
 {
@@ -10,11 +12,14 @@ public class RocketEngineFX : MonoBehaviour
     public ParticleSystem sparks;
     public Light engineLight;
 
-    public float maxFlameRate = 220f;
-    public float maxSmokeRate = 70f;
-    public float maxSparkRate = 90f;
-    public float maxLightIntensity = 70f;
-    public float lightRange = 110f;
+    public float maxFlameRate = 200f;
+    /// <summary>Дим — лише легкий шлейф, щоб не закривав корпус.</summary>
+    public float maxSmokeRate = 18f;
+    public float maxSparkRate = 70f;
+    public float maxLightIntensity = 65f;
+    public float lightRange = 100f;
+    /// <summary>Нижче цієї висоти дим трохи сильніший (landing burn).</summary>
+    public float smokeBoostBelowAltitude = 120f;
 
     RocketPhysics rocket;
     float smoothThrust;
@@ -43,15 +48,21 @@ public class RocketEngineFX : MonoBehaviour
         float target = dead ? 0f : Mathf.Clamp01(rocket.state.currentThrust / maxT);
 
         smoothThrust = Mathf.Lerp(smoothThrust, target, 1f - Mathf.Exp(-12f * Time.deltaTime));
-        bool on = smoothThrust > 0.015f;
+        bool on = smoothThrust > 0.02f;
 
         SetEmission(flame, on ? smoothThrust * maxFlameRate : 0f, on);
-        SetEmission(smoke, on ? smoothThrust * maxSmokeRate : 0f, on);
-        SetEmission(sparks, on ? smoothThrust * maxSparkRate * 0.6f : 0f, on);
+
+        // Дим: слабкий на висоті, трохи сильніший біля pad; ніколи не «стіна»
+        float h = rocket.state.position.y;
+        float smokeMul = 0.35f + 0.65f * Mathf.Clamp01(1f - h / smokeBoostBelowAltitude);
+        float smokeRate = on ? smoothThrust * maxSmokeRate * smokeMul : 0f;
+        SetEmission(smoke, smokeRate, on && smokeRate > 0.5f);
+
+        SetEmission(sparks, on ? smoothThrust * maxSparkRate * 0.45f : 0f, on);
 
         if (engineLight != null)
         {
-            float flicker = on ? 0.88f + 0.12f * Mathf.PerlinNoise(Time.time * 32f, 0.4f) : 1f;
+            float flicker = on ? 0.9f + 0.1f * Mathf.PerlinNoise(Time.time * 28f, 0.4f) : 1f;
             engineLight.intensity = smoothThrust * maxLightIntensity * flicker;
             engineLight.range = lightRange * (0.7f + 0.3f * smoothThrust);
             engineLight.color = Color.Lerp(
@@ -64,11 +75,11 @@ public class RocketEngineFX : MonoBehaviour
         {
             var main = flame.main;
             main.startSpeed = new ParticleSystem.MinMaxCurve(
-                30f + smoothThrust * 55f,
-                55f + smoothThrust * 90f);
+                28f + smoothThrust * 50f,
+                50f + smoothThrust * 80f);
             main.startSize = new ParticleSystem.MinMaxCurve(
-                1.3f + smoothThrust * 2.2f,
-                3.2f + smoothThrust * 4.5f);
+                1.2f + smoothThrust * 1.8f,
+                2.8f + smoothThrust * 3.5f);
         }
     }
 

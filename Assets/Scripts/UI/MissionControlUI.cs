@@ -2,10 +2,12 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
-
 /// <summary>
-/// Центр керування місією: телеметрія, режими посадки, експерименти.
-/// Мова інтерфейсу — зрозуміла для рядового користувача (UA).
+/// Центр керування місією (runtime HUD).
+/// Ліва панель: телеметрія, критерії soft-landing, висновок, live-графіки.
+/// Права панель: алгоритм A–D, запуск, камера (Follow/Повна траєкторія/Manual),
+/// умови Monte-Carlo, експорт CSV/JSON/Markdown.
+/// Інтерфейс українською, орієнтований на демонстрацію дипломної роботи.
 /// </summary>
 [DefaultExecutionOrder(-50)]
 public class MissionControlUI : MonoBehaviour
@@ -14,39 +16,65 @@ public class MissionControlUI : MonoBehaviour
 
     RocketPhysics rocket;
     SimulationManager sim;
+    CameraFollow cameraFollow;
+    DataLogger dataLogger;
 
     TMP_Text txtAlt, txtVel, txtThr, txtTilt, txtFuel, txtMiss, txtMode, txtStatus, txtTime, txtScore;
+    TMP_Text txtHVel, txtMass, txtTwr, txtEta, txtAcc, txtRate;
+    TMP_Text txtPeakVy, txtPeakTilt, txtMinH, txtDeltaStrip;
+    TMP_Text txtCritV, txtCritA, txtCritM, txtCritH;
+    TMP_Text txtInsight, txtFuelPct;
     TMP_Text txtPid, txtFuzzy, txtNeural, txtHybrid, txtWinner, txtInfo, txtHint;
     TMP_Text txtWindVal, txtTestsVal;
-    TMP_Text txtResultTitle, txtResultBody, txtProgress, txtCamMode;
+    TMP_Text txtResultTitle, txtResultBody, txtProgress, txtCamMode, txtCamHelp;
+    TMP_Text txtTrajBtn, txtTitle, txtSubtitle, txtBottom, txtHow, txtGraphHint;
+    TMP_Text txtHdrTelem, txtHdrLive, txtHdrCrit, txtHdrInsight, txtHdrGraphs;
+    Button trajToggleBtn;
+
+    // Metric label texts (for language refresh)
+    readonly List<TMP_Text> metricLabels = new();
 
     Slider windSlider, testsSlider, timeScaleSlider;
     Toggle noiseToggle, trainToggle;
     Image thrBarFill, fuelBarFill, tiltBarFill, statusDot, progressFill, resultPanelBg;
-    GameObject resultRoot, progressRoot;
+    GameObject resultRoot, progressRoot, canvasRoot;
+    GameObject leftPanelGo, rightPanelGo, bottomBarGo, centerHintGo, topBarGo, topMenuGo;
+    bool panelsHidden;
+    TMP_Text txtHideBtn;
     TelemetryGraph graphAlt, graphVel, graphThr;
     readonly List<Button> modeButtons = new();
     readonly List<Image> modeButtonImages = new();
 
     float sampleTimer;
+    float prevVyForAcc;
+    float prevAlt, prevAbsVy, prevTilt, prevThr;
+    float smoothedAcc;
+    float peakVy, peakTilt, minAltLive;
+    bool flightPeaksActive;
     bool built;
     bool batchMode;
     bool overviewCam;
     bool resultShown;
+    bool trajVisible = true;
+    bool rebuilding;
+    string lastExportPath;
 
-    // Space mission palette
-    static readonly Color C_Panel = new(0.03f, 0.04f, 0.09f, 0.92f);
-    static readonly Color C_PanelSoft = new(0.04f, 0.055f, 0.12f, 0.88f);
-    static readonly Color C_Edge = new(0.2f, 0.45f, 0.75f, 0.55f);
-    static readonly Color C_Cyan = new(0.35f, 0.85f, 1f, 1f);
-    static readonly Color C_Amber = new(1f, 0.72f, 0.25f, 1f);
-    static readonly Color C_Ok = new(0.35f, 0.95f, 0.55f, 1f);
-    static readonly Color C_Alert = new(1f, 0.38f, 0.42f, 1f);
-    static readonly Color C_Text = new(0.92f, 0.95f, 1f, 1f);
-    static readonly Color C_Muted = new(0.55f, 0.62f, 0.75f, 1f);
-    static readonly Color C_Btn = new(0.07f, 0.12f, 0.22f, 0.98f);
-    static readonly Color C_BtnActive = new(0.08f, 0.32f, 0.42f, 1f);
-    static readonly Color C_BtnHover = new(0.12f, 0.22f, 0.38f, 1f);
+    // Сіро-біла естетика (акцент — білий/срібло; статус — м'які тони)
+    static readonly Color C_Panel = new(0.09f, 0.09f, 0.1f, 0.94f);
+    static readonly Color C_PanelSoft = new(0.12f, 0.12f, 0.13f, 0.9f);
+    static readonly Color C_Edge = new(0.5f, 0.5f, 0.54f, 0.45f);
+    static readonly Color C_Cyan = new(0.92f, 0.92f, 0.95f, 1f); // accent white
+    static readonly Color C_Amber = new(0.78f, 0.78f, 0.8f, 1f);
+    static readonly Color C_Ok = new(0.72f, 0.86f, 0.74f, 1f);
+    static readonly Color C_Alert = new(0.88f, 0.55f, 0.55f, 1f);
+    static readonly Color C_Text = new(0.95f, 0.95f, 0.96f, 1f);
+    static readonly Color C_Muted = new(0.58f, 0.58f, 0.62f, 1f);
+    static readonly Color C_Btn = new(0.16f, 0.16f, 0.18f, 0.98f);
+    static readonly Color C_BtnActive = new(0.32f, 0.32f, 0.36f, 1f);
+    static readonly Color C_BtnHover = new(0.24f, 0.24f, 0.27f, 1f);
+    static readonly Color C_GraphA = new(0.9f, 0.9f, 0.92f, 1f);
+    static readonly Color C_GraphB = new(0.72f, 0.72f, 0.76f, 1f);
+    static readonly Color C_GraphC = new(0.55f, 0.55f, 0.58f, 1f);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void AutoCreate()
@@ -61,14 +89,46 @@ public class MissionControlUI : MonoBehaviour
         Instance = this;
         rocket = FindFirstObjectByType<RocketPhysics>();
         sim = FindFirstObjectByType<SimulationManager>();
+        cameraFollow = FindFirstObjectByType<CameraFollow>();
+        if (rocket != null) dataLogger = rocket.GetComponent<DataLogger>();
     }
 
     void Start()
     {
         HideLegacyUI();
+        UILocale.OnLanguageChanged -= OnLanguageChanged;
+        UILocale.OnLanguageChanged += OnLanguageChanged;
         Build();
         WireLegacyDashboard();
         built = true;
+    }
+
+    void OnDestroy()
+    {
+        UILocale.OnLanguageChanged -= OnLanguageChanged;
+        if (Instance == this) Instance = null;
+    }
+
+    void OnLanguageChanged()
+    {
+        if (!built || rebuilding) return;
+        RebuildUi();
+    }
+
+    void RebuildUi()
+    {
+        rebuilding = true;
+        built = false;
+        modeButtons.Clear();
+        modeButtonImages.Clear();
+        metricLabels.Clear();
+        if (canvasRoot != null) Destroy(canvasRoot);
+        Build();
+        WireLegacyDashboard();
+        built = true;
+        rebuilding = false;
+        RefreshCamLabel();
+        UpdateTrajButtonLabel();
     }
 
     void HideLegacyUI()
@@ -120,6 +180,7 @@ public class MissionControlUI : MonoBehaviour
     {
         var canvasGo = new GameObject("MC_Canvas");
         canvasGo.transform.SetParent(transform, false);
+        canvasRoot = canvasGo;
         var canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 100;
@@ -131,17 +192,91 @@ public class MissionControlUI : MonoBehaviour
         EnsureEventSystem();
 
         BuildTopBar(canvasGo.transform);
+        BuildTopMenu(canvasGo.transform);
         BuildLeftPanel(canvasGo.transform);
         BuildRightPanel(canvasGo.transform);
         BuildBottomBar(canvasGo.transform);
         BuildCenterHint(canvasGo.transform);
         BuildResultOverlay(canvasGo.transform);
         BuildProgressBar(canvasGo.transform);
+        ApplyPanelsVisibility();
+    }
+
+    void BuildTopMenu(Transform parent)
+    {
+        topMenuGo = CreatePanel("TopMenu", parent, new Color(0.11f, 0.11f, 0.12f, 0.96f));
+        var rt = topMenuGo.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0, 1);
+        rt.anchorMax = new Vector2(1, 1);
+        rt.pivot = new Vector2(0.5f, 1);
+        rt.offsetMin = new Vector2(0, -102);
+        rt.offsetMax = new Vector2(0, -70);
+        Outline(topMenuGo, 1f);
+
+        float x = 16f;
+        MenuBtn(topMenuGo.transform, ref x, UILocale.T("btn_lang"), () => UILocale.Toggle());
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Панелі" : "Panels", TogglePanels);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Траєкторія" : "Trajectory", OnToggleTrajectoryLine);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Слідкувати F" : "Follow F", OnCamFollow);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Огляд T" : "Overview T", OnFullTrajectoryView);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Експорт" : "Export", OnExportResults);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Звіти" : "Reports", OnOpenExportFolder);
+
+        var tip = CreateText(topMenuGo.transform,
+            UILocale.IsUK ? "H — сховати панелі  ·  Ctrl+колесо — зум над UI" : "H — hide panels  ·  Ctrl+scroll — zoom over UI",
+            11, C_Muted);
+        var trt = tip.rectTransform;
+        trt.anchorMin = trt.anchorMax = new Vector2(1, 0.5f);
+        trt.pivot = new Vector2(1, 0.5f);
+        trt.anchoredPosition = new Vector2(-16, 0);
+        trt.sizeDelta = new Vector2(420, 24);
+        tip.alignment = TextAlignmentOptions.Right;
+    }
+
+    void MenuBtn(Transform parent, ref float x, string label, UnityEngine.Events.UnityAction action)
+    {
+        var go = CreatePanel("MBtn", parent, C_Btn);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0, 0.5f);
+        rt.pivot = new Vector2(0, 0.5f);
+        rt.anchoredPosition = new Vector2(x, 0);
+        rt.sizeDelta = new Vector2(Mathf.Max(90f, label.Length * 8.5f + 24f), 24);
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = go.GetComponent<Image>();
+        var t = CreateText(go.transform, label, 11, C_Text, FontStyles.Bold);
+        StretchFull(t.rectTransform, 4, 2, 4, 2);
+        t.alignment = TextAlignmentOptions.Center;
+        btn.onClick.AddListener(action);
+        x += rt.sizeDelta.x + 8f;
+    }
+
+    void TogglePanels()
+    {
+        panelsHidden = !panelsHidden;
+        ApplyPanelsVisibility();
+        NotifyInfo(panelsHidden
+            ? (UILocale.IsUK ? "Панелі сховано (H — показати)" : "Panels hidden (H — show)")
+            : (UILocale.IsUK ? "Панелі показано" : "Panels visible"));
+    }
+
+    void ApplyPanelsVisibility()
+    {
+        bool show = !panelsHidden;
+        if (leftPanelGo) leftPanelGo.SetActive(show);
+        if (rightPanelGo) rightPanelGo.SetActive(show);
+        if (bottomBarGo) bottomBarGo.SetActive(show);
+        if (centerHintGo) centerHintGo.SetActive(show && txtHint != null && txtHint.gameObject.activeSelf);
+        // top bar + menu always visible for settings
+        if (txtHideBtn != null)
+            txtHideBtn.text = panelsHidden
+                ? (UILocale.IsUK ? "Показати UI" : "Show UI")
+                : (UILocale.IsUK ? "Сховати UI" : "Hide UI");
     }
 
     void BuildTopBar(Transform parent)
     {
         var bar = CreatePanel("TopBar", parent, C_Panel);
+        topBarGo = bar;
         DockTop(bar.GetComponent<RectTransform>(), 70f);
         Outline(bar, 1.5f);
 
@@ -154,18 +289,36 @@ public class MissionControlUI : MonoBehaviour
         art.anchoredPosition = Vector2.zero;
         art.sizeDelta = new Vector2(0, 2);
 
-        var title = CreateText(bar.transform, "BETELGEUSE", 22, C_Cyan, FontStyles.Bold);
-        Pin(title.rectTransform, 0, 0.55f, 0, 0.55f, 24, 4, 200, 30);
+        txtTitle = CreateText(bar.transform, UILocale.T("app_title"), 22, C_Cyan, FontStyles.Bold);
+        Pin(txtTitle.rectTransform, 0, 0.55f, 0, 0.55f, 24, 4, 200, 30);
 
-        var subtitle = CreateText(bar.transform, "Автономна посадка ракетоносія", 13, C_Muted);
-        Pin(subtitle.rectTransform, 0, 0.28f, 0, 0.28f, 24, 0, 320, 22);
+        txtSubtitle = CreateText(bar.transform, UILocale.T("app_sub"), 13, C_Muted);
+        Pin(txtSubtitle.rectTransform, 0, 0.28f, 0, 0.28f, 24, 0, 360, 22);
 
-        txtMode = CreateText(bar.transform, "Алгоритм: —", 16, C_Amber, FontStyles.Bold);
+        txtMode = CreateText(bar.transform, UILocale.T("algo_fmt").Replace("{0}", "—"), 16, C_Amber, FontStyles.Bold);
         Pin(txtMode.rectTransform, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 420, 34);
         txtMode.alignment = TextAlignmentOptions.Center;
 
-        txtTime = CreateText(bar.transform, "Час  0.0 с", 15, C_Text);
-        Pin(txtTime.rectTransform, 1, 0.5f, 1, 0.5f, -300, 0, 130, 30);
+        txtTime = CreateText(bar.transform, string.Format(UILocale.T("time_fmt"), 0f), 15, C_Text);
+        Pin(txtTime.rectTransform, 1, 0.5f, 1, 0.5f, -300, 0, 140, 30);
+
+        var langGo = CreatePanel("LangBtn", bar.transform, C_Btn);
+        Pin(langGo.GetComponent<RectTransform>(), 1, 0.5f, 1, 0.5f, -520, 0, 120, 34);
+        var langBtn = langGo.AddComponent<Button>();
+        langBtn.targetGraphic = langGo.GetComponent<Image>();
+        var langTxt = CreateText(langGo.transform, UILocale.T("btn_lang"), 12, C_Text, FontStyles.Bold);
+        StretchFull(langTxt.rectTransform, 4, 2, 4, 2);
+        langTxt.alignment = TextAlignmentOptions.Center;
+        langBtn.onClick.AddListener(() => UILocale.Toggle());
+
+        var hideGo = CreatePanel("HideBtn", bar.transform, C_BtnActive);
+        Pin(hideGo.GetComponent<RectTransform>(), 1, 0.5f, 1, 0.5f, -650, 0, 120, 34);
+        var hideBtn = hideGo.AddComponent<Button>();
+        hideBtn.targetGraphic = hideGo.GetComponent<Image>();
+        txtHideBtn = CreateText(hideGo.transform, UILocale.IsUK ? "Сховати UI" : "Hide UI", 12, C_Text, FontStyles.Bold);
+        StretchFull(txtHideBtn.rectTransform, 4, 2, 4, 2);
+        txtHideBtn.alignment = TextAlignmentOptions.Center;
+        hideBtn.onClick.AddListener(TogglePanels);
 
         // Status with dot
         var statusRow = CreatePanel("StatusRow", bar.transform, new Color(0, 0, 0, 0));
@@ -180,7 +333,7 @@ public class MissionControlUI : MonoBehaviour
         drt.sizeDelta = new Vector2(10, 10);
         statusDot = dot.GetComponent<Image>();
 
-        txtStatus = CreateText(statusRow.transform, "ГОТОВО", 14, C_Muted, FontStyles.Bold);
+        txtStatus = CreateText(statusRow.transform, UILocale.T("st_ready"), 14, C_Muted, FontStyles.Bold);
         var srt = txtStatus.rectTransform;
         srt.anchorMin = srt.anchorMax = new Vector2(0, 0.5f);
         srt.pivot = new Vector2(0, 0.5f);
@@ -191,34 +344,98 @@ public class MissionControlUI : MonoBehaviour
     void BuildLeftPanel(Transform parent)
     {
         var panel = CreatePanel("LeftPanel", parent, C_Panel);
-        DockLeft(panel.GetComponent<RectTransform>(), 14, 78, 58, 330);
+        leftPanelGo = panel;
+        DockLeft(panel.GetComponent<RectTransform>(), 14, 108, 58, 330);
         Outline(panel);
 
+        var viewport = CreatePanel("LViewport", panel.transform, new Color(0, 0, 0, 0));
+        viewport.GetComponent<Image>().raycastTarget = false;
+        var vrt = viewport.GetComponent<RectTransform>();
+        StretchFull(vrt, 0, 0, 0, 0);
+        viewport.AddComponent<RectMask2D>();
+
+        var content = CreatePanel("LContent", viewport.transform, new Color(0, 0, 0, 0));
+        content.GetComponent<Image>().raycastTarget = false;
+        var crt = content.GetComponent<RectTransform>();
+        crt.anchorMin = new Vector2(0, 1);
+        crt.anchorMax = new Vector2(1, 1);
+        crt.pivot = new Vector2(0.5f, 1);
+        crt.anchoredPosition = Vector2.zero;
+        crt.sizeDelta = new Vector2(0, 1200);
+
+        var scroll = panel.AddComponent<ScrollRect>();
+        scroll.viewport = vrt;
+        scroll.content = crt;
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 28f;
+
+        Transform root = content.transform;
         float y = -16f;
-        Header(panel.transform, "ТЕЛЕМЕТРІЯ ПОЛЬОТУ", ref y);
+        txtHdrTelem = Header(root, UILocale.T("h_telem"), ref y);
 
-        txtAlt = Metric(panel.transform, "Висота", "м", ref y);
-        txtVel = Metric(panel.transform, "Швидкість вниз", "м/с", ref y);
-        txtThr = Metric(panel.transform, "Тяга двигуна", "кН", ref y);
-        thrBarFill = MakeBar(panel.transform, ref y, C_Cyan);
-        txtTilt = Metric(panel.transform, "Нахил корпусу", "°", ref y);
-        tiltBarFill = MakeBar(panel.transform, ref y, C_Amber);
-        txtFuel = Metric(panel.transform, "Паливо", "кг", ref y);
-        fuelBarFill = MakeBar(panel.transform, ref y, C_Ok);
-        txtMiss = Metric(panel.transform, "Відхилення від pad", "м", ref y);
-        txtScore = Metric(panel.transform, "Оцінка посадки", "/100", ref y);
+        txtAlt = Metric(root, UILocale.T("m_alt"), UILocale.T("u_m"), ref y);
+        txtVel = Metric(root, UILocale.T("m_vy"), UILocale.T("u_ms"), ref y);
+        txtHVel = Metric(root, UILocale.T("m_vh"), UILocale.T("u_ms"), ref y);
+        txtThr = Metric(root, UILocale.T("m_thr"), UILocale.T("u_kn"), ref y);
+        thrBarFill = MakeBar(root, ref y, C_Cyan);
+        txtTwr = Metric(root, UILocale.T("m_twr"), "—", ref y);
+        txtTilt = Metric(root, UILocale.T("m_tilt"), UILocale.T("u_deg"), ref y);
+        tiltBarFill = MakeBar(root, ref y, C_Amber);
+        txtRate = Metric(root, UILocale.T("m_rate"), UILocale.T("u_dps"), ref y);
+        txtFuel = Metric(root, UILocale.T("m_fuel"), UILocale.T("u_kg"), ref y);
+        fuelBarFill = MakeBar(root, ref y, C_Ok);
+        txtFuelPct = Metric(root, UILocale.T("m_fuel_pct"), UILocale.T("u_pct"), ref y);
+        txtMass = Metric(root, UILocale.T("m_mass"), UILocale.T("u_t"), ref y);
+        txtMiss = Metric(root, UILocale.T("m_miss"), UILocale.T("u_m"), ref y);
+        txtAcc = Metric(root, UILocale.T("m_acc"), UILocale.T("u_ms2"), ref y);
+        txtEta = Metric(root, UILocale.T("m_eta"), UILocale.T("u_s"), ref y);
+        txtScore = Metric(root, UILocale.T("m_score"), UILocale.T("u_score"), ref y);
 
-        y -= 8f;
-        Header(panel.transform, "ГРАФІКИ В РЕАЛЬНОМУ ЧАСІ", ref y);
-        graphAlt = MakeGraph(panel.transform, "Висота, м", C_Cyan, ref y);
-        graphVel = MakeGraph(panel.transform, "Швидкість, м/с", C_Amber, ref y);
-        graphThr = MakeGraph(panel.transform, "Тяга, кН", new Color(0.45f, 0.95f, 0.55f), ref y);
+        y -= 6f;
+        txtHdrLive = Header(root, UILocale.T("h_live"), ref y);
+        txtPeakVy = Metric(root, UILocale.T("m_peak_vy"), UILocale.T("u_ms"), ref y);
+        txtPeakTilt = Metric(root, UILocale.T("m_peak_tilt"), UILocale.T("u_deg"), ref y);
+        txtMinH = Metric(root, UILocale.T("m_min_h"), UILocale.T("u_m"), ref y);
+        txtDeltaStrip = CreateText(root, "Δ —", 12, C_Muted);
+        txtDeltaStrip.enableWordWrapping = true;
+        PinTL(txtDeltaStrip.rectTransform, 14, y, 300, 36);
+        y -= 40f;
+
+        y -= 4f;
+        txtHdrCrit = Header(root, UILocale.T("h_crit"), ref y);
+        txtCritV = CriterionLine(root, "|Vy| < 3.5", ref y);
+        txtCritA = CriterionLine(root, "tilt < 7°", ref y);
+        txtCritM = CriterionLine(root, "miss < 25 m", ref y);
+        txtCritH = CriterionLine(root, "|Vh| < 5", ref y);
+
+        y -= 6f;
+        txtHdrInsight = Header(root, UILocale.T("h_insight"), ref y);
+        txtInsight = CreateText(root, UILocale.T("ins_wait"), 12, C_Text);
+        txtInsight.enableWordWrapping = true;
+        txtInsight.alignment = TextAlignmentOptions.TopLeft;
+        txtInsight.overflowMode = TextOverflowModes.Overflow;
+        PinTL(txtInsight.rectTransform, 14, y, 300, 72);
+        y -= 78f;
+
+        y -= 4f;
+        txtHdrGraphs = Header(root, UILocale.T("h_graphs"), ref y);
+        txtGraphHint = CreateText(root, UILocale.T("graph_hint"), 10, C_Muted);
+        PinTL(txtGraphHint.rectTransform, 16, y, 310, 14);
+        y -= 16f;
+        graphAlt = MakeGraph(root, UILocale.T("m_alt"), UILocale.T("u_m"), C_GraphA, ref y, null, "F0");
+        graphVel = MakeGraph(root, "Vy", UILocale.T("u_ms"), C_GraphB, ref y, -3.5f, "F1");
+        graphThr = MakeGraph(root, UILocale.T("m_thr"), UILocale.T("u_kn"), C_GraphC, ref y, null, "F0");
+
+        crt.sizeDelta = new Vector2(0, Mathf.Max(1600f, -y + 40f));
     }
 
     void BuildRightPanel(Transform parent)
     {
         var panel = CreatePanel("RightPanel", parent, C_Panel);
-        DockRight(panel.GetComponent<RectTransform>(), 14, 78, 58, 360);
+        rightPanelGo = panel;
+        DockRight(panel.GetComponent<RectTransform>(), 14, 108, 58, 360);
         Outline(panel);
 
         // Scrollable content for short screens
@@ -246,66 +463,89 @@ public class MissionControlUI : MonoBehaviour
         scroll.scrollSensitivity = 30f;
 
         float y = -14f;
-        var how = CreateText(content.transform,
-            "① Алгоритм  →  ② Запуск  →  ③ Дивіться результат",
-            12, C_Cyan, FontStyles.Bold);
-        PinTL(how.rectTransform, 14, y, 330, 20);
+        txtHow = CreateText(content.transform, UILocale.T("how"), 12, C_Cyan, FontStyles.Bold);
+        PinTL(txtHow.rectTransform, 14, y, 330, 20);
         y -= 26f;
 
-        Header(content.transform, "КРОК 1 · ОБЕРІТЬ АЛГОРИТМ", ref y);
+        Header(content.transform, UILocale.T("h_step1"), ref y);
 
         modeButtons.Clear();
         modeButtonImages.Clear();
-        modeButtons.Add(ModeButton(content.transform, "A  Класичний PID",
-            "Простий еталон", RocketPhysics.ControlMode.PID, ref y));
-        modeButtons.Add(ModeButton(content.transform, "B  Нечітка логіка",
-            "Sugeno — правила «як пілот»", RocketPhysics.ControlMode.Fuzzy, ref y));
-        modeButtons.Add(ModeButton(content.transform, "C  Нейромережа",
-            "Машинне навчання", RocketPhysics.ControlMode.Neural, ref y));
-        modeButtons.Add(ModeButton(content.transform, "D  Гібрид ★ рекомендовано",
-            "Нечітка + нейромережа", RocketPhysics.ControlMode.Hybrid, ref y));
+        modeButtons.Add(ModeButton(content.transform, UILocale.T("mode_btn_a"),
+            UILocale.T("mode_sub_a"), RocketPhysics.ControlMode.PID, ref y));
+        modeButtons.Add(ModeButton(content.transform, UILocale.T("mode_btn_b"),
+            UILocale.T("mode_sub_b"), RocketPhysics.ControlMode.Fuzzy, ref y));
+        modeButtons.Add(ModeButton(content.transform, UILocale.T("mode_btn_c"),
+            UILocale.T("mode_sub_c"), RocketPhysics.ControlMode.Neural, ref y));
+        modeButtons.Add(ModeButton(content.transform, UILocale.T("mode_btn_d"),
+            UILocale.T("mode_sub_d"), RocketPhysics.ControlMode.Hybrid, ref y));
 
         y -= 4f;
-        Header(content.transform, "КРОК 2 · КЕРУВАННЯ", ref y);
+        Header(content.transform, UILocale.T("h_step2"), ref y);
 
-        ActionButton(content.transform, "▶  ЗАПУСТИТИ ПОСАДКУ", new Color(0.05f, 0.48f, 0.36f), ref y, OnStartLanding);
-        ActionButton(content.transform, "⏹  СТОП / ПАУЗА", new Color(0.45f, 0.12f, 0.15f), ref y, OnStop);
-        ActionButton(content.transform, "👁  ВСЯ ТРАЄКТОРІЯ", new Color(0.12f, 0.22f, 0.4f), ref y, OnToggleTrajectoryView);
-        ActionButton(content.transform, "⚡  ПОРІВНЯТИ ВСІ АЛГОРИТМИ", new Color(0.45f, 0.3f, 0.06f), ref y, OnStartCompare);
-        ActionButton(content.transform, "✖  СКАСУВАТИ ПОРІВНЯННЯ", new Color(0.3f, 0.15f, 0.1f), ref y, OnCancelCompare);
+        ActionButton(content.transform, UILocale.T("btn_start"), new Color(0.22f, 0.22f, 0.24f), ref y, OnStartLanding);
+        ActionButton(content.transform, UILocale.T("btn_stop"), new Color(0.18f, 0.16f, 0.16f), ref y, OnStop);
+        ActionButton(content.transform, UILocale.T("btn_compare"), new Color(0.2f, 0.2f, 0.22f), ref y, OnStartCompare);
+        ActionButton(content.transform, UILocale.T("btn_cancel"), new Color(0.17f, 0.15f, 0.15f), ref y, OnCancelCompare);
 
-        txtCamMode = CreateText(content.transform, "Камера: слідкування за ракетою", 11, C_Muted);
+        y -= 2f;
+        Header(content.transform, UILocale.T("h_cam"), ref y);
+        ActionButton(content.transform, UILocale.T("btn_follow"), C_Btn, ref y, OnCamFollow);
+        ActionButton(content.transform, UILocale.T("btn_traj_view"), C_Btn, ref y, OnFullTrajectoryView);
+        ActionButton(content.transform, UILocale.T("btn_manual"), C_Btn, ref y, OnCamManual);
+        ActionButton(content.transform, UILocale.T("btn_reset_cam"), C_Btn, ref y, OnCamReset);
+
+        // Trajectory line toggle
+        var trajGo = CreatePanel("TrajToggle", content.transform, C_BtnActive);
+        PinTL(trajGo.GetComponent<RectTransform>(), 14, y, 322, 40);
+        trajToggleBtn = trajGo.AddComponent<Button>();
+        trajToggleBtn.targetGraphic = trajGo.GetComponent<Image>();
+        txtTrajBtn = CreateText(trajGo.transform, UILocale.T("btn_traj_on"), 13, C_Text, FontStyles.Bold);
+        StretchFull(txtTrajBtn.rectTransform, 4, 2, 4, 2);
+        txtTrajBtn.alignment = TextAlignmentOptions.Center;
+        trajToggleBtn.onClick.AddListener(OnToggleTrajectoryLine);
+        y -= 46f;
+        UpdateTrajButtonLabel();
+
+        txtCamMode = CreateText(content.transform, UILocale.T("cam_prefix") + UILocale.T("cam_follow"), 12, C_Cyan, FontStyles.Bold);
         PinTL(txtCamMode.rectTransform, 16, y, 320, 18);
-        y -= 22f;
+        y -= 20f;
+        txtCamHelp = CreateText(content.transform, UILocale.T("cam_help"), 11, C_Muted);
+        txtCamHelp.enableWordWrapping = true;
+        PinTL(txtCamHelp.rectTransform, 16, y, 320, 40);
+        y -= 44f;
 
         y -= 2f;
-        Header(content.transform, "КРОК 3 · УМОВИ ТЕСТУ (опційно)", ref y);
-        txtTestsVal = SliderLine(content.transform, "Запусків на алгоритм", 5, 40, 15, ref y, out testsSlider);
-        txtWindVal = SliderLine(content.transform, "Сила вітру", 0, 25, 10, ref y, out windSlider);
-        SliderLine(content.transform, "Прискорення часу (тест)", 1, 40, 20, ref y, out timeScaleSlider);
-        noiseToggle = ToggleLine(content.transform, "Випадкові збурення", true, ref y);
-        trainToggle = ToggleLine(content.transform, "Навчати нейромережу", true, ref y);
+        Header(content.transform, UILocale.T("h_export"), ref y);
+        ActionButton(content.transform, UILocale.T("btn_export"), C_BtnActive, ref y, OnExportResults);
+        ActionButton(content.transform, UILocale.T("btn_folder"), C_Btn, ref y, OnOpenExportFolder);
+
+        y -= 2f;
+        Header(content.transform, UILocale.T("h_step3"), ref y);
+        txtTestsVal = SliderLine(content.transform, UILocale.T("sl_tests"), 5, 40, 15, ref y, out testsSlider);
+        txtWindVal = SliderLine(content.transform, UILocale.T("sl_wind"), 0, 25, 10, ref y, out windSlider);
+        SliderLine(content.transform, UILocale.T("sl_time"), 1, 40, 20, ref y, out timeScaleSlider);
+        noiseToggle = ToggleLine(content.transform, UILocale.T("tg_noise"), true, ref y);
+        trainToggle = ToggleLine(content.transform, UILocale.T("tg_train"), true, ref y);
 
         y -= 4f;
-        Header(content.transform, "РЕЗУЛЬТАТИ ПОРІВНЯННЯ (% успіху)", ref y);
-        txtPid = Stat(content.transform, "A  PID", ref y);
-        txtFuzzy = Stat(content.transform, "B  Нечітка", ref y);
-        txtNeural = Stat(content.transform, "C  Нейромережа", ref y);
-        txtHybrid = Stat(content.transform, "D  Гібрид", ref y);
+        Header(content.transform, UILocale.T("h_results"), ref y);
+        txtPid = Stat(content.transform, UILocale.T("stat_a"), ref y);
+        txtFuzzy = Stat(content.transform, UILocale.T("stat_b"), ref y);
+        txtNeural = Stat(content.transform, UILocale.T("stat_c"), ref y);
+        txtHybrid = Stat(content.transform, UILocale.T("stat_d"), ref y);
 
         y -= 2f;
-        txtWinner = CreateText(content.transform, "Переможець: ще не визначено", 13, C_Ok, FontStyles.Bold);
+        txtWinner = CreateText(content.transform, UILocale.T("winner_none"), 13, C_Ok, FontStyles.Bold);
         PinTL(txtWinner.rectTransform, 14, y, 330, 22);
         y -= 26f;
 
-        txtInfo = CreateText(content.transform,
-            "Порада: D → ЗАПУСТИТИ. Після посадки з’явиться великий банер УСПІХ / НЕВДАЧА. «ВСЯ ТРАЄКТОРІЯ» показує весь шлях.",
-            12, C_Muted);
+        txtInfo = CreateText(content.transform, UILocale.T("tip"), 12, C_Muted);
         txtInfo.enableWordWrapping = true;
         txtInfo.alignment = TextAlignmentOptions.TopLeft;
         PinTL(txtInfo.rectTransform, 14, y, 330, 80);
 
-        crt.sizeDelta = new Vector2(0, Mathf.Max(1100f, -y + 40f));
+        crt.sizeDelta = new Vector2(0, Mathf.Max(1600f, -y + 50f));
     }
 
     // ─── User actions ───
@@ -315,17 +555,50 @@ public class MissionControlUI : MonoBehaviour
         if (rocket == null) return;
         if (sim != null && sim.IsExperimentRunning)
         {
-            NotifyInfo("Спочатку скасуйте авто-тест (✖).");
+            NotifyInfo(UILocale.T("msg_cancel_first"));
             return;
         }
         HideLandingResult();
         ClearGraphs();
+        ResetFlightPeaks();
         overviewCam = false;
-        FindFirstObjectByType<CameraFollow>()?.SetMode(CameraFollow.ViewMode.Follow);
-        if (txtCamMode) txtCamMode.text = "Камера: слідкування за ракетою";
+        ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
+        RefreshCamLabel();
         rocket.ResetSimulation();
-        if (txtInfo) txtInfo.text = $"▶ Посадка: {FriendlyMode(rocket.controlMode)}. Дивіться центр екрана.";
+        NotifyInfo(string.Format(UILocale.T("msg_started"), UILocale.ModeName(rocket.controlMode)));
         if (txtHint) txtHint.gameObject.SetActive(false);
+    }
+
+    void OnToggleTrajectoryLine()
+    {
+        var tv = FindFirstObjectByType<TrajectoryVisualizer>();
+        if (tv == null) return;
+        trajVisible = !tv.IsVisible;
+        tv.SetVisible(trajVisible);
+        UpdateTrajButtonLabel();
+        NotifyInfo(trajVisible ? UILocale.T("msg_traj_on") : UILocale.T("msg_traj_off"));
+    }
+
+    void UpdateTrajButtonLabel()
+    {
+        var tv = FindFirstObjectByType<TrajectoryVisualizer>();
+        if (tv != null) trajVisible = tv.IsVisible;
+        if (txtTrajBtn != null)
+            txtTrajBtn.text = trajVisible ? UILocale.T("btn_traj_on") : UILocale.T("btn_traj_off");
+    }
+
+    void ResetFlightPeaks()
+    {
+        flightPeaksActive = true;
+        peakVy = 0f;
+        peakTilt = 0f;
+        minAltLive = float.MaxValue;
+        prevAlt = prevAbsVy = prevTilt = prevThr = 0f;
+        prevVyForAcc = 0f;
+        if (txtPeakVy) txtPeakVy.text = "—";
+        if (txtPeakTilt) txtPeakTilt.text = "—";
+        if (txtMinH) txtMinH.text = "—";
+        if (txtDeltaStrip) txtDeltaStrip.text = "Δ —";
     }
 
     void OnStop()
@@ -339,38 +612,171 @@ public class MissionControlUI : MonoBehaviour
         if (rocket == null) return;
         rocket.StopSimulation(keepPosition: true);
         HideLandingResult();
-        NotifyInfo("⏹ Політ зупинено. Оберіть алгоритм і натисніть ЗАПУСТИТИ знову.\n" +
-                   "Щоб вийти з Play Mode у Unity: кнопка ■ зверху (або Ctrl+P).");
+        NotifyInfo(UILocale.T("msg_stopped"));
         if (txtStatus)
         {
-            txtStatus.text = "ЗУПИНЕНО";
+            txtStatus.text = UILocale.T("st_stop");
             txtStatus.color = C_Amber;
         }
     }
 
-    void OnToggleTrajectoryView()
+    void OnToggleTrajectoryView() => OnFullTrajectoryView();
+
+    /// <summary>
+    /// Переводить камеру в позицію, з якої видно повну траєкторію
+    /// (стартова висота → поточна точка → landing pad).
+    /// </summary>
+    void OnFullTrajectoryView()
     {
-        var cam = FindFirstObjectByType<CameraFollow>();
+        var cam = ResolveCamera();
         if (cam == null) return;
-        overviewCam = !overviewCam;
-        cam.SetMode(overviewCam ? CameraFollow.ViewMode.Overview : CameraFollow.ViewMode.Follow);
-        if (txtCamMode)
-            txtCamMode.text = overviewCam
-                ? "Камера: ОГЛЯД УСІЄЇ ТРАЄКТОРІЇ"
-                : "Камера: слідкування за ракетою";
-        NotifyInfo(overviewCam
-            ? "👁 Огляд: видно весь шлях від старту до pad (блакитна/зелена/червона лінія)."
-            : "Камера знову за ракетою.");
+        overviewCam = true;
+        cam.SnapToFullTrajectoryView();
+        RefreshCamLabel();
+        NotifyInfo(UILocale.T("msg_cam_traj"));
+    }
+
+    void OnCamFollow()
+    {
+        overviewCam = false;
+        ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
+        RefreshCamLabel();
+        NotifyInfo(UILocale.T("msg_cam_follow"));
+    }
+
+    void OnCamManual()
+    {
+        overviewCam = false;
+        var cam = ResolveCamera();
+        if (cam == null) return;
+        cam.SetMode(CameraFollow.ViewMode.Manual);
+        RefreshCamLabel();
+        NotifyInfo(UILocale.T("msg_cam_manual"));
+    }
+
+    void OnCamReset()
+    {
+        var cam = ResolveCamera();
+        if (cam == null) return;
+        if (cam.mode == CameraFollow.ViewMode.Overview)
+        {
+            cam.SnapToFullTrajectoryView();
+            overviewCam = true;
+            NotifyInfo(UILocale.T("msg_cam_reset"));
+        }
+        else
+        {
+            cam.ResetManualOrbit();
+            cam.SetMode(CameraFollow.ViewMode.Follow);
+            overviewCam = false;
+            NotifyInfo(UILocale.T("msg_cam_reset"));
+        }
+        RefreshCamLabel();
+    }
+
+    void OnExportResults()
+    {
+        try
+        {
+            // Prefer comparison export if available
+            if (sim != null && sim.HasComparisonResults)
+            {
+                lastExportPath = sim.SaveComparisonReports();
+                NotifyInfo(string.Format(UILocale.T("msg_export_cmp"), lastExportPath));
+                return;
+            }
+
+            if (rocket == null || rocket.metrics == null)
+            {
+                NotifyInfo(UILocale.T("msg_no_data"));
+                return;
+            }
+
+            bool hasFlight = rocket.metrics.totalFlightTime > 0.05f
+                             || rocket.state.simulationFinished
+                             || (dataLogger != null && dataLogger.SampleCount > 0);
+            if (!hasFlight && (rocket.metrics.touchdownVelocity <= 0f && !rocket.metrics.isSuccessfulLanding))
+            {
+                NotifyInfo(UILocale.T("msg_no_data"));
+                return;
+            }
+
+            if (dataLogger == null && rocket != null)
+                dataLogger = rocket.GetComponent<DataLogger>();
+            dataLogger?.Save();
+
+            lastExportPath = ExportCurrentLandingPackage();
+            NotifyInfo(string.Format(UILocale.T("msg_export_ok"), lastExportPath));
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogException(ex);
+            NotifyInfo(ex.Message);
+        }
+    }
+
+    /// <summary>Повний пакет: CSV кроків + JSON + MD + SVG графіки траєкторії.</summary>
+    string ExportCurrentLandingPackage(LandingMetrics metrics = null, float maxV = -1f, float maxA = -1f, float maxM = -1f, float maxH = -1f)
+    {
+        if (dataLogger == null && rocket != null) dataLogger = rocket.GetComponent<DataLogger>();
+        dataLogger?.Save();
+        var p = rocket != null ? rocket.parameters : null;
+        var m = metrics ?? rocket?.metrics;
+        if (m == null) throw new System.InvalidOperationException("No metrics");
+
+        var export = new ResearchExporter.LandingExportData
+        {
+            algorithm = FriendlyMode(rocket != null ? rocket.controlMode : RocketPhysics.ControlMode.PID),
+            timestamp = ResearchExporter.Stamp(),
+            metrics = m,
+            maxTouchdownVelocity = maxV > 0 ? maxV : (p != null ? p.maxTouchdownVelocity : 3.5f),
+            maxLandingAngle = maxA > 0 ? maxA : (p != null ? p.maxLandingAngle : 7f),
+            maxHorizontalMiss = maxM > 0 ? maxM : (p != null ? p.maxHorizontalMiss : 25f),
+            maxHorizontalSpeed = maxH > 0 ? maxH : (p != null ? p.maxHorizontalSpeed : 5f),
+            trajectoryCsvPath = dataLogger != null ? dataLogger.LastFilePath : null,
+            trajectoryRows = dataLogger != null ? dataLogger.CloneRows() : null,
+            samples = dataLogger != null ? dataLogger.CloneSamples() : null
+        };
+        return ResearchExporter.ExportLanding(export);
+    }
+
+    void OnOpenExportFolder()
+    {
+        try
+        {
+            ResearchExporter.OpenLogsFolder();
+            NotifyInfo(string.Format(UILocale.T("msg_folder"), ResearchExporter.LogsDirectory));
+        }
+        catch (System.Exception ex)
+        {
+            NotifyInfo("Не вдалося відкрити папку: " + ex.Message);
+        }
+    }
+
+    CameraFollow ResolveCamera()
+    {
+        if (cameraFollow == null) cameraFollow = FindFirstObjectByType<CameraFollow>();
+        return cameraFollow;
+    }
+
+    void RefreshCamLabel()
+    {
+        var cam = ResolveCamera();
+        if (txtCamMode == null) return;
+        if (cam == null) { txtCamMode.text = UILocale.T("cam_prefix") + "—"; return; }
+        overviewCam = cam.mode == CameraFollow.ViewMode.Overview;
+        txtCamMode.text = UILocale.T("cam_prefix") + UILocale.CamLabel(cam.mode);
+        txtCamMode.color = cam.mode == CameraFollow.ViewMode.Manual ? C_Amber : C_Cyan;
     }
 
     void OnStartCompare()
     {
-        if (sim == null) { NotifyInfo("Помилка: SimulationManager не знайдено"); return; }
-        if (sim.IsExperimentRunning) { NotifyInfo("Тест уже йде…"); return; }
+        if (sim == null) { NotifyInfo("SimulationManager missing"); return; }
+        if (sim.IsExperimentRunning) { NotifyInfo(UILocale.T("st_batch") + "…"); return; }
         HideLandingResult();
         ApplySettings();
         sim.RequestFullExperiment();
-        NotifyInfo("⚡ Авто-тест: алгоритми змінюються САМІ (PID→Fuzzy→NN→Hybrid) — це нормально. Прогрес зверху.");
+        NotifyInfo(UILocale.T("msg_compare"));
         if (txtHint) txtHint.gameObject.SetActive(false);
     }
 
@@ -378,7 +784,7 @@ public class MissionControlUI : MonoBehaviour
     {
         if (sim == null) return;
         sim.CancelExperiment();
-        NotifyInfo("✖ Скасування авто-тесту…");
+        NotifyInfo(UILocale.T("btn_cancel"));
     }
 
     public void NotifyInfo(string msg)
@@ -415,23 +821,31 @@ public class MissionControlUI : MonoBehaviour
         bool ok = m.isSuccessfulLanding;
         if (txtResultTitle)
         {
-            txtResultTitle.text = ok ? "✓  ПОСАДКА УСПІШНА" : "✗  ПОСАДКА НЕВДАЛА";
+            txtResultTitle.text = ok ? UILocale.T("res_ok") : UILocale.T("res_fail");
             txtResultTitle.color = ok ? C_Ok : C_Alert;
         }
         if (txtResultBody)
         {
-            txtResultBody.text = m.BuildUserSummary(maxV, maxA, maxM, maxH)
-                + "\n\n«ВСЯ ТРАЄКТОРІЯ» — побачити шлях  ·  ЗАПУСТИТИ — ще раз";
+            txtResultBody.text = m.BuildUserSummary(maxV, maxA, maxM, maxH) + UILocale.T("res_footer");
             txtResultBody.color = C_Text;
+        }
+
+        try
+        {
+            lastExportPath = ExportCurrentLandingPackage(m, maxV, maxA, maxM, maxH);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("[Export] auto landing report failed: " + ex.Message);
         }
         if (resultPanelBg)
             resultPanelBg.color = ok
-                ? new Color(0.04f, 0.18f, 0.1f, 0.94f)
-                : new Color(0.2f, 0.05f, 0.07f, 0.94f);
+                ? new Color(0.12f, 0.14f, 0.13f, 0.96f)
+                : new Color(0.16f, 0.11f, 0.11f, 0.96f);
 
         if (txtStatus)
         {
-            txtStatus.text = ok ? "УСПІХ" : "НЕВДАЧА";
+            txtStatus.text = ok ? UILocale.T("st_success") : UILocale.T("st_fail");
             txtStatus.color = ok ? C_Ok : C_Alert;
         }
         if (statusDot) statusDot.color = ok ? C_Ok : C_Alert;
@@ -451,10 +865,10 @@ public class MissionControlUI : MonoBehaviour
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = new Vector2(360, 70);
-        rt.offsetMax = new Vector2(-380, -90);
+        rt.offsetMax = new Vector2(-380, -110);
         resultRoot.GetComponent<Image>().raycastTarget = true;
 
-        var card = CreatePanel("ResultCard", resultRoot.transform, new Color(0.04f, 0.18f, 0.1f, 0.94f));
+        var card = CreatePanel("ResultCard", resultRoot.transform, new Color(0.12f, 0.12f, 0.13f, 0.96f));
         resultPanelBg = card.GetComponent<Image>();
         var crt = card.GetComponent<RectTransform>();
         crt.anchorMin = new Vector2(0.5f, 0.5f);
@@ -474,11 +888,11 @@ public class MissionControlUI : MonoBehaviour
         var brt = txtResultBody.rectTransform;
         brt.anchorMin = new Vector2(0, 0);
         brt.anchorMax = new Vector2(1, 1);
-        brt.offsetMin = new Vector2(28, 70);
+        brt.offsetMin = new Vector2(28, 110);
         brt.offsetMax = new Vector2(-28, -70);
 
         // Close button
-        var closeGo = CreatePanel("CloseResult", card.transform, new Color(0.1f, 0.25f, 0.4f));
+        var closeGo = CreatePanel("CloseResult", card.transform, C_BtnActive);
         var clrt = closeGo.GetComponent<RectTransform>();
         clrt.anchorMin = new Vector2(0.5f, 0);
         clrt.anchorMax = new Vector2(0.5f, 0);
@@ -487,29 +901,48 @@ public class MissionControlUI : MonoBehaviour
         clrt.sizeDelta = new Vector2(220, 40);
         var cbtn = closeGo.AddComponent<Button>();
         cbtn.targetGraphic = closeGo.GetComponent<Image>();
-        var ctxt = CreateText(closeGo.transform, "ЗРОЗУМІЛО", 14, C_Text, FontStyles.Bold);
+        var ctxt = CreateText(closeGo.transform, UILocale.T("btn_ok"), 14, C_Text, FontStyles.Bold);
         StretchFull(ctxt.rectTransform, 4, 4, 4, 4);
         ctxt.alignment = TextAlignmentOptions.Center;
         cbtn.onClick.AddListener(HideLandingResult);
 
-        // Secondary: show trajectory
-        var trGo = CreatePanel("ShowTraj", card.transform, new Color(0.08f, 0.2f, 0.35f));
+        // Secondary row: trajectory + export
+        var trGo = CreatePanel("ShowTraj", card.transform, C_Btn);
         var trt = trGo.GetComponent<RectTransform>();
         trt.anchorMin = new Vector2(0.5f, 0);
         trt.anchorMax = new Vector2(0.5f, 0);
         trt.pivot = new Vector2(0.5f, 0);
-        trt.anchoredPosition = new Vector2(0, 62);
-        trt.sizeDelta = new Vector2(280, 36);
+        trt.anchoredPosition = new Vector2(-110, 62);
+        trt.sizeDelta = new Vector2(200, 36);
         var tbtn = trGo.AddComponent<Button>();
         tbtn.targetGraphic = trGo.GetComponent<Image>();
-        var ttxt = CreateText(trGo.transform, "Показати всю траєкторію", 13, C_Text, FontStyles.Bold);
+        var ttxt = CreateText(trGo.transform, UILocale.T("btn_show_traj"), 13, C_Text, FontStyles.Bold);
         StretchFull(ttxt.rectTransform, 4, 4, 4, 4);
         ttxt.alignment = TextAlignmentOptions.Center;
         tbtn.onClick.AddListener(() =>
         {
             HideLandingResult();
-            if (!overviewCam) OnToggleTrajectoryView();
+            OnFullTrajectoryView();
         });
+
+        var exGo = CreatePanel("ExportResult", card.transform, C_BtnActive);
+        var ert = exGo.GetComponent<RectTransform>();
+        ert.anchorMin = new Vector2(0.5f, 0);
+        ert.anchorMax = new Vector2(0.5f, 0);
+        ert.pivot = new Vector2(0.5f, 0);
+        ert.anchoredPosition = new Vector2(110, 62);
+        ert.sizeDelta = new Vector2(200, 36);
+        var ebtn = exGo.AddComponent<Button>();
+        ebtn.targetGraphic = exGo.GetComponent<Image>();
+        var etxt = CreateText(exGo.transform, UILocale.T("btn_export_short"), 13, C_Text, FontStyles.Bold);
+        StretchFull(etxt.rectTransform, 4, 4, 4, 4);
+        etxt.alignment = TextAlignmentOptions.Center;
+        ebtn.onClick.AddListener(() =>
+        {
+            OnExportResults();
+        });
+
+        crt.sizeDelta = new Vector2(540, 360);
 
         resultRoot.SetActive(false);
     }
@@ -521,7 +954,7 @@ public class MissionControlUI : MonoBehaviour
         rt.anchorMin = new Vector2(0.5f, 1);
         rt.anchorMax = new Vector2(0.5f, 1);
         rt.pivot = new Vector2(0.5f, 1);
-        rt.anchoredPosition = new Vector2(0, -78);
+        rt.anchoredPosition = new Vector2(0, -108);
         rt.sizeDelta = new Vector2(560, 48);
         Outline(progressRoot);
 
@@ -552,6 +985,7 @@ public class MissionControlUI : MonoBehaviour
     void BuildBottomBar(Transform parent)
     {
         var bar = CreatePanel("BottomBar", parent, C_PanelSoft);
+        bottomBarGo = bar;
         var rt = bar.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0, 0);
         rt.anchorMax = new Vector2(1, 0);
@@ -560,17 +994,16 @@ public class MissionControlUI : MonoBehaviour
         rt.offsetMax = new Vector2(-378, 50);
         Outline(bar);
 
-        var t = CreateText(bar.transform,
-            "Успіх: швидкість < 3.5 м/с · нахил < 7° · промах < 25 м · бічна < 5  |  СТОП = зупинити політ  |  Unity ■ / Ctrl+P = вийти з Play",
-            12, C_Muted);
-        StretchFull(t.rectTransform, 10, 4, 10, 4);
-        t.alignment = TextAlignmentOptions.Center;
-        t.enableWordWrapping = true;
+        txtBottom = CreateText(bar.transform, UILocale.T("bottom"), 12, C_Muted);
+        StretchFull(txtBottom.rectTransform, 10, 4, 10, 4);
+        txtBottom.alignment = TextAlignmentOptions.Center;
+        txtBottom.enableWordWrapping = true;
     }
 
     void BuildCenterHint(Transform parent)
     {
-        var hint = CreatePanel("CenterHint", parent, new Color(0.02f, 0.04f, 0.1f, 0.6f));
+        var hint = CreatePanel("CenterHint", parent, new Color(0.08f, 0.08f, 0.09f, 0.75f));
+        centerHintGo = hint;
         var rt = hint.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.5f, 0);
         rt.anchorMax = new Vector2(0.5f, 0);
@@ -579,9 +1012,7 @@ public class MissionControlUI : MonoBehaviour
         rt.sizeDelta = new Vector2(560, 48);
         Outline(hint);
 
-        txtHint = CreateText(hint.transform,
-            "① Справа: алгоритм (D)   ② «ЗАПУСТИТИ ПОСАДКУ»   ③ Банер УСПІХ/НЕВДАЧА",
-            13, C_Text);
+        txtHint = CreateText(hint.transform, UILocale.T("hint"), 13, C_Text);
         StretchFull(txtHint.rectTransform, 12, 6, 12, 6);
         txtHint.alignment = TextAlignmentOptions.Center;
         txtHint.enableWordWrapping = true;
@@ -589,7 +1020,12 @@ public class MissionControlUI : MonoBehaviour
 
     void Update()
     {
-        if (!built || rocket == null) return;
+        if (!built) return;
+
+        if (Input.GetKeyDown(KeyCode.H) && !Input.GetKey(KeyCode.LeftControl))
+            TogglePanels();
+
+        if (rocket == null) return;
         var s = rocket.state;
 
         float tilt = Vector3.Angle(s.rotation * Vector3.up, Vector3.up);
@@ -598,59 +1034,127 @@ public class MissionControlUI : MonoBehaviour
         float fuelPct = rocket.parameters != null && rocket.parameters.fuelMass > 1f
             ? s.currentFuelMass / rocket.parameters.fuelMass : 0f;
 
-        Write(txtAlt, $"{s.position.y:F0}", s.position.y < 80f ? C_Amber : C_Text);
+        float hVel = new Vector2(s.velocity.x, s.velocity.z).magnitude;
+        float angRate = s.angularVelocity.magnitude * Mathf.Rad2Deg;
+        float mass = Mathf.Max(1f, s.TotalMass);
+        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, s.position.y));
+        float twr = s.currentThrust / (mass * g);
+        float dt = Mathf.Max(Time.unscaledDeltaTime, 1e-4f);
+        float rawAcc = (s.velocity.y - prevVyForAcc) / dt;
+        prevVyForAcc = s.velocity.y;
+        smoothedAcc = Mathf.Lerp(smoothedAcc, rawAcc, 1f - Mathf.Exp(-6f * dt));
+        // Оцінка часу до землі (лінійна, лише для індикації)
+        float eta = 0f;
+        if (s.velocity.y < -0.15f && s.position.y > 0.5f)
+            eta = s.position.y / Mathf.Abs(s.velocity.y);
+
+        float maxV = rocket.parameters != null ? rocket.parameters.maxTouchdownVelocity : 3.5f;
+        float maxA = rocket.parameters != null ? rocket.parameters.maxLandingAngle : 7f;
+        float maxM = rocket.parameters != null ? rocket.parameters.maxHorizontalMiss : 25f;
+        float maxH = rocket.parameters != null ? rocket.parameters.maxHorizontalSpeed : 5f;
+
+        Write(txtAlt, $"{s.position.y:F1}", s.position.y < 80f ? C_Amber : C_Text);
         float av = Mathf.Abs(s.velocity.y);
-        Write(txtVel, $"{Mathf.Abs(s.velocity.y):F1}", av > 25f ? C_Alert : av > 8f ? C_Amber : C_Ok);
-        Write(txtThr, $"{s.currentThrust / 1000f:F0}", C_Text);
-        Write(txtTilt, $"{tilt:F1}", tilt > 7f ? C_Alert : tilt > 3f ? C_Amber : C_Text);
+        Write(txtVel, $"{av:F2}", av > 25f ? C_Alert : av > maxV ? C_Amber : C_Ok);
+        Write(txtHVel, $"{hVel:F2}", hVel > maxH ? C_Alert : hVel > maxH * 0.6f ? C_Amber : C_Text);
+        Write(txtThr, $"{s.currentThrust / 1000f:F1}", C_Text);
+        Write(txtTwr, $"{twr:F2}", twr < 0.9f ? C_Amber : twr > 2.5f ? C_Alert : C_Ok);
+        Write(txtTilt, $"{tilt:F2}", tilt > maxA ? C_Alert : tilt > maxA * 0.5f ? C_Amber : C_Text);
+        Write(txtRate, $"{angRate:F1}", angRate > 15f ? C_Alert : angRate > 6f ? C_Amber : C_Text);
         Write(txtFuel, $"{s.currentFuelMass:F0}", fuelPct < 0.15f ? C_Alert : C_Text);
-        Write(txtMiss, $"{miss:F1}", miss > 25f ? C_Alert : C_Text);
+        Write(txtFuelPct, $"{fuelPct * 100f:F1}", fuelPct < 0.15f ? C_Alert : C_Text);
+        Write(txtMass, $"{mass / 1000f:F2}", C_Text);
+        Write(txtMiss, $"{miss:F2}", miss > maxM ? C_Alert : miss > maxM * 0.5f ? C_Amber : C_Text);
+        Write(txtAcc, $"{smoothedAcc:F1}", Mathf.Abs(smoothedAcc) > 25f ? C_Amber : C_Text);
+        Write(txtEta, eta > 0.05f && rocket.simulationArmed && !s.simulationFinished
+            ? $"{eta:F1}" : "—", eta > 0f && eta < 8f ? C_Amber : C_Muted);
+
+        // Live peak / change tracking during flight
+        if (rocket.simulationArmed && !s.simulationFinished)
+        {
+            if (!flightPeaksActive) ResetFlightPeaks();
+            if (av > peakVy) peakVy = av;
+            if (tilt > peakTilt) peakTilt = tilt;
+            if (s.position.y < minAltLive) minAltLive = s.position.y;
+            Write(txtPeakVy, $"{peakVy:F2}", C_Text);
+            Write(txtPeakTilt, $"{peakTilt:F2}", C_Text);
+            Write(txtMinH, minAltLive < 1e8f ? $"{minAltLive:F1}" : "—", C_Text);
+
+            float dAlt = s.position.y - prevAlt;
+            float dVy = av - prevAbsVy;
+            float dTilt = tilt - prevTilt;
+            float dThr = s.currentThrust / 1000f - prevThr;
+            if (txtDeltaStrip)
+            {
+                txtDeltaStrip.text =
+                    $"Δh {Arrow(dAlt)}{Mathf.Abs(dAlt):F1}  ·  Δ|Vy| {Arrow(dVy)}{Mathf.Abs(dVy):F2}  ·  " +
+                    $"Δ∠ {Arrow(dTilt)}{Mathf.Abs(dTilt):F2}  ·  ΔF {Arrow(dThr)}{Mathf.Abs(dThr):F1}";
+                txtDeltaStrip.color = C_Muted;
+            }
+            prevAlt = s.position.y;
+            prevAbsVy = av;
+            prevTilt = tilt;
+            prevThr = s.currentThrust / 1000f;
+        }
+        else if (!rocket.simulationArmed && !s.simulationFinished)
+        {
+            flightPeaksActive = false;
+        }
 
         SetBar(thrBarFill, thrPct, C_Cyan);
-        SetBar(fuelBarFill, fuelPct, C_Ok);
-        SetBar(tiltBarFill, Mathf.Clamp01(tilt / 15f), tilt > 7f ? C_Alert : C_Amber);
+        SetBar(fuelBarFill, fuelPct, fuelPct < 0.15f ? C_Alert : C_Ok);
+        SetBar(tiltBarFill, Mathf.Clamp01(tilt / 15f), tilt > maxA ? C_Alert : C_Amber);
+
+        bool nearGround = s.position.y < 40f || s.isLanded || s.simulationFinished;
+        string lim = UILocale.IsUK ? "норма" : "limit";
+        UpdateCriterion(txtCritV, av < maxV, $"|Vy|={av:F2}  ({lim} < {maxV})", nearGround || av < maxV);
+        UpdateCriterion(txtCritA, tilt < maxA, $"∠={tilt:F2}°  ({lim} < {maxA}°)", true);
+        UpdateCriterion(txtCritM, miss < maxM, $"Δ={miss:F1}  ({lim} < {maxM})", true);
+        UpdateCriterion(txtCritH, hVel < maxH, $"|Vh|={hVel:F2}  ({lim} < {maxH})", true);
+
+        UpdateInsight(s, av, hVel, tilt, miss, twr, fuelPct, eta, maxV, maxA, maxM, maxH);
 
         bool exp = sim != null && sim.IsExperimentRunning;
         if (txtMode && !exp)
-            txtMode.text = $"Алгоритм:  {FriendlyMode(rocket.controlMode)}";
-        if (txtTime) txtTime.text = $"Час  {s.time:F1} с";
+            txtMode.text = string.Format(UILocale.T("algo_fmt"), UILocale.ModeName(rocket.controlMode));
+        if (txtTime) txtTime.text = string.Format(UILocale.T("time_fmt"), s.time);
 
         if (txtStatus && !resultShown)
         {
             if (exp)
             {
-                txtStatus.text = "АВТО-ТЕСТ";
+                txtStatus.text = UILocale.T("st_batch");
                 txtStatus.color = C_Amber;
                 if (statusDot) statusDot.color = C_Amber;
             }
             else if (s.simulationFinished && rocket.simulationArmed == false && rocket.metrics != null
                      && (rocket.metrics.totalFlightTime > 0.1f || rocket.metrics.isSuccessfulLanding || rocket.metrics.timedOut))
             {
-                // stopped mid-flight without finish metrics — handled by OnStop
+                // stopped mid-flight — OnStop
             }
             else if (s.simulationFinished && rocket.metrics != null && rocket.metrics.totalFlightTime > 0.05f)
             {
                 bool ok = rocket.metrics.isSuccessfulLanding;
-                txtStatus.text = ok ? "УСПІХ" : "НЕВДАЧА";
+                txtStatus.text = ok ? UILocale.T("st_success") : UILocale.T("st_fail");
                 txtStatus.color = ok ? C_Ok : C_Alert;
                 if (statusDot) statusDot.color = ok ? C_Ok : C_Alert;
                 Write(txtScore, $"{rocket.metrics.SuccessScore:F0}", ok ? C_Ok : C_Alert);
             }
             else if (rocket.simulationArmed && s.time > 0.05f)
             {
-                txtStatus.text = "СПУСК";
+                txtStatus.text = UILocale.T("st_descent");
                 txtStatus.color = C_Cyan;
                 if (statusDot) statusDot.color = C_Cyan;
             }
             else if (rocket.simulationArmed)
             {
-                txtStatus.text = "СТАРТ";
+                txtStatus.text = UILocale.T("st_start");
                 txtStatus.color = C_Amber;
                 if (statusDot) statusDot.color = C_Amber;
             }
             else
             {
-                txtStatus.text = "ОЧІКУВАННЯ";
+                txtStatus.text = UILocale.T("st_wait");
                 txtStatus.color = C_Muted;
                 if (statusDot) statusDot.color = C_Muted;
             }
@@ -672,8 +1176,10 @@ public class MissionControlUI : MonoBehaviour
             }
         }
 
+        // Щільніший семплінг під час польоту — зручніше стежити за змінами
         sampleTimer += Time.unscaledDeltaTime;
-        if (sampleTimer >= 0.07f && !s.simulationFinished && s.time > 0f)
+        float sampleDt = s.position.y < 200f ? 0.04f : 0.07f;
+        if (sampleTimer >= sampleDt && !s.simulationFinished && s.time > 0f && rocket.simulationArmed)
         {
             sampleTimer = 0f;
             graphAlt?.Push(s.position.y);
@@ -683,31 +1189,49 @@ public class MissionControlUI : MonoBehaviour
 
         if (txtWindVal && windSlider) txtWindVal.text = $"{windSlider.value:F0}";
         if (txtTestsVal && testsSlider) txtTestsVal.text = $"{testsSlider.value:F0}";
+
+        // Keep camera label in sync if user used hotkeys
+        if (txtCamMode && cameraFollow != null && Time.frameCount % 15 == 0)
+            RefreshCamLabel();
     }
 
     public void UpdateStatistics(float pid, float fuzzy, float neural, float hybrid = -1f)
     {
-        Write(txtPid, $"{pid:F1} %", C_Text);
-        Write(txtFuzzy, $"{fuzzy:F1} %", C_Text);
-        Write(txtNeural, $"{neural:F1} %", C_Text);
-        if (hybrid >= 0f) Write(txtHybrid, $"{hybrid:F1} %", C_Text);
+        Write(txtPid, $"{pid:F1} %", RateColor(pid));
+        Write(txtFuzzy, $"{fuzzy:F1} %", RateColor(fuzzy));
+        Write(txtNeural, $"{neural:F1} %", RateColor(neural));
+        if (hybrid >= 0f) Write(txtHybrid, $"{hybrid:F1} %", RateColor(hybrid));
 
-        string winner = "PID";
+        string winner = UILocale.T("mode_pid");
         float max = pid;
-        if (fuzzy >= max) { max = fuzzy; winner = "Нечітка логіка"; }
-        if (neural >= max) { max = neural; winner = "Нейромережа"; }
-        if (hybrid > max) { max = hybrid; winner = "Гібрид Neuro-Fuzzy"; }
-        if (txtWinner) { txtWinner.text = $"Переможець: {winner}  ({max:F1}%)"; txtWinner.color = C_Ok; }
-        if (txtInfo) txtInfo.text = $"✓ Авто-тест завершено.\nПереможець: {winner} ({max:F1}% успішних).\nАлгоритм користувача відновлено.";
+        if (fuzzy >= max) { max = fuzzy; winner = UILocale.T("mode_fuzzy"); }
+        if (neural >= max) { max = neural; winner = UILocale.T("mode_neural"); }
+        if (hybrid > max) { max = hybrid; winner = UILocale.T("mode_hybrid"); }
+        if (txtWinner)
+        {
+            txtWinner.text = string.Format(UILocale.T("winner_fmt"), winner, max);
+            txtWinner.color = C_Ok;
+        }
+        if (txtInfo)
+            txtInfo.text = string.Format(UILocale.T("msg_compare_done"), winner, max);
     }
 
-    static string FriendlyMode(RocketPhysics.ControlMode m) => m switch
+    static Color RateColor(float pct)
     {
-        RocketPhysics.ControlMode.Fuzzy => "Нечітка логіка (Sugeno)",
-        RocketPhysics.ControlMode.Neural => "Нейромережа (ES)",
-        RocketPhysics.ControlMode.Hybrid => "Гібрид Neuro-Fuzzy",
-        _ => "Класичний PID"
-    };
+        if (pct >= 80f) return C_Ok;
+        if (pct >= 50f) return C_Amber;
+        if (pct > 0f) return C_Alert;
+        return C_Muted;
+    }
+
+    static string FriendlyMode(RocketPhysics.ControlMode m) => UILocale.ModeName(m);
+
+    static string Arrow(float d)
+    {
+        if (d > 0.05f) return "↑";
+        if (d < -0.05f) return "↓";
+        return "→";
+    }
 
     void ApplySettings()
     {
@@ -772,7 +1296,7 @@ public class MissionControlUI : MonoBehaviour
         return tmp;
     }
 
-    void Header(Transform parent, string title, ref float y)
+    TMP_Text Header(Transform parent, string title, ref float y)
     {
         var t = CreateText(parent, title, 12, C_Cyan, FontStyles.Bold);
         PinTL(t.rectTransform, 14, y, 320, 20);
@@ -780,12 +1304,14 @@ public class MissionControlUI : MonoBehaviour
         var line = CreatePanel("line", parent, C_Edge);
         PinTL(line.GetComponent<RectTransform>(), 14, y + 2, 322, 1);
         y -= 8f;
+        return t;
     }
 
     TMP_Text Metric(Transform parent, string key, string unit, ref float y)
     {
         var k = CreateText(parent, key, 12, C_Muted);
-        PinTL(k.rectTransform, 16, y, 160, 18);
+        PinTL(k.rectTransform, 16, y, 168, 18);
+        metricLabels.Add(k);
         var v = CreateText(parent, "—", 16, C_Text, FontStyles.Bold);
         v.alignment = TextAlignmentOptions.Right;
         PinTL(v.rectTransform, 160, y - 1, 100, 20);
@@ -803,9 +1329,93 @@ public class MissionControlUI : MonoBehaviour
         t.color = c;
     }
 
+    TMP_Text CriterionLine(Transform parent, string label, ref float y)
+    {
+        var t = CreateText(parent, "○  " + label, 12, C_Muted);
+        PinTL(t.rectTransform, 16, y, 300, 18);
+        y -= 20f;
+        return t;
+    }
+
+    static void UpdateCriterion(TMP_Text t, bool ok, string detail, bool emphasize)
+    {
+        if (t == null) return;
+        t.text = (ok ? "●  " : "○  ") + detail;
+        t.color = ok ? C_Ok : (emphasize ? C_Alert : C_Amber);
+    }
+
+    void UpdateInsight(RocketState s, float av, float hVel, float tilt, float miss,
+        float twr, float fuelPct, float eta,
+        float maxV, float maxA, float maxM, float maxH)
+    {
+        if (txtInsight == null) return;
+
+        if (batchMode || (sim != null && sim.IsExperimentRunning))
+        {
+            txtInsight.text = UILocale.T("ins_batch");
+            txtInsight.color = C_Amber;
+            return;
+        }
+
+        if (s.simulationFinished && rocket.metrics != null && rocket.metrics.totalFlightTime > 0.05f)
+        {
+            bool ok = rocket.metrics.isSuccessfulLanding;
+            txtInsight.text = ok
+                ? string.Format(UILocale.T("ins_ok"), rocket.metrics.SuccessScore)
+                : rocket.metrics.BuildUserSummary(maxV, maxA, maxM, maxH).Replace("\n\n", "\n");
+            txtInsight.color = ok ? C_Ok : C_Alert;
+            return;
+        }
+
+        if (!rocket.simulationArmed)
+        {
+            txtInsight.text = UILocale.T("ins_wait");
+            txtInsight.color = C_Muted;
+            return;
+        }
+
+        if (s.position.y > 400f)
+        {
+            txtInsight.text = twr < 0.95f ? UILocale.T("ins_high_low_twr") : UILocale.T("ins_high_ok");
+            txtInsight.color = C_Cyan;
+        }
+        else if (s.position.y > 80f)
+        {
+            if (av > 40f) { txtInsight.text = UILocale.T("ins_fast"); txtInsight.color = C_Alert; }
+            else if (tilt > maxA) { txtInsight.text = UILocale.T("ins_tilt"); txtInsight.color = C_Alert; }
+            else if (miss > maxM) { txtInsight.text = UILocale.T("ins_miss"); txtInsight.color = C_Amber; }
+            else
+            {
+                txtInsight.text = string.Format(UILocale.T("ins_mid"), eta);
+                txtInsight.color = C_Ok;
+            }
+        }
+        else
+        {
+            int bad = 0;
+            if (av >= maxV) bad++;
+            if (tilt >= maxA) bad++;
+            if (miss >= maxM) bad++;
+            if (hVel >= maxH) bad++;
+            if (fuelPct < 0.05f) bad++;
+
+            if (bad == 0) { txtInsight.text = UILocale.T("ins_term_ok"); txtInsight.color = C_Ok; }
+            else if (av >= maxV)
+            {
+                txtInsight.text = string.Format(UILocale.T("ins_term_v"), av, maxV);
+                txtInsight.color = C_Alert;
+            }
+            else
+            {
+                txtInsight.text = string.Format(UILocale.T("ins_term_bad"), bad);
+                txtInsight.color = C_Amber;
+            }
+        }
+    }
+
     Image MakeBar(Transform parent, ref float y, Color fill)
     {
-        var bg = CreatePanel("Bar", parent, new Color(0.02f, 0.03f, 0.06f, 1f));
+        var bg = CreatePanel("Bar", parent, new Color(0.05f, 0.05f, 0.06f, 1f));
         PinTL(bg.GetComponent<RectTransform>(), 16, y, 308, 8);
         var f = CreatePanel("Fill", bg.transform, fill);
         var frt = f.GetComponent<RectTransform>();
@@ -824,22 +1434,21 @@ public class MissionControlUI : MonoBehaviour
         fill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(t), 1f);
     }
 
-    TelemetryGraph MakeGraph(Transform parent, string title, Color line, ref float y)
+    TelemetryGraph MakeGraph(Transform parent, string title, string unit, Color line, ref float y,
+        float? threshold, string fmt)
     {
-        var lab = CreateText(parent, title, 11, C_Muted);
-        PinTL(lab.rectTransform, 16, y, 200, 16);
-        y -= 16f;
-
-        var go = new GameObject("Graph", typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
+        var go = new GameObject("Graph_" + title, typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
         go.transform.SetParent(parent, false);
-        PinTL(go.GetComponent<RectTransform>(), 14, y, 312, 88);
+        PinTL(go.GetComponent<RectTransform>(), 14, y, 312, 92);
         var raw = go.GetComponent<RawImage>();
         raw.color = Color.white;
         var g = go.AddComponent<TelemetryGraph>();
-        g.lineColor = line;
-        g.title = title;
         g.autoScale = true;
-        y -= 96f;
+        g.showFill = true;
+        g.showZeroLine = true;
+        g.valueFormat = fmt ?? "F1";
+        g.Configure(title, unit, line, threshold);
+        y -= 100f;
         return g;
     }
 
@@ -868,20 +1477,21 @@ public class MissionControlUI : MonoBehaviour
             if (rocket == null) return;
             if (sim != null && sim.IsExperimentRunning)
             {
-                NotifyInfo("Під час авто-тесту алгоритм змінюється автоматично. Натисніть ✖ щоб скасувати.");
+                NotifyInfo(UILocale.T("msg_cancel_first"));
                 return;
             }
             HideLandingResult();
             ClearGraphs();
+            ResetFlightPeaks();
             overviewCam = false;
-            FindFirstObjectByType<CameraFollow>()?.SetMode(CameraFollow.ViewMode.Follow);
+            ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
             rocket.PrepareMode(mode);
-            if (txtCamMode) txtCamMode.text = "Камера: слідкування за ракетою";
-            if (txtInfo) txtInfo.text = $"✓ Обрано: {title}\nНатисніть зелену «ЗАПУСТИТИ ПОСАДКУ».";
+            RefreshCamLabel();
+            NotifyInfo(string.Format(UILocale.T("msg_selected"), title));
             if (txtHint)
             {
                 txtHint.gameObject.SetActive(true);
-                txtHint.text = $"Обрано: {title}  →  «ЗАПУСТИТИ ПОСАДКУ»";
+                txtHint.text = title + "  →  " + UILocale.T("btn_start");
             }
         });
         y -= 50f;

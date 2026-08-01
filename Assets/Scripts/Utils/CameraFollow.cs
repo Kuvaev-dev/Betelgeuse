@@ -1,207 +1,451 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 /// <summary>
-/// Камера: Follow (ракета) або Overview (уся траєкторія від старту до pad).
+/// Стабільна orbit-камера навколо ракети.
+/// Єдина модель: focus + (yaw, pitch, distance).
+/// Під час drag/клавіш — без Lerp (миттєво), інакше — м'яке згладжування.
 /// </summary>
 public class CameraFollow : MonoBehaviour
 {
-    public enum ViewMode { Follow, Overview }
+    public enum ViewMode { Follow, Overview, Manual }
 
     public Transform target;
     public RocketPhysics rocket;
     public TrajectoryVisualizer trajectory;
     public ViewMode mode = ViewMode.Follow;
 
-    [Header("Follow")]
-    public Vector3 viewOffset = new(42f, 18f, -78f);
+    [Header("Focus")]
     public float bodyLookHeight = 18f;
-    public float fov = 46f;
-    public float positionSharpness = 12f;
-    public float rotationSharpness = 14f;
-    public float snapDistance = 80f;
-    public float velocityLookAhead = 0.35f;
-    public float nearGroundScale = 0.72f;
-    public float highAltScale = 1.15f;
-    public float minDist = 60f;
-    public float maxDist = 320f;
-    public float minCameraHeight = 8f;
+    public float focusSmooth = 14f;
+
+    [Header("Orbit defaults")]
+    public float defaultYaw = 28f;
+    public float defaultPitch = 18f;
+    public float defaultDistance = 100f;
+    public float minDist = 12f;
+    public float maxDist = 600f;
+    /// <summary>Від'ємний pitch = погляд знизу / під носій.</summary>
+    public float minPitch = -35f;
+    public float maxPitch = 82f;
+    public float minCameraHeight = 2f;
+
+    [Header("Follow auto")]
+    public float nearDistance = 75f;
+    public float farDistance = 160f;
+    public float autoReturnSpeed = 1.2f;
 
     [Header("Overview")]
-    public float overviewFov = 55f;
-    public float overviewPadding = 1.35f;
+    public float overviewPadding = 1.25f;
+    public float overviewMaxDistance = 2400f;
+    public float overviewMinHeight = 35f;
 
+    [Header("Input")]
+    public float orbitSensitivity = 0.22f;
+    /// <summary>М'який зум: частка відстані за один крок колеса (~4–6%).</summary>
+    public float zoomSensitivity = 0.045f;
+    public float keyOrbitSpeed = 55f;
+    public bool invertY;
+
+    [Header("Bounds")]
+    public float worldBoundRadius = 4500f;
+    public float worldBoundMaxY = 4200f;
+    public float worldBoundMinY = 4f;
+    public Vector3 worldBoundCenter = new(0f, 800f, 0f);
+
+    [Header("Lens")]
+    public float fov = 46f;
+    public float overviewFov = 50f;
+
+    // Orbit state (єдине джерело правди)
+    float yaw;
+    float pitch;
+    float distance;
+    float ovYaw, ovPitch, ovDistMul = 1f;
+
+    Vector3 smoothFocus;
+    bool focusInited;
+    bool orbitDragging;
+    Vector3 lastMouse;
+    bool userOrbitLock; // після ручного orbit — не авто-повертати кут, поки R/F
     Camera cam;
-    bool snappedOnce;
+
+    // Compat fields used elsewhere / inspector
+    public float manualYaw { get => yaw; set => yaw = value; }
+    public float manualPitch { get => pitch; set => pitch = value; }
+    public float manualDistance { get => distance; set => distance = value; }
+    public Vector3 viewOffset = new(42f, 18f, -78f);
+    public float followDistanceMul = 1f;
+
+    public bool IsManual => mode == ViewMode.Manual;
+    public bool IsOverview => mode == ViewMode.Overview;
+
+    public string ModeLabelKey => mode switch
+    {
+        ViewMode.Overview => "cam_overview",
+        ViewMode.Manual => "cam_manual",
+        _ => "cam_follow"
+    };
+
+    public string ModeLabel => UILocale.CamLabel(mode);
 
     void Awake()
     {
         cam = GetComponent<Camera>();
         Resolve();
         ApplyCameraSettings();
+        ResetOrbitDefaults();
     }
 
     void Start()
     {
         Resolve();
+        focusInited = false;
         SnapNow();
-        snappedOnce = true;
     }
 
-    void OnEnable() => snappedOnce = false;
+    void OnEnable()
+    {
+        focusInited = false;
+    }
+
+    void Update() => HandleInput();
 
     void LateUpdate()
     {
         Resolve();
-        if (mode == ViewMode.Overview)
+        Vector3 targetFocus = ComputeFocus();
+        if (!focusInited)
         {
-            UpdateOverview();
-            return;
-        }
-
-        if (target == null) return;
-
-        Vector3 focus = GetFocusPoint();
-        Vector3 desired = focus + ScaledOffset(focus);
-        if (desired.y < minCameraHeight) desired.y = minCameraHeight;
-
-        float lag = Vector3.Distance(transform.position, desired);
-        bool shouldSnap = !snappedOnce || lag > snapDistance
-                          || (rocket != null && !rocket.simulationArmed && lag > 15f);
-
-        if (shouldSnap)
-        {
-            transform.position = desired;
-            snappedOnce = true;
+            smoothFocus = targetFocus;
+            focusInited = true;
         }
         else
         {
-            float k = 1f - Mathf.Exp(-positionSharpness * Time.deltaTime);
-            transform.position = Vector3.Lerp(transform.position, desired, k);
+            // Focus завжди гладко йде за ракетою — це прибирає дьоргання від look-ahead
+            float fk = 1f - Mathf.Exp(-focusSmooth * Time.deltaTime);
+            smoothFocus = Vector3.Lerp(smoothFocus, targetFocus, fk);
         }
 
-        Vector3 lookPoint = focus;
-        if (focus.y < 120f)
-            lookPoint = Vector3.Lerp(focus, Vector3.zero, 0.12f * (1f - focus.y / 120f));
+        bool hard = orbitDragging || Input.anyKey; // під час керування — без лагу
+        // anyKey too broad - only when orbit keys
+        hard = orbitDragging || IsOrbitKeyHeld();
 
-        Vector3 toLook = lookPoint - transform.position;
-        if (toLook.sqrMagnitude < 0.01f) return;
-
-        Quaternion want = Quaternion.LookRotation(toLook.normalized, Vector3.up);
-        float rk = 1f - Mathf.Exp(-rotationSharpness * Time.deltaTime);
-        transform.rotation = Quaternion.Slerp(transform.rotation, want, rk);
+        if (mode == ViewMode.Overview)
+            PlaceOverview(hard);
+        else
+            PlaceOrbit(smoothFocus, yaw, pitch, distance, hard);
 
         if (cam != null)
         {
-            float h = Mathf.Max(0f, focus.y);
-            float targetFov = Mathf.Lerp(50f, fov, Mathf.Clamp01(h / 400f));
-            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-4f * Time.deltaTime));
+            float wantFov = mode == ViewMode.Overview ? overviewFov : fov;
+            cam.fieldOfView = hard ? wantFov : Mathf.Lerp(cam.fieldOfView, wantFov, 1f - Mathf.Exp(-6f * Time.deltaTime));
         }
     }
 
-    void UpdateOverview()
+    bool IsOrbitKeyHeld()
     {
+        return Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.D)
+            || Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.S)
+            || Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.E)
+            || Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.RightArrow)
+            || Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.DownArrow)
+            || Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.Minus)
+            || Input.GetKey(KeyCode.KeypadPlus) || Input.GetKey(KeyCode.KeypadMinus);
+    }
+
+    void HandleInput()
+    {
+        bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            userOrbitLock = false;
+            if (mode == ViewMode.Overview) SnapToFullTrajectoryView();
+            else
+            {
+                ResetOrbitDefaults();
+                SetMode(ViewMode.Follow);
+            }
+        }
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            userOrbitLock = false;
+            SetMode(ViewMode.Follow);
+        }
+        if (Input.GetKeyDown(KeyCode.T))
+            SetMode(mode == ViewMode.Overview ? ViewMode.Follow : ViewMode.Overview);
+        if (Input.GetKeyDown(KeyCode.C) && !overUI)
+        {
+            userOrbitLock = true;
+            SetMode(ViewMode.Manual);
+        }
+
+        // Zoom: працює завжди в центрі екрана; біля minDist — від'їзд працює
+        float scroll = Input.mouseScrollDelta.y;
+        if (Mathf.Abs(scroll) > 0.01f && (!overUI || Input.GetKey(KeyCode.LeftControl)))
+            ApplyZoom(scroll);
+
+        if (overUI)
+        {
+            if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1))
+                orbitDragging = false;
+            return;
+        }
+
+        // LMB / RMB orbit
+        if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
+        {
+            orbitDragging = true;
+            lastMouse = Input.mousePosition;
+            userOrbitLock = true;
+        }
+        if (Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1))
+        {
+            if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1))
+                orbitDragging = false;
+        }
+
+        if (orbitDragging && (Input.GetMouseButton(0) || Input.GetMouseButton(1)))
+        {
+            Vector3 delta = Input.mousePosition - lastMouse;
+            lastMouse = Input.mousePosition;
+            float dy = delta.y * orbitSensitivity * (invertY ? 1f : -1f);
+            ApplyOrbit(delta.x * orbitSensitivity, dy);
+        }
+
+        // Keys
+        float k = keyOrbitSpeed * Time.unscaledDeltaTime;
+        float yD = 0f, pD = 0f, zD = 0f;
+        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.Q)) yD -= k;
+        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.E)) yD += k;
+        if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) pD += k * 0.7f;
+        if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) pD -= k * 0.7f;
+        if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus)) zD -= 1f;
+        if (Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.KeypadMinus)) zD += 1f;
+
+        if (Mathf.Abs(yD) + Mathf.Abs(pD) + Mathf.Abs(zD) > 0.0001f)
+        {
+            userOrbitLock = true;
+            ApplyOrbit(yD, pD);
+            if (Mathf.Abs(zD) > 0.01f)
+                ApplyZoom(-zD * Time.deltaTime * 12f);
+        }
+
+        // Follow auto-distance when not user-locked
+        if (mode == ViewMode.Follow && !userOrbitLock && !orbitDragging)
+        {
+            float h = 0f;
+            if (rocket != null) h = Mathf.Max(0f, rocket.state.position.y);
+            float wantDist = Mathf.Lerp(nearDistance, farDistance, Mathf.Clamp01(h / 2000f));
+            distance = Mathf.Lerp(distance, wantDist, 1f - Mathf.Exp(-autoReturnSpeed * Time.deltaTime));
+            // М'яко повертаємо кут до default
+            yaw = Mathf.LerpAngle(yaw, defaultYaw, 1f - Mathf.Exp(-autoReturnSpeed * 0.35f * Time.deltaTime));
+            pitch = Mathf.Lerp(pitch, defaultPitch, 1f - Mathf.Exp(-autoReturnSpeed * 0.35f * Time.deltaTime));
+        }
+    }
+
+    void ApplyZoom(float scroll)
+    {
+        float steps = Mathf.Clamp(scroll, -4f, 4f);
+        // Additive step ∝ current distance — біля minDist крок не нульовий
+        if (mode == ViewMode.Overview)
+        {
+            float step = Mathf.Max(0.03f, ovDistMul * zoomSensitivity);
+            ovDistMul = Mathf.Clamp(ovDistMul - steps * step, 0.55f, 2.4f);
+        }
+        else
+        {
+            float step = Mathf.Max(1.2f, distance * zoomSensitivity);
+            distance = Mathf.Clamp(distance - steps * step, minDist, maxDist);
+            userOrbitLock = true;
+        }
+    }
+
+    void ApplyOrbit(float yawDelta, float pitchDelta)
+    {
+        if (mode == ViewMode.Overview)
+        {
+            ovYaw += yawDelta;
+            ovPitch = Mathf.Clamp(ovPitch + pitchDelta, -20f, 75f);
+        }
+        else
+        {
+            yaw += yawDelta;
+            pitch = Mathf.Clamp(pitch + pitchDelta, minPitch, maxPitch);
+        }
+    }
+
+    void PlaceOrbit(Vector3 focus, float y, float p, float dist, bool hard)
+    {
+        Quaternion rot = Quaternion.Euler(p, y, 0f);
+        Vector3 desired = focus + rot * (Vector3.back * dist);
+        // Дозволяємо погляд знизу: камера може бути нижче focus, але не під землю
+        float floor = Mathf.Max(minCameraHeight, 1.5f);
+        if (desired.y < floor) desired.y = floor;
+        desired = ClampPoint(desired);
+
+        if (hard)
+            transform.position = desired;
+        else
+        {
+            float t = 1f - Mathf.Exp(-18f * Time.deltaTime);
+            transform.position = Vector3.Lerp(transform.position, desired, t);
+        }
+
+        Vector3 lookDir = focus - transform.position;
+        if (lookDir.sqrMagnitude > 0.0001f)
+        {
+            Quaternion want = Quaternion.LookRotation(lookDir.normalized, Vector3.up);
+            if (hard)
+                transform.rotation = want;
+            else
+            {
+                float rt = 1f - Mathf.Exp(-20f * Time.deltaTime);
+                transform.rotation = Quaternion.Slerp(transform.rotation, want, rt);
+            }
+        }
+    }
+
+    void PlaceOverview(bool hard)
+    {
+        ComputeFraming(out Vector3 center, out float radius, out Vector3 lookAt);
+        radius *= overviewPadding * ovDistMul;
+        Quaternion orbit = Quaternion.Euler(ovPitch, ovYaw, 0f);
+        Vector3 dir = orbit * Vector3.back;
+        float dist = Mathf.Clamp(radius * 1.5f, 120f, overviewMaxDistance);
+        Vector3 desired = center + dir * dist;
+        if (desired.y < overviewMinHeight) desired.y = overviewMinHeight;
+        desired = ClampPoint(desired);
+
+        if (hard)
+        {
+            transform.position = desired;
+            transform.rotation = Quaternion.LookRotation((lookAt - desired).normalized, Vector3.up);
+        }
+        else
+        {
+            float t = 1f - Mathf.Exp(-8f * Time.deltaTime);
+            transform.position = Vector3.Lerp(transform.position, desired, t);
+            transform.rotation = Quaternion.Slerp(transform.rotation,
+                Quaternion.LookRotation((lookAt - transform.position).normalized, Vector3.up), t);
+        }
+    }
+
+    Vector3 ComputeFocus()
+    {
+        if (rocket != null)
+            return rocket.state.position + Vector3.up * bodyLookHeight;
+        if (target != null)
+            return target.position + Vector3.up * bodyLookHeight;
+        return Vector3.up * bodyLookHeight;
+    }
+
+    public void SnapToFullTrajectoryView()
+    {
+        mode = ViewMode.Overview;
+        userOrbitLock = false;
+        ovDistMul = 1f;
+        ovYaw = 40f;
+        ovPitch = 28f;
+        focusInited = false;
+        PlaceOverview(true);
+    }
+
+    void ComputeFraming(out Vector3 center, out float radius, out Vector3 lookAt)
+    {
+        Vector3 min = Vector3.zero, max = Vector3.zero;
+        bool any = false;
+        void Enc(Vector3 p)
+        {
+            if (!any) { min = max = p; any = true; }
+            else { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+        }
+        Enc(Vector3.zero);
+        if (rocket != null)
+        {
+            Enc(rocket.state.position);
+            if (rocket.parameters != null) Enc(rocket.parameters.startPosition);
+        }
         if (trajectory == null) trajectory = FindFirstObjectByType<TrajectoryVisualizer>();
-        Vector3 center;
-        float radius;
-        if (trajectory != null && trajectory.TryGetOverview(out center, out radius))
+        if (trajectory != null)
+            foreach (var p in trajectory.Points) Enc(p);
+
+        if (!any)
         {
-            // nothing
+            center = new Vector3(0f, 400f, 0f);
+            radius = 400f;
+            lookAt = center;
+            return;
         }
-        else if (rocket != null)
-        {
-            center = rocket.state.position * 0.5f;
-            radius = Mathf.Max(120f, rocket.state.position.y * 0.55f);
-        }
-        else return;
+        center = (min + max) * 0.5f;
+        lookAt = center + Vector3.up * Mathf.Clamp((max.y - min.y) * 0.05f, 0f, 50f);
+        radius = Mathf.Max(90f, (max - min).magnitude * 0.48f);
+        radius = Mathf.Max(radius, max.y * 0.45f + 50f);
+        radius = Mathf.Min(1500f, radius);
+    }
 
-        radius *= overviewPadding;
-        // Place camera on a diagonal so full path (high start → pad) is visible
-        Vector3 dir = new Vector3(0.55f, 0.35f, -0.75f).normalized;
-        Vector3 desired = center + dir * (radius * 1.6f);
-        if (desired.y < 40f) desired.y = 40f;
+    Vector3 ClampPoint(Vector3 p)
+    {
+        p.y = Mathf.Clamp(p.y, worldBoundMinY, worldBoundMaxY);
+        Vector3 from = p - worldBoundCenter;
+        float r = from.magnitude;
+        if (r > worldBoundRadius && r > 0.01f)
+            p = worldBoundCenter + from * (worldBoundRadius / r);
+        return p;
+    }
 
-        float k = 1f - Mathf.Exp(-6f * Time.deltaTime);
-        transform.position = Vector3.Lerp(transform.position, desired, k);
-
-        Quaternion want = Quaternion.LookRotation((center - transform.position).normalized, Vector3.up);
-        transform.rotation = Quaternion.Slerp(transform.rotation, want, k);
-
-        if (cam != null)
-            cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, overviewFov, k);
+    void ResetOrbitDefaults()
+    {
+        yaw = defaultYaw;
+        pitch = defaultPitch;
+        distance = defaultDistance;
+        ovYaw = 40f;
+        ovPitch = 28f;
+        ovDistMul = 1f;
+        userOrbitLock = false;
     }
 
     public void SetMode(ViewMode m)
     {
         mode = m;
-        if (m == ViewMode.Follow) SnapNow();
+        if (m == ViewMode.Follow)
+        {
+            if (!userOrbitLock) ResetOrbitDefaults();
+            SnapNow();
+        }
+        else if (m == ViewMode.Overview)
+            SnapToFullTrajectoryView();
         else
         {
-            // immediate jump into overview
-            UpdateOverview();
-            transform.position = transform.position; // already set in UpdateOverview partially
-            // force hard place
-            if (trajectory != null && trajectory.TryGetOverview(out var c, out var r))
-            {
-                r *= overviewPadding;
-                Vector3 dir = new Vector3(0.55f, 0.35f, -0.75f).normalized;
-                transform.position = c + dir * (r * 1.6f);
-                if (transform.position.y < 40f)
-                {
-                    var p = transform.position;
-                    p.y = 40f;
-                    transform.position = p;
-                }
-                transform.LookAt(c);
-            }
+            // Manual — keep current orbit angles
+            userOrbitLock = true;
+            mode = ViewMode.Manual;
+            SnapNow();
         }
+    }
+
+    public void EnterManualFromCurrent() => SetMode(ViewMode.Manual);
+
+    public void ResetManualOrbit()
+    {
+        userOrbitLock = false;
+        ResetOrbitDefaults();
+        if (mode == ViewMode.Overview) SnapToFullTrajectoryView();
+        else SetMode(ViewMode.Follow);
     }
 
     public void SnapNow()
     {
         Resolve();
-        mode = ViewMode.Follow;
-        if (target == null) return;
-        Vector3 focus = GetFocusPoint();
-        Vector3 desired = focus + ScaledOffset(focus);
-        if (desired.y < minCameraHeight) desired.y = minCameraHeight;
-        transform.position = desired;
-        transform.rotation = Quaternion.LookRotation((focus - desired).normalized, Vector3.up);
-        snappedOnce = true;
-        if (cam != null) cam.fieldOfView = fov;
-    }
-
-    Vector3 GetFocusPoint()
-    {
-        Vector3 pos;
-        Vector3 vel = Vector3.zero;
-        if (rocket != null)
-        {
-            pos = rocket.state.position;
-            vel = rocket.state.velocity;
-        }
-        else pos = target.position;
-
-        Vector3 focus = pos + Vector3.up * bodyLookHeight;
-        if (rocket != null && rocket.simulationArmed && !rocket.state.simulationFinished)
-            focus += vel * velocityLookAhead;
-        return focus;
-    }
-
-    Vector3 ScaledOffset(Vector3 focus)
-    {
-        float h = Mathf.Max(0f, focus.y - bodyLookHeight);
-        float t = Mathf.Clamp01(h / 2500f);
-        float scale = Mathf.Lerp(nearGroundScale, highAltScale, t);
-        if (rocket != null)
-        {
-            float miss = new Vector2(rocket.state.position.x, rocket.state.position.z).magnitude;
-            scale += Mathf.Clamp(miss / 400f, 0f, 0.35f);
-        }
-        Vector3 o = viewOffset * scale;
-        float dist = o.magnitude;
-        if (dist < minDist) o = o.normalized * minDist;
-        if (dist > maxDist) o = o.normalized * maxDist;
-        return o;
+        focusInited = false;
+        smoothFocus = ComputeFocus();
+        focusInited = true;
+        if (mode == ViewMode.Overview)
+            PlaceOverview(true);
+        else
+            PlaceOrbit(smoothFocus, yaw, pitch, distance, true);
+        if (cam != null) cam.fieldOfView = mode == ViewMode.Overview ? overviewFov : fov;
     }
 
     void Resolve()
@@ -216,11 +460,11 @@ public class CameraFollow : MonoBehaviour
     {
         if (cam == null) cam = GetComponent<Camera>();
         if (cam == null) return;
-        cam.farClipPlane = 16000f;
-        cam.nearClipPlane = 0.25f;
+        cam.farClipPlane = 12000f;
+        cam.nearClipPlane = 0.3f;
         cam.fieldOfView = fov;
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.01f, 0.012f, 0.035f);
+        cam.backgroundColor = new Color(0.06f, 0.06f, 0.07f);
         cam.allowHDR = true;
         try { if (!CompareTag("MainCamera")) tag = "MainCamera"; } catch { /* ignore */ }
     }

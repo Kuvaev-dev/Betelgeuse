@@ -2,28 +2,41 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Повна траєкторія польоту (LineRenderer). Не стирається після посадки —
-/// лише при новому старті. Підтримує огляд усього шляху (bounds).
+/// Візуалізація траєкторії польоту (LineRenderer).
+/// Товщина масштабується відстанню до камери. Можна увімкнути/вимкнути.
 /// </summary>
 public class TrajectoryVisualizer : MonoBehaviour
 {
     public RocketPhysics rocketPhysics;
     public LineRenderer lineRenderer;
     public int maxPoints = 4000;
-    public float lineWidth = 4f;
-    public float minPointDistance = 2f;
+    public float baseLineWidth = 6f;
+    /// <summary>Alias для сумісності зі старим API / сценами.</summary>
+    public float lineWidth
+    {
+        get => baseLineWidth;
+        set => baseLineWidth = value;
+    }
+    public float minPointDistance = 2.5f;
+    public float minWidth = 4f;
+    public float maxWidth = 55f;
+    public float widthScalePerMeter = 0.012f;
 
-    public Color goodColor = new(0.35f, 0.95f, 0.55f, 0.95f);
-    public Color badColor = new(1f, 0.35f, 0.4f, 0.95f);
-    public Color normalColor = new(0.45f, 0.9f, 1f, 0.95f);
+    // Сіро-біла палітра
+    public Color goodColor = new(0.85f, 0.9f, 0.88f, 1f);
+    public Color badColor = new(0.75f, 0.55f, 0.55f, 1f);
+    public Color normalColor = new(0.92f, 0.92f, 0.95f, 1f);
 
     readonly List<Vector3> points = new();
     Vector3 lastPoint;
     bool hasLast;
     bool finished;
+    bool visible = true;
+    Color currentColor;
 
     public int PointCount => points.Count;
     public IReadOnlyList<Vector3> Points => points;
+    public bool IsVisible => visible;
 
     void Start()
     {
@@ -36,27 +49,57 @@ public class TrajectoryVisualizer : MonoBehaviour
             rocketPhysics = FindFirstObjectByType<RocketPhysics>();
 
         ConfigureLine();
+        currentColor = normalColor;
+        ApplyVisibility();
     }
 
     void ConfigureLine()
     {
-        lineRenderer.startWidth = lineWidth;
-        lineRenderer.endWidth = lineWidth * 0.55f;
         lineRenderer.positionCount = 0;
         lineRenderer.useWorldSpace = true;
-        lineRenderer.numCapVertices = 4;
-        lineRenderer.numCornerVertices = 4;
+        lineRenderer.numCapVertices = 6;
+        lineRenderer.numCornerVertices = 6;
         lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         lineRenderer.receiveShadows = false;
-        lineRenderer.sortingOrder = 10;
+        lineRenderer.allowOcclusionWhenDynamic = false;
+        lineRenderer.sortingOrder = 50;
+        lineRenderer.widthMultiplier = 1f;
 
-        var shader = Shader.Find("Sprites/Default")
-                     ?? Shader.Find("Universal Render Pipeline/Unlit")
-                     ?? Shader.Find("Particles/Standard Unlit");
+        var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                     ?? Shader.Find("Unlit/Color")
+                     ?? Shader.Find("Sprites/Default");
         if (shader != null)
-            lineRenderer.material = new Material(shader) { color = Color.white };
+        {
+            var mat = new Material(shader);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
+            if (mat.HasProperty("_EmissionColor"))
+            {
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", normalColor * 1.2f);
+            }
+            lineRenderer.material = mat;
+        }
 
+        lineRenderer.textureMode = LineTextureMode.Stretch;
+        lineRenderer.alignment = LineAlignment.View;
         ApplyColor(normalColor);
+        ApplyDistanceWidth();
+    }
+
+    /// <summary>Увімкнути / вимкнути відображення лінії траєкторії.</summary>
+    public void SetVisible(bool on)
+    {
+        visible = on;
+        ApplyVisibility();
+    }
+
+    public void ToggleVisible() => SetVisible(!visible);
+
+    void ApplyVisibility()
+    {
+        if (lineRenderer != null)
+            lineRenderer.enabled = visible;
     }
 
     void LateUpdate()
@@ -67,25 +110,44 @@ public class TrajectoryVisualizer : MonoBehaviour
             if (rocketPhysics == null) return;
         }
 
-        // Record while armed and not finished
-        if (!rocketPhysics.simulationArmed || finished) return;
-        if (rocketPhysics.state.simulationFinished)
+        if (rocketPhysics.simulationArmed && !finished)
         {
-            // Ensure last point (touchdown) is on the line
-            AddPoint(rocketPhysics.state.position, force: true);
-            return;
+            if (rocketPhysics.state.simulationFinished)
+                AddPoint(rocketPhysics.state.position, force: true);
+            else
+                AddPoint(rocketPhysics.state.position, force: false);
         }
 
-        AddPoint(rocketPhysics.state.position, force: false);
+        if (visible)
+            ApplyDistanceWidth();
+    }
+
+    void ApplyDistanceWidth()
+    {
+        if (lineRenderer == null || !visible) return;
+
+        float dist = 200f;
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            Vector3 refPoint = points.Count > 0
+                ? points[points.Count / 2]
+                : (rocketPhysics != null ? rocketPhysics.state.position : Vector3.zero);
+            dist = Vector3.Distance(cam.transform.position, refPoint);
+        }
+
+        float w = Mathf.Clamp(baseLineWidth + dist * widthScalePerMeter, minWidth, maxWidth);
+        lineRenderer.startWidth = w;
+        lineRenderer.endWidth = w * 0.65f;
     }
 
     void AddPoint(Vector3 p, bool force)
     {
+        if (lineRenderer == null) return;
         if (points.Count >= maxPoints) return;
         if (!force && hasLast && (p - lastPoint).sqrMagnitude < minPointDistance * minPointDistance)
             return;
 
-        // Lift slightly so line is not z-fighting with ground
         if (p.y < 0.5f) p.y = 0.5f;
 
         points.Add(p);
@@ -101,6 +163,7 @@ public class TrajectoryVisualizer : MonoBehaviour
         if (rocketPhysics != null)
             AddPoint(rocketPhysics.state.position, force: true);
         ApplyColor(successful ? goodColor : badColor);
+        ApplyDistanceWidth();
     }
 
     public void Clear()
@@ -115,44 +178,55 @@ public class TrajectoryVisualizer : MonoBehaviour
         }
     }
 
-    /// <summary>Центр і радіус усієї траєкторії (+ pad) для оглядової камери.</summary>
     public bool TryGetOverview(out Vector3 center, out float radius)
     {
         center = Vector3.zero;
         radius = 100f;
-        if (points.Count < 2)
+
+        Vector3 min = Vector3.zero;
+        Vector3 max = Vector3.zero;
+        bool any = false;
+
+        void Enc(Vector3 p)
         {
-            // fallback: rocket to pad
-            if (rocketPhysics != null)
-            {
-                Vector3 a = rocketPhysics.state.position;
-                center = (a + Vector3.zero) * 0.5f;
-                radius = Mathf.Max(80f, a.magnitude * 0.6f + a.y * 0.5f);
-                return true;
-            }
-            return false;
+            if (!any) { min = max = p; any = true; }
+            else { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
         }
 
-        Vector3 min = points[0];
-        Vector3 max = points[0];
-        foreach (var p in points)
+        Enc(Vector3.zero);
+        if (rocketPhysics != null)
         {
-            min = Vector3.Min(min, p);
-            max = Vector3.Max(max, p);
+            Enc(rocketPhysics.state.position);
+            if (rocketPhysics.parameters != null)
+                Enc(rocketPhysics.parameters.startPosition);
         }
-        min = Vector3.Min(min, Vector3.zero);
-        max = Vector3.Max(max, Vector3.zero);
+        if (points.Count > 0)
+            foreach (var p in points) Enc(p);
+
+        if (!any) return false;
         center = (min + max) * 0.5f;
-        radius = Mathf.Max(60f, (max - min).magnitude * 0.55f);
+        radius = Mathf.Min(1500f, Mathf.Max(80f, (max - min).magnitude * 0.5f, max.y * 0.45f + 50f));
         return true;
     }
 
     void ApplyColor(Color c)
     {
+        currentColor = c;
         if (lineRenderer == null) return;
         lineRenderer.startColor = c;
-        lineRenderer.endColor = new Color(c.r, c.g, c.b, 0.55f);
+        lineRenderer.endColor = new Color(c.r, c.g, c.b, 0.85f);
         if (lineRenderer.material != null)
+        {
+            if (lineRenderer.material.HasProperty("_BaseColor"))
+                lineRenderer.material.SetColor("_BaseColor", c);
+            if (lineRenderer.material.HasProperty("_Color"))
+                lineRenderer.material.SetColor("_Color", c);
+            if (lineRenderer.material.HasProperty("_EmissionColor"))
+            {
+                lineRenderer.material.EnableKeyword("_EMISSION");
+                lineRenderer.material.SetColor("_EmissionColor", c * 1.3f);
+            }
             lineRenderer.material.color = c;
+        }
     }
 }

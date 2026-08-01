@@ -1,7 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Космічне середовище: глибокий космос, зорі, м'який горизонт, нічний landing pad.
+/// Космічне середовище: глибоке небо, зорі, туманності, обрій, landing pad.
+/// Акуратна композиція без «артефактних» фігур біля pad.
 /// </summary>
 public static class EnvironmentBuilder
 {
@@ -18,11 +19,11 @@ public static class EnvironmentBuilder
 
         BuildGround(root.transform);
         BuildLandingPad(root.transform);
-        BuildDistanceGrid(root.transform);
+        BuildDistanceRings(root.transform);
         var starPs = BuildStarField(root.transform);
-        BuildHorizonGlow(root.transform);
-        BuildPadBeacons(root.transform);
-        BuildLandingLights(root.transform);
+        BuildSkyScenery(root.transform);
+        BuildPadInfrastructure(root.transform);
+        BuildApproachLights(root.transform);
 
         var amb = SpaceAmbience.Ensure();
         amb.Bind(root.transform, starPs, sun);
@@ -31,26 +32,31 @@ public static class EnvironmentBuilder
     static void BuildGround(Transform parent)
     {
         var ground = Prim(PrimitiveType.Plane, "Ground", parent,
-            Vector3.zero, new Vector3(600f, 1f, 600f));
-        VisualMaterials.Apply(ground, new Color(0.035f, 0.04f, 0.055f), 0.12f, 0.1f);
+            Vector3.zero, new Vector3(500f, 1f, 500f));
+        VisualMaterials.Apply(ground, new Color(0.035f, 0.036f, 0.04f), 0.06f, 0.1f);
+        NoShadow(ground);
 
-        // Subtle terrain mottling patches
-        var rng = new System.Random(11);
-        for (int i = 0; i < 40; i++)
+        // Далека площина (не «квадрат-диск» біля pad)
+        var far = Prim(PrimitiveType.Plane, "FarPlane", parent,
+            new Vector3(0f, -1f, 0f), new Vector3(4000f, 1f, 4000f));
+        VisualMaterials.Apply(far, new Color(0.018f, 0.018f, 0.022f), 0.02f, 0.04f);
+        NoShadow(far);
+
+        // Легкий рельєф далеко від pad (не біля центру)
+        var rng = new System.Random(19);
+        for (int i = 0; i < 28; i++)
         {
-            float x = ((float)rng.NextDouble() - 0.5f) * 1800f;
-            float z = ((float)rng.NextDouble() - 0.5f) * 1800f;
-            if (x * x + z * z < 80f * 80f) continue;
-            var patch = Prim(PrimitiveType.Cylinder, "TerrainPatch", parent,
-                new Vector3(x, -0.2f, z),
-                new Vector3(40f + (float)rng.NextDouble() * 80f, 0.15f, 40f + (float)rng.NextDouble() * 80f));
-            float g = 0.03f + (float)rng.NextDouble() * 0.04f;
-            VisualMaterials.Apply(patch, new Color(g, g * 1.05f, g * 1.15f), 0.08f, 0.08f);
+            float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
+            float d = 180f + (float)rng.NextDouble() * 900f;
+            float x = Mathf.Cos(ang) * d;
+            float z = Mathf.Sin(ang) * d;
+            float s = 25f + (float)rng.NextDouble() * 55f;
+            var patch = Prim(PrimitiveType.Cylinder, "Terrain", parent,
+                new Vector3(x, -0.35f, z), new Vector3(s, 0.25f, s * (0.7f + (float)rng.NextDouble() * 0.5f)));
+            float g = 0.03f + (float)rng.NextDouble() * 0.035f;
+            VisualMaterials.Apply(patch, new Color(g, g, g * 1.05f), 0.05f, 0.08f);
+            NoShadow(patch);
         }
-
-        var outer = Prim(PrimitiveType.Cylinder, "VoidDisc", parent,
-            new Vector3(0f, -6f, 0f), new Vector3(14000f, 2f, 14000f));
-        VisualMaterials.Apply(outer, new Color(0.01f, 0.012f, 0.03f), 0.02f, 0.05f);
     }
 
     static void BuildLandingPad(Transform parent)
@@ -58,277 +64,251 @@ public static class EnvironmentBuilder
         var old = GameObject.Find("LandingPad");
         if (old != null) Object.Destroy(old);
 
-        var padRoot = new GameObject("LandingPad");
-        padRoot.transform.SetParent(parent, false);
+        var pad = new GameObject("LandingPad");
+        pad.transform.SetParent(parent, false);
 
-        // Outer apron
-        var apron = Prim(PrimitiveType.Cylinder, "PadApron", padRoot.transform,
-            new Vector3(0f, 0.08f, 0f), new Vector3(90f, 0.12f, 90f));
-        VisualMaterials.Apply(apron, new Color(0.08f, 0.09f, 0.12f), 0.35f, 0.3f);
+        var apron = Prim(PrimitiveType.Cylinder, "PadApron", pad.transform,
+            new Vector3(0f, 0.05f, 0f), new Vector3(88f, 0.1f, 88f));
+        VisualMaterials.Apply(apron, new Color(0.08f, 0.08f, 0.09f), 0.3f, 0.32f);
 
-        // Main deck
-        var deck = Prim(PrimitiveType.Cylinder, "PadDeck", padRoot.transform,
-            new Vector3(0f, 0.22f, 0f), new Vector3(58f, 0.16f, 58f));
-        VisualMaterials.Apply(deck, new Color(0.14f, 0.15f, 0.18f), 0.5f, 0.4f);
+        var deck = Prim(PrimitiveType.Cylinder, "PadDeck", pad.transform,
+            new Vector3(0f, 0.2f, 0f), new Vector3(52f, 0.14f, 52f));
+        VisualMaterials.Apply(deck, new Color(0.15f, 0.15f, 0.16f), 0.45f, 0.42f);
 
-        // Chequered inner zone (alternating wedges via cubes ring)
-        var target = Prim(PrimitiveType.Cylinder, "PadTarget", padRoot.transform,
-            new Vector3(0f, 0.35f, 0f), new Vector3(24f, 0.05f, 24f));
-        VisualMaterials.Apply(target, new Color(0.2f, 0.22f, 0.26f), 0.4f, 0.45f);
+        var target = Prim(PrimitiveType.Cylinder, "PadTarget", pad.transform,
+            new Vector3(0f, 0.32f, 0f), new Vector3(22f, 0.05f, 22f));
+        VisualMaterials.Apply(target, new Color(0.2f, 0.2f, 0.22f), 0.35f, 0.48f);
+        NoShadow(target);
 
-        // Neon rings
-        float[] rs = { 0.95f, 0.62f, 0.32f, 0.12f };
-        Color[] cols =
-        {
-            new Color(0.2f, 0.75f, 1f),
-            new Color(0.25f, 0.85f, 1f),
-            new Color(0.4f, 0.9f, 1f),
-            new Color(1f, 0.8f, 0.3f)
-        };
+        float[] rs = { 0.9f, 0.58f, 0.3f, 0.12f };
         for (int i = 0; i < rs.Length; i++)
         {
-            var ring = Prim(PrimitiveType.Cylinder, $"PadRing_{i}", padRoot.transform,
-                new Vector3(0f, 0.4f + i * 0.015f, 0f),
-                new Vector3(58f * rs[i], 0.035f, 58f * rs[i]));
-            VisualMaterials.Apply(ring, cols[i] * 0.5f, 0.15f, 0.7f, cols[i] * 0.55f);
+            float g = 0.5f + i * 0.1f;
+            var ring = Prim(PrimitiveType.Cylinder, $"PadRing_{i}", pad.transform,
+                new Vector3(0f, 0.38f + i * 0.015f, 0f),
+                new Vector3(52f * rs[i], 0.05f, 52f * rs[i]));
+            VisualMaterials.Apply(ring, new Color(g, g, g + 0.02f), 0.15f, 0.6f,
+                new Color(0.15f, 0.15f, 0.18f) * (0.4f + i * 0.1f));
+            NoShadow(ring);
         }
 
-        // Cross
-        foreach (var xAxis in new[] { true, false })
+        foreach (var x in new[] { true, false })
         {
-            var bar = Prim(PrimitiveType.Cube, xAxis ? "CrossX" : "CrossZ", padRoot.transform,
-                new Vector3(0f, 0.42f, 0f),
-                xAxis ? new Vector3(50f, 0.06f, 1.1f) : new Vector3(1.1f, 0.06f, 50f));
-            VisualMaterials.Apply(bar, new Color(1f, 0.82f, 0.25f), 0.2f, 0.55f,
-                new Color(0.55f, 0.35f, 0.05f));
+            var bar = Prim(PrimitiveType.Cube, x ? "CX" : "CZ", pad.transform,
+                new Vector3(0f, 0.4f, 0f),
+                x ? new Vector3(44f, 0.05f, 1.05f) : new Vector3(1.05f, 0.05f, 44f));
+            VisualMaterials.Apply(bar, new Color(0.88f, 0.88f, 0.9f), 0.15f, 0.55f,
+                new Color(0.22f, 0.22f, 0.25f));
+            NoShadow(bar);
         }
 
-        // Raised rim
-        var rim = Prim(PrimitiveType.Cylinder, "PadRim", padRoot.transform,
-            new Vector3(0f, 0.55f, 0f), new Vector3(59f, 0.35f, 59f));
-        // Hollow-ish look: dark thin wall
-        VisualMaterials.Apply(rim, new Color(0.25f, 0.28f, 0.32f), 0.55f, 0.35f);
+        var bull = Prim(PrimitiveType.Cylinder, "Bull", pad.transform,
+            new Vector3(0f, 0.42f, 0f), new Vector3(3f, 0.04f, 3f));
+        VisualMaterials.Apply(bull, new Color(0.92f, 0.92f, 0.94f), 0.2f, 0.55f,
+            new Color(0.3f, 0.3f, 0.32f));
+        NoShadow(bull);
 
-        // Corner towers + spots
         for (int i = 0; i < 4; i++)
         {
             float a = (i * 90f + 45f) * Mathf.Deg2Rad;
-            float r = 32f;
-            Vector3 basePos = new Vector3(Mathf.Sin(a) * r, 0f, Mathf.Cos(a) * r);
+            Vector3 bp = new Vector3(Mathf.Sin(a) * 30f, 0f, Mathf.Cos(a) * 30f);
+            var pole = Prim(PrimitiveType.Cylinder, $"Tow_{i}", pad.transform,
+                bp + Vector3.up * 6.5f, new Vector3(0.6f, 6.5f, 0.6f));
+            VisualMaterials.Apply(pole, new Color(0.32f, 0.32f, 0.34f), 0.55f, 0.4f);
+            var head = Prim(PrimitiveType.Sphere, $"TH_{i}", pad.transform,
+                bp + Vector3.up * 13.2f, Vector3.one * 1.15f);
+            VisualMaterials.Apply(head, new Color(0.92f, 0.93f, 0.95f), 0.12f, 0.75f,
+                new Color(0.4f, 0.42f, 0.5f));
 
-            var pole = Prim(PrimitiveType.Cylinder, $"Tower_{i}", padRoot.transform,
-                basePos + Vector3.up * 7f, new Vector3(0.7f, 7f, 0.7f));
-            VisualMaterials.Apply(pole, new Color(0.3f, 0.32f, 0.36f), 0.6f, 0.35f);
-
-            var head = Prim(PrimitiveType.Sphere, $"TowerHead_{i}", padRoot.transform,
-                basePos + Vector3.up * 14.2f, Vector3.one * 1.4f);
-            VisualMaterials.Apply(head, new Color(0.9f, 0.95f, 1f), 0.2f, 0.8f,
-                new Color(0.4f, 0.7f, 1f) * 0.8f);
-
-            var lightGo = new GameObject($"Spot_{i}");
-            lightGo.transform.SetParent(padRoot.transform, false);
-            lightGo.transform.position = basePos + Vector3.up * 14f;
-            var spot = lightGo.AddComponent<Light>();
+            var lg = new GameObject($"Spot_{i}");
+            lg.transform.SetParent(pad.transform, false);
+            lg.transform.position = bp + Vector3.up * 13f;
+            var spot = lg.AddComponent<Light>();
             spot.type = LightType.Spot;
-            spot.color = new Color(0.85f, 0.92f, 1f);
-            spot.intensity = 55f;
-            spot.range = 100f;
-            spot.spotAngle = 65f;
-            spot.innerSpotAngle = 35f;
+            spot.color = new Color(0.95f, 0.96f, 1f);
+            spot.intensity = 48f;
+            spot.range = 90f;
+            spot.spotAngle = 62f;
             spot.shadows = LightShadows.Soft;
-            lightGo.transform.rotation = Quaternion.LookRotation(
-                (-basePos + Vector3.up * -8f).normalized);
+            lg.transform.rotation = Quaternion.LookRotation((-bp + Vector3.up * -7f).normalized);
         }
 
-        // Center fill
-        var cGo = new GameObject("PadFill");
-        cGo.transform.SetParent(padRoot.transform, false);
-        cGo.transform.position = new Vector3(0f, 10f, 0f);
-        var cl = cGo.AddComponent<Light>();
-        cl.type = LightType.Point;
-        cl.color = new Color(0.45f, 0.7f, 1f);
-        cl.intensity = 18f;
-        cl.range = 80f;
+        var fill = new GameObject("PadFill");
+        fill.transform.SetParent(pad.transform, false);
+        fill.transform.position = new Vector3(0f, 11f, 0f);
+        var fl = fill.AddComponent<Light>();
+        fl.type = LightType.Point;
+        fl.color = new Color(0.8f, 0.85f, 1f);
+        fl.intensity = 14f;
+        fl.range = 75f;
     }
 
-    static void BuildLandingLights(Transform parent)
+    static void BuildDistanceRings(Transform parent)
     {
-        // Approach runway lights along Z
-        for (int i = 1; i <= 12; i++)
+        float[] r = { 120f, 280f, 520f };
+        foreach (float radius in r)
         {
-            float z = i * 35f;
-            foreach (float x in new[] { -18f, 18f })
-            {
-                var lamp = Prim(PrimitiveType.Sphere, "ApproachLight", parent,
-                    new Vector3(x, 0.6f, z), Vector3.one * 0.9f);
-                Color c = i % 3 == 0
-                    ? new Color(1f, 0.35f, 0.2f)
-                    : new Color(0.3f, 0.9f, 1f);
-                VisualMaterials.Apply(lamp, c * 0.6f, 0.1f, 0.7f, c * 0.9f);
-            }
-        }
-    }
-
-    static void BuildDistanceGrid(Transform parent)
-    {
-        var grid = new GameObject("DistanceGrid");
-        grid.transform.SetParent(parent, false);
-
-        float[] radii = { 75f, 150f, 300f, 500f };
-        foreach (float radius in radii)
-        {
-            var ring = Prim(PrimitiveType.Cylinder, $"Ring_{radius}", grid.transform,
-                new Vector3(0f, 0.04f, 0f),
-                new Vector3(radius * 2f, 0.025f, radius * 2f));
-            VisualMaterials.Apply(ring, new Color(0.06f, 0.12f, 0.18f), 0.1f, 0.2f,
-                new Color(0.03f, 0.08f, 0.14f));
-        }
-
-        for (int d = 1; d <= 6; d++)
-        {
-            foreach (var dir in new[] {
-                Vector3.right, Vector3.left, Vector3.forward, Vector3.back })
-            {
-                var m = Prim(PrimitiveType.Cube, "Mark", grid.transform,
-                    dir * (d * 100f) + Vector3.up * 0.35f,
-                    new Vector3(2.5f, 0.7f, 2.5f));
-                VisualMaterials.Apply(m, new Color(0.18f, 0.28f, 0.35f), 0.25f, 0.3f,
-                    d == 1 ? new Color(0.05f, 0.15f, 0.2f) : null);
-            }
+            var ring = Prim(PrimitiveType.Cylinder, $"DRing_{radius}", parent,
+                new Vector3(0f, 0.04f, 0f), new Vector3(radius * 2f, 0.045f, radius * 2f));
+            VisualMaterials.Apply(ring, new Color(0.1f, 0.11f, 0.13f), 0.08f, 0.2f,
+                new Color(0.05f, 0.06f, 0.08f));
+            NoShadow(ring);
         }
     }
 
     static ParticleSystem BuildStarField(Transform parent)
     {
-        var starsRoot = new GameObject("StarField");
-        starsRoot.transform.SetParent(parent, false);
+        var root = new GameObject("StarField");
+        root.transform.SetParent(parent, false);
 
-        // Dense star particles
         var go = new GameObject("Stars");
-        go.transform.SetParent(starsRoot.transform, false);
+        go.transform.SetParent(root.transform, false);
         var ps = go.AddComponent<ParticleSystem>();
-
         var main = ps.main;
         main.loop = false;
         main.playOnAwake = true;
         main.duration = 0.5f;
         main.startLifetime = 99999f;
         main.startSpeed = 0f;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.8f, 5.5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.6f, 4.5f);
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(0.65f, 0.75f, 1f, 0.85f),
-            new Color(1f, 0.95f, 0.85f, 1f));
-        main.maxParticles = 3500;
+            new Color(0.7f, 0.75f, 0.9f, 0.9f),
+            new Color(1f, 0.97f, 0.92f, 1f));
+        main.maxParticles = 4000;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.gravityModifier = 0f;
 
-        var emission = ps.emission;
-        emission.rateOverTime = 0f;
-        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 3200) });
+        var em = ps.emission;
+        em.rateOverTime = 0f;
+        em.SetBursts(new[] { new ParticleSystem.Burst(0f, 3600) });
 
-        var shape = ps.shape;
-        shape.shapeType = ParticleSystemShapeType.Sphere;
-        shape.radius = 5000f;
-        shape.radiusThickness = 0.4f;
+        var sh = ps.shape;
+        sh.shapeType = ParticleSystemShapeType.Sphere;
+        sh.radius = 5000f;
+        sh.radiusThickness = 0.45f;
 
-        var renderer = go.GetComponent<ParticleSystemRenderer>();
-        renderer.renderMode = ParticleSystemRenderMode.Billboard;
-        renderer.sharedMaterial = VisualMaterials.Particle(Color.white);
+        var rend = go.GetComponent<ParticleSystemRenderer>();
+        rend.renderMode = ParticleSystemRenderMode.Billboard;
+        rend.sharedMaterial = VisualMaterials.Particle(Color.white);
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-        // Bright accent stars (mesh spheres with emission)
-        var rng = new System.Random(3);
-        for (int i = 0; i < 80; i++)
+        var rng = new System.Random(5);
+        for (int i = 0; i < 70; i++)
         {
-            Vector3 dir = RandomOnSphere(rng);
-            if (dir.y < -0.15f) dir.y = Mathf.Abs(dir.y) * 0.3f; // prefer upper hemisphere
+            Vector3 dir = RandSphere(rng);
+            if (dir.y < 0.08f) dir.y = Mathf.Abs(dir.y) + 0.2f;
             dir.Normalize();
-            float dist = 2800f + (float)rng.NextDouble() * 1800f;
-            float s = 2f + (float)rng.NextDouble() * 6f;
-            var star = Prim(PrimitiveType.Sphere, "BrightStar", starsRoot.transform,
-                dir * dist, Vector3.one * s);
-            Color c = Color.Lerp(
-                new Color(0.7f, 0.85f, 1f),
-                new Color(1f, 0.9f, 0.7f),
-                (float)rng.NextDouble());
-            VisualMaterials.Apply(star, c, 0f, 0f, c * (1.2f + (float)rng.NextDouble()));
+            float dist = 3000f + (float)rng.NextDouble() * 1600f;
+            float s = 1.8f + (float)rng.NextDouble() * 5f;
+            var star = Prim(PrimitiveType.Sphere, "BStar", root.transform, dir * dist, Vector3.one * s);
+            Color c = Color.Lerp(new Color(0.75f, 0.82f, 1f), new Color(1f, 0.92f, 0.8f), (float)rng.NextDouble());
+            if (i % 19 == 0) c = new Color(1f, 0.55f, 0.4f);
+            VisualMaterials.Apply(star, c, 0f, 0f, c * (1.1f + (float)rng.NextDouble() * 0.5f));
+            NoShadow(star);
         }
-
-        // Nebula clouds
-        for (int i = 0; i < 8; i++)
-        {
-            Vector3 dir = RandomOnSphere(rng);
-            dir.y = Mathf.Abs(dir.y) * 0.55f + 0.1f;
-            dir.Normalize();
-            float dist = 3200f + (float)rng.NextDouble() * 1200f;
-            float s = 350f + (float)rng.NextDouble() * 700f;
-            var neb = Prim(PrimitiveType.Sphere, $"Nebula_{i}", starsRoot.transform,
-                dir * dist, Vector3.one * s);
-            Color nc = i % 2 == 0
-                ? new Color(0.18f, 0.08f, 0.4f)
-                : new Color(0.06f, 0.14f, 0.38f);
-            float b = 0.12f + (float)rng.NextDouble() * 0.12f;
-            VisualMaterials.Apply(neb, nc * 0.35f, 0f, 0f, nc * b);
-        }
-
-        // Milky-way band (elongated)
-        var band = Prim(PrimitiveType.Sphere, "MilkyWay", starsRoot.transform,
-            new Vector3(0f, 800f, 4200f), new Vector3(5500f, 400f, 900f));
-        VisualMaterials.Apply(band, new Color(0.12f, 0.12f, 0.2f) * 0.4f, 0f, 0f,
-            new Color(0.15f, 0.16f, 0.28f) * 0.2f);
 
         return ps;
     }
 
-    static void BuildHorizonGlow(Transform parent)
+    /// <summary>Туманності, Чумацький Шлях, атмосферний обрій — далеко від pad.</summary>
+    static void BuildSkyScenery(Transform parent)
     {
-        // Atmospheric limb
-        var limb = Prim(PrimitiveType.Cylinder, "AtmoLimb", parent,
-            new Vector3(0f, 18f, 0f), new Vector3(10000f, 28f, 10000f));
-        VisualMaterials.Apply(limb, new Color(0.05f, 0.1f, 0.22f), 0f, 0f,
-            new Color(0.08f, 0.15f, 0.35f) * 0.25f);
+        var sky = new GameObject("SkyScenery");
+        sky.transform.SetParent(parent, false);
+        var rng = new System.Random(21);
 
-        // Soft sky dome (inside-facing look via large sphere)
-        var dome = Prim(PrimitiveType.Sphere, "SkyDome", parent,
-            Vector3.zero, Vector3.one * 11000f);
-        VisualMaterials.Apply(dome, new Color(0.01f, 0.015f, 0.04f), 0f, 0f);
-        // Flip normals not trivial on primitive — keep dark outer, stars outside anyway
-
-        var rng = new System.Random(42);
-        for (int i = 0; i < 20; i++)
+        // Туманності (далеко, м'які)
+        Color[] nebCols =
         {
-            float a = i / 20f * Mathf.PI * 2f;
-            float d = 2000f + (float)rng.NextDouble() * 1000f;
-            float s = 120f + (float)rng.NextDouble() * 260f;
-            var hill = Prim(PrimitiveType.Sphere, $"Hill_{i}", parent,
-                new Vector3(Mathf.Cos(a) * d, s * 0.18f, Mathf.Sin(a) * d),
-                new Vector3(s * 2.4f, s * 0.45f, s * 2.4f));
-            VisualMaterials.Apply(hill, new Color(0.025f, 0.03f, 0.045f), 0.05f, 0.08f);
+            new Color(0.2f, 0.08f, 0.35f),
+            new Color(0.06f, 0.12f, 0.32f),
+            new Color(0.15f, 0.05f, 0.22f),
+            new Color(0.08f, 0.16f, 0.28f),
+            new Color(0.18f, 0.1f, 0.3f),
+            new Color(0.05f, 0.1f, 0.25f)
+        };
+        for (int i = 0; i < nebCols.Length; i++)
+        {
+            Vector3 dir = RandSphere(rng);
+            dir.y = Mathf.Abs(dir.y) * 0.55f + 0.2f;
+            dir.Normalize();
+            float dist = 3400f + (float)rng.NextDouble() * 1000f;
+            float sx = 400f + (float)rng.NextDouble() * 500f;
+            float sy = 280f + (float)rng.NextDouble() * 350f;
+            var neb = Prim(PrimitiveType.Sphere, $"Nebula_{i}", sky.transform,
+                dir * dist, new Vector3(sx, sy, sx * 0.85f));
+            float b = 0.1f + (float)rng.NextDouble() * 0.1f;
+            VisualMaterials.Apply(neb, nebCols[i] * 0.3f, 0f, 0f, nebCols[i] * b);
+            NoShadow(neb);
         }
+
+        // Смуга Чумацького Шляху
+        var mw = Prim(PrimitiveType.Sphere, "MilkyWay", sky.transform,
+            new Vector3(400f, 700f, 3800f), new Vector3(5200f, 320f, 900f));
+        VisualMaterials.Apply(mw, new Color(0.12f, 0.12f, 0.18f) * 0.35f, 0f, 0f,
+            new Color(0.16f, 0.17f, 0.28f) * 0.22f);
+        NoShadow(mw);
+
+        var mw2 = Prim(PrimitiveType.Sphere, "MilkyWay2", sky.transform,
+            new Vector3(-600f, 500f, -3600f), new Vector3(4200f, 260f, 750f));
+        VisualMaterials.Apply(mw2, new Color(0.1f, 0.09f, 0.16f) * 0.3f, 0f, 0f,
+            new Color(0.18f, 0.12f, 0.28f) * 0.15f);
+        NoShadow(mw2);
+
+        // Атмосферний обрій — дуже тонкий і низький, не «стіна»
+        var limb = Prim(PrimitiveType.Cylinder, "AtmoLimb", sky.transform,
+            new Vector3(0f, 8f, 0f), new Vector3(9000f, 12f, 9000f));
+        VisualMaterials.Apply(limb, new Color(0.04f, 0.06f, 0.12f), 0f, 0f,
+            new Color(0.1f, 0.18f, 0.4f) * 0.2f);
+        NoShadow(limb);
+
+        // Далекий «сонце-диск»
+        var sunDisc = Prim(PrimitiveType.Sphere, "SunDisc", sky.transform,
+            new Vector3(-3200f, 1800f, -2500f), Vector3.one * 140f);
+        VisualMaterials.Apply(sunDisc, new Color(1f, 0.96f, 0.88f), 0f, 0f,
+            new Color(1f, 0.9f, 0.65f) * 1.8f);
+        NoShadow(sunDisc);
     }
 
-    static void BuildPadBeacons(Transform parent)
+    static void BuildPadInfrastructure(Transform parent)
     {
         var tower = Prim(PrimitiveType.Cylinder, "RefTower", parent,
-            new Vector3(95f, 45f, 95f), new Vector3(1.2f, 90f, 1.2f));
-        VisualMaterials.Apply(tower, new Color(0.4f, 0.42f, 0.48f), 0.55f, 0.4f);
+            new Vector3(85f, 40f, 85f), new Vector3(1.0f, 80f, 1.0f));
+        VisualMaterials.Apply(tower, new Color(0.36f, 0.36f, 0.39f), 0.5f, 0.4f);
 
-        float[] marks = { 15f, 35f, 55f, 75f, 90f };
+        float[] marks = { 15f, 35f, 55f, 75f };
         foreach (float h in marks)
         {
-            var mark = Prim(PrimitiveType.Cube, $"TMark_{h}", parent,
-                new Vector3(95f, h, 95f), new Vector3(3.5f, 0.4f, 3.5f));
-            VisualMaterials.Apply(mark, new Color(1f, 0.75f, 0.25f), 0.2f, 0.55f,
-                new Color(0.4f, 0.2f, 0.04f));
+            var m = Prim(PrimitiveType.Cube, "TMark", parent,
+                new Vector3(85f, h, 85f), new Vector3(3.2f, 0.4f, 3.2f));
+            VisualMaterials.Apply(m, new Color(0.85f, 0.75f, 0.45f), 0.2f, 0.5f,
+                new Color(0.3f, 0.2f, 0.05f));
+            NoShadow(m);
         }
 
-        var beacon = new GameObject("TowerBeacon");
-        beacon.transform.SetParent(parent, false);
-        beacon.transform.position = new Vector3(95f, 92f, 95f);
-        var bl = beacon.AddComponent<Light>();
+        var b = new GameObject("TowerBeacon");
+        b.transform.SetParent(parent, false);
+        b.transform.position = new Vector3(85f, 82f, 85f);
+        var bl = b.AddComponent<Light>();
         bl.type = LightType.Point;
-        bl.color = new Color(1f, 0.7f, 0.25f);
+        bl.color = new Color(1f, 0.75f, 0.35f);
         bl.intensity = 8f;
-        bl.range = 60f;
+        bl.range = 55f;
+    }
+
+    static void BuildApproachLights(Transform parent)
+    {
+        for (int i = 1; i <= 12; i++)
+        {
+            float z = i * 38f;
+            foreach (float x in new[] { -17f, 17f })
+            {
+                var lamp = Prim(PrimitiveType.Sphere, "AppLight", parent,
+                    new Vector3(x, 0.5f, z), Vector3.one * 0.6f);
+                Color c = i % 4 == 0 ? new Color(0.95f, 0.45f, 0.3f) : new Color(0.8f, 0.85f, 0.95f);
+                VisualMaterials.Apply(lamp, c * 0.5f, 0.1f, 0.65f, c * 0.7f);
+                NoShadow(lamp);
+            }
+        }
     }
 
     static void SetupLighting(out Light sun)
@@ -341,80 +321,77 @@ public static class EnvironmentBuilder
             sun.type = LightType.Directional;
         }
         sun.name = "Sun";
-        sun.color = new Color(1f, 0.97f, 0.92f);
-        sun.intensity = 1.45f;
+        sun.color = new Color(1f, 0.97f, 0.93f);
+        sun.intensity = 1.4f;
         sun.shadows = LightShadows.Soft;
-        sun.shadowStrength = 0.85f;
-        sun.transform.rotation = Quaternion.Euler(32f, -48f, 0f);
+        sun.shadowStrength = 0.8f;
+        sun.transform.rotation = Quaternion.Euler(32f, -45f, 0f);
 
-        EnsureDirLight("FillLight", new Color(0.3f, 0.4f, 0.75f), 0.32f, Quaternion.Euler(195f, 55f, 0f));
-        EnsureDirLight("RimLight", new Color(0.45f, 0.6f, 1f), 0.28f, Quaternion.Euler(-20f, 155f, 0f));
-        EnsureDirLight("GroundBounce", new Color(0.15f, 0.2f, 0.3f), 0.12f, Quaternion.Euler(90f, 0f, 0f));
+        EnsureDir("FillLight", new Color(0.4f, 0.45f, 0.6f), 0.3f, Quaternion.Euler(195f, 55f, 0f));
+        EnsureDir("RimLight", new Color(0.55f, 0.6f, 0.75f), 0.25f, Quaternion.Euler(-18f, 145f, 0f));
 
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.05f, 0.06f, 0.12f);
-        RenderSettings.ambientEquatorColor = new Color(0.03f, 0.04f, 0.07f);
-        RenderSettings.ambientGroundColor = new Color(0.015f, 0.018f, 0.03f);
-        RenderSettings.reflectionIntensity = 0.3f;
-        RenderSettings.subtractiveShadowColor = new Color(0.02f, 0.03f, 0.06f);
+        RenderSettings.ambientSkyColor = new Color(0.07f, 0.07f, 0.1f);
+        RenderSettings.ambientEquatorColor = new Color(0.045f, 0.045f, 0.055f);
+        RenderSettings.ambientGroundColor = new Color(0.025f, 0.025f, 0.03f);
+        RenderSettings.reflectionIntensity = 0.28f;
     }
 
-    static void EnsureDirLight(string name, Color color, float intensity, Quaternion rot)
+    static void EnsureDir(string name, Color c, float i, Quaternion r)
     {
         var go = GameObject.Find(name);
-        if (go == null)
-        {
-            go = new GameObject(name);
-            go.AddComponent<Light>();
-        }
+        if (go == null) { go = new GameObject(name); go.AddComponent<Light>(); }
         var l = go.GetComponent<Light>();
         l.type = LightType.Directional;
-        l.color = color;
-        l.intensity = intensity;
+        l.color = c;
+        l.intensity = i;
         l.shadows = LightShadows.None;
-        go.transform.rotation = rot;
+        go.transform.rotation = r;
     }
 
     static void SetupSkyAndFog()
     {
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.ExponentialSquared;
-        RenderSettings.fogColor = new Color(0.015f, 0.02f, 0.05f);
-        RenderSettings.fogDensity = 0.00006f;
+        RenderSettings.fogColor = new Color(0.04f, 0.04f, 0.055f);
+        RenderSettings.fogDensity = 0.000045f;
 
         var cam = Camera.main ?? Object.FindFirstObjectByType<Camera>();
         if (cam != null)
         {
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.01f, 0.012f, 0.035f);
-            cam.farClipPlane = 16000f;
-            cam.nearClipPlane = 0.25f;
-            cam.fieldOfView = 46f;
-            try { if (!cam.CompareTag("MainCamera")) cam.tag = "MainCamera"; } catch { /* ignore */ }
+            cam.backgroundColor = new Color(0.03f, 0.03f, 0.04f);
+            cam.farClipPlane = 14000f;
+            cam.nearClipPlane = 0.3f;
         }
     }
 
-    static GameObject Prim(PrimitiveType type, string name, Transform parent, Vector3 pos, Vector3 scale)
+    static GameObject Prim(PrimitiveType t, string n, Transform p, Vector3 pos, Vector3 sc)
     {
-        var go = GameObject.CreatePrimitive(type);
-        go.name = name;
-        go.transform.SetParent(parent, false);
+        var go = GameObject.CreatePrimitive(t);
+        go.name = n;
+        go.transform.SetParent(p, false);
         go.transform.localPosition = pos;
-        go.transform.localScale = scale;
-        var col = go.GetComponent<Collider>();
-        if (col != null) Object.Destroy(col);
+        go.transform.localScale = sc;
+        var c = go.GetComponent<Collider>();
+        if (c != null) Object.Destroy(c);
         return go;
     }
 
-    static Vector3 RandomOnSphere(System.Random rng)
+    static void NoShadow(GameObject go)
+    {
+        var r = go.GetComponent<MeshRenderer>();
+        if (r == null) return;
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        r.receiveShadows = false;
+    }
+
+    static Vector3 RandSphere(System.Random rng)
     {
         float u = (float)rng.NextDouble();
         float v = (float)rng.NextDouble();
-        float theta = 2f * Mathf.PI * u;
-        float phi = Mathf.Acos(2f * v - 1f);
-        return new Vector3(
-            Mathf.Sin(phi) * Mathf.Cos(theta),
-            Mathf.Cos(phi),
-            Mathf.Sin(phi) * Mathf.Sin(theta));
+        float th = 2f * Mathf.PI * u;
+        float ph = Mathf.Acos(2f * v - 1f);
+        return new Vector3(Mathf.Sin(ph) * Mathf.Cos(th), Mathf.Cos(ph), Mathf.Sin(ph) * Mathf.Sin(th));
     }
 }

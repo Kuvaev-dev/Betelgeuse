@@ -1,19 +1,23 @@
 using UnityEngine;
 
 /// <summary>
-/// Фізика та GNC ракетоносія:
-/// RK4 (трансляція), semi-implicit Euler (орієнтація),
-/// режими PID / Fuzzy Sugeno / Neural ES / Hybrid Neuro-Fuzzy.
+/// Ядро фізики та GNC ракетоносія.
+/// — Трансляція: інтегратор Рунге–Кутти 4-го порядку (RK4);
+/// — Орієнтація: semi-implicit Euler + демпфінг;
+/// — Режими: PID / Fuzzy Sugeno / Neural ES / Hybrid Neuro-Fuzzy.
+/// Симуляція стартує лише після simulationArmed = true (кнопка UI).
 /// </summary>
 [RequireComponent(typeof(DataLogger))]
 public class RocketPhysics : MonoBehaviour
 {
     [Header("Основні параметри")]
     public SimulationParameters parameters;
+    /// <summary>Алгоритм керування (A–D у UI).</summary>
     public enum ControlMode { PID, Fuzzy, Neural, Hybrid }
 
     [Header("Режим керування")]
     public ControlMode controlMode = ControlMode.Hybrid;
+    /// <summary>Поточний фізичний стан (єдине джерело правди для камери/UI).</summary>
     public RocketState state = new RocketState();
 
     [Header("Запуск")]
@@ -288,7 +292,16 @@ public class RocketPhysics : MonoBehaviour
 
         // Notify UI (single flights only — batch suppresses popup)
         if (!batch)
+        {
             MissionControlUI.Instance?.ShowLandingResult(metrics);
+        }
+    }
+
+    /// <summary>Останній шлях CSV-логу (якщо є).</summary>
+    public string GetLastTrajectoryPath()
+    {
+        if (logger == null) logger = GetComponent<DataLogger>();
+        return logger != null ? logger.LastFilePath : null;
     }
 
     /// <summary>Повне перезавантаження та старт спуску.</summary>

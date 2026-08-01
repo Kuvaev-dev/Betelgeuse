@@ -4,9 +4,10 @@ using System.Collections.Generic;
 using System.IO;
 
 /// <summary>
-/// Порівняльні Monte-Carlo експерименти. НЕ запускається сам —
-/// лише за явним викликом RequestFullExperiment() з UI.
-/// Під час тесту алгоритми змінюються навмисно (це і є порівняння).
+/// Менеджер порівняльних Monte-Carlo експериментів.
+/// НЕ стартує сам — лише через RequestFullExperiment() з UI.
+/// Послідовно: PID → Fuzzy → Neural → Hybrid (N запусків кожен),
+/// з випадковим вітром/масою/кутом. Результати → UI + ResearchExporter.
 /// </summary>
 public class SimulationManager : MonoBehaviour
 {
@@ -144,8 +145,10 @@ public class SimulationManager : MonoBehaviour
 
             dashboard?.UpdateStatistics(pid, fuzzy, neural, hybrid);
             MissionControlUI.Instance?.UpdateStatistics(pid, fuzzy, neural, hybrid);
-            SaveComparisonToCSV();
+            string exportDir = SaveComparisonReports();
             SetProgress("Авто-тест завершено", 1f);
+            MissionControlUI.Instance?.NotifyInfo(
+                $"✓ Авто-тест завершено. Звіти CSV/JSON/MD збережено:\n{exportDir}");
         }
         else
         {
@@ -293,34 +296,52 @@ public class SimulationManager : MonoBehaviour
         return sum / list.Count;
     }
 
-    void SaveComparisonToCSV()
+    /// <summary>Повний експорт порівняння (CSV + JSON + Markdown).</summary>
+    public string SaveComparisonReports()
     {
-        string dir = Path.Combine(Application.dataPath, "..", "SimulationLogs");
-        Directory.CreateDirectory(dir);
-        string path = Path.Combine(dir, $"Final_Comparison_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
-
+        var data = BuildComparisonExportData();
+        // Legacy short CSV for backwards compatibility
+        string dir = ResearchExporter.LogsDirectory;
+        string legacy = Path.Combine(dir, $"Final_Comparison_{data.timestamp}.csv");
         var lines = new List<string>
         {
             "Algorithm,Tests,SuccessRate(%),AvgTouchdownVelocity,AvgAngleError,AvgHorizontalMiss,AvgFuelRemaining,AvgSuccessScore"
         };
-        lines.Add(CreateCSVLine("PID", pidResults));
-        lines.Add(CreateCSVLine("Fuzzy Sugeno", fuzzyResults));
-        lines.Add(CreateCSVLine("Neural ES", neuralResults));
-        if (includeHybrid)
-            lines.Add(CreateCSVLine("Hybrid Neuro-Fuzzy", hybridResults));
-
-        File.WriteAllLines(path, lines);
-        Debug.Log($"CSV: {path}");
+        foreach (var a in data.algorithms)
+        {
+            lines.Add($"{a.name},{a.tests},{a.successRate:F2},{a.avgTouchdownVelocity:F2}," +
+                      $"{a.avgAngleError:F2},{a.avgHorizontalMiss:F2},{a.avgFuelRemaining:F2},{a.avgSuccessScore:F2}");
+        }
+        File.WriteAllLines(legacy, lines);
+        return ResearchExporter.ExportComparison(data);
     }
 
-    string CreateCSVLine(string name, List<LandingMetrics> list)
+    public ResearchExporter.ComparisonExportData BuildComparisonExportData()
     {
-        if (list.Count == 0) return $"{name},0,0,0,0,0,0,0";
-        return $"{name},{list.Count},{GetSuccessRate(list):F2}," +
-               $"{GetAverage(list, m => m.touchdownVelocity):F2}," +
-               $"{GetAverage(list, m => m.landingAngleError):F2}," +
-               $"{GetAverage(list, m => m.horizontalMiss):F2}," +
-               $"{GetAverage(list, m => m.fuelRemaining):F2}," +
-               $"{GetAverage(list, m => m.SuccessScore):F2}";
+        string stamp = ResearchExporter.Stamp();
+        var data = new ResearchExporter.ComparisonExportData
+        {
+            timestamp = stamp,
+            testsPerAlgorithm = testsPerAlgorithm,
+            enableNoise = enableNoise,
+            windStrength = windStrength,
+            massVariationPercent = massVariationPercent,
+            angleVariationDegrees = angleVariationDegrees
+        };
+        data.algorithms.Add(ResearchExporter.ComputeStats("PID", pidResults));
+        data.algorithms.Add(ResearchExporter.ComputeStats("Fuzzy Sugeno", fuzzyResults));
+        data.algorithms.Add(ResearchExporter.ComputeStats("Neural ES", neuralResults));
+        if (includeHybrid)
+            data.algorithms.Add(ResearchExporter.ComputeStats("Hybrid Neuro-Fuzzy", hybridResults));
+        return data;
     }
+
+    /// <summary>Доступ до останніх результатів (для UI-експорту / тестів).</summary>
+    public IReadOnlyList<LandingMetrics> PidResults => pidResults;
+    public IReadOnlyList<LandingMetrics> FuzzyResults => fuzzyResults;
+    public IReadOnlyList<LandingMetrics> NeuralResults => neuralResults;
+    public IReadOnlyList<LandingMetrics> HybridResults => hybridResults;
+
+    public bool HasComparisonResults =>
+        pidResults.Count > 0 || fuzzyResults.Count > 0 || neuralResults.Count > 0 || hybridResults.Count > 0;
 }

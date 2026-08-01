@@ -1,0 +1,5 @@
+﻿Algorithm,Tests,SuccessCount,SuccessRate(%),AvgTouchdownVelocity,MinTouchdownVelocity,MaxTouchdownVelocity,AvgAngleError,AvgHorizontalMiss,AvgHorizontalSpeed,AvgFuelRemaining,AvgFlightTime,AvgSuccessScore
+PID,15,0,0,0.3,0.291,0.312,0,319.404,4.979,6081.625,60.082,76.392
+Fuzzy Sugeno,15,0,0,145.952,144.869,147.425,2.356,802.261,4.791,0,144.133,23.121
+Neural ES,15,0,0,162.288,147.138,187.923,86.748,192.796,23.018,7544.382,24.391,15
+Hybrid Neuro-Fuzzy,15,0,0,132.576,130.526,134.153,3.599,643.119,4.312,0,141.288,20.613

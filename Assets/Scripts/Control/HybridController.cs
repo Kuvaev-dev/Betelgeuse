@@ -1,15 +1,20 @@
 using UnityEngine;
 
 /// <summary>
-/// Гібридний Neuro-Fuzzy контролер (тема магістерської).
-/// База: zero-order Sugeno; корекція: обмежений residual MLP.
+/// Гібридний Neuro-Fuzzy контролер — центральна ідея магістерської роботи.
+/// База: zero-order Sugeno (інтерпретовані правила);
+/// корекція: обмежений residual від MLP, щоб мережа не «зламала» стійку fuzzy-базу.
+/// thrust = clamp(lerp(fuzzy, nn, α), fuzzy ± residualMax)
 /// </summary>
 public class HybridController : MonoBehaviour
 {
     [Header("Hybrid Neuro-Fuzzy")]
     public bool isActive = true;
+    /// <summary>Частка нейро-корекції тяги (α ≈ 0.20).</summary>
     [Range(0f, 0.45f)] public float neuralThrustBlend = 0.20f;
+    /// <summary>Частка нейро-корекції gimbal (β ≈ 0.15).</summary>
     [Range(0f, 0.40f)] public float neuralGimbalBlend = 0.15f;
+    /// <summary>Макс. residual відносно mg (захист від нестабільної NN).</summary>
     [Range(0.05f, 0.55f)] public float maxResidualMult = 0.30f;
 
     public FuzzyLandingController fuzzy;

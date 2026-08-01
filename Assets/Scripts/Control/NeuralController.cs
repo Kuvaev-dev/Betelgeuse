@@ -2,9 +2,11 @@ using UnityEngine;
 using System.IO;
 
 /// <summary>
-/// MLP-контролер посадки: 5 → H → 2 (tanh hidden, linear out).
-/// Навчання: еволюційна стратегія (1+λ) — мутація ваг, елітизм за cost посадки.
-/// Входи: h, vy, mass, tilt, |v_horizontal|; виходи: thrust mult, pitch gimbal bias.
+/// Нейромережевий контролер посадки: MLP 5→8→2 (tanh hidden, linear out).
+/// Навчання: еволюційна стратегія ES(1+λ) — мутація ваг, елітизм за cost touchdown.
+/// Входи (нормовані): h, Vy, mass, tilt, |Vh|;
+/// виходи: множник тяги, bias gimbal.
+/// Ваги зберігаються у BestWeights_Neural.json.
 /// </summary>
 public class NeuralController : MonoBehaviour
 {

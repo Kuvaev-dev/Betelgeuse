@@ -1,7 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Спільна фабрика URP/Standard матеріалів для процедурних ассетів.
+/// Фабрика матеріалів для процедурної геометрії (URP Lit / Unlit / Particles).
+/// Автоматично підбирає shader з fallback на Standard/Sprites.
 /// </summary>
 public static class VisualMaterials
 {
@@ -56,7 +57,14 @@ public static class VisualMaterials
     public static void Apply(GameObject go, Material mat)
     {
         var r = go.GetComponent<MeshRenderer>();
-        if (r != null) r.sharedMaterial = mat;
+        if (r == null) return;
+        r.sharedMaterial = mat;
+        // Тонка геометрія менше «блимає» без зайвих тіней
+        if (go.transform.localScale.y < 0.15f || go.transform.localScale.x < 0.4f)
+        {
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+        }
     }
 
     public static void Apply(GameObject go, Color color, float metallic = 0.3f, float smooth = 0.5f, Color? emission = null)

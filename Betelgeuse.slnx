@@ -1,4 +1,7 @@
 ﻿<Solution>
-  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Betelgeuse.EditModeTests.csproj" />
+  <Project Path="Betelgeuse.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Betelgeuse.PlayModeTests.csproj" />
 </Solution>

@@ -2,21 +2,35 @@ using UnityEngine;
 using System.Text;
 
 /// <summary>
-/// Метрики посадки для аналізу та Monte-Carlo порівняння алгоритмів.
+/// Метрики однієї посадки для UI, експорту та Monte-Carlo порівняння.
+/// SuccessScore ∈ [0;100] — зважена якість touchdown (без timeout = 0).
 /// </summary>
 [System.Serializable]
 public class LandingMetrics
 {
+    /// <summary>Модуль вертикальної швидкості в момент торкання, м/с.</summary>
     public float touchdownVelocity;
+    /// <summary>Кут між віссю корпусу та вертикаллю, градуси.</summary>
     public float landingAngleError;
+    /// <summary>Залишок палива після посадки, кг.</summary>
     public float fuelRemaining;
+    /// <summary>Максимальна висота за політ, м.</summary>
     public float maxAltitude;
+    /// <summary>Тривалість польоту, с.</summary>
     public float totalFlightTime;
+    /// <summary>Горизонтальна відстань до центру pad, м.</summary>
     public float horizontalMiss;
+    /// <summary>Модуль горизонтальної швидкості на touchdown, м/с.</summary>
     public float horizontalSpeed;
+    /// <summary>true, якщо вичерпано maxSimulationTime.</summary>
     public bool timedOut;
+    /// <summary>true, якщо всі критерії soft-landing виконані.</summary>
     public bool isSuccessfulLanding;
 
+    /// <summary>
+    /// Інтегральна оцінка якості посадки (0…100).
+    /// Ваги: швидкість 35%, кут 25%, паливо 15%, промах 15%, бічна 10%.
+    /// </summary>
     public float SuccessScore
     {
         get
@@ -32,7 +46,7 @@ public class LandingMetrics
         }
     }
 
-    /// <summary>Людською мовою: чому успіх / невдача.</summary>
+    /// <summary>Текстовий висновок українською: чому успіх / невдача.</summary>
     public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 25f, float maxH = 5f)
     {
         var sb = new StringBuilder();
