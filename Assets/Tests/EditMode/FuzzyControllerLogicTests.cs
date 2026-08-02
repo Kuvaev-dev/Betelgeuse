@@ -67,4 +67,22 @@ public class FuzzyControllerLogicTests
         float expected = mass * AtmosphereModel.GetGravity(500f) * 1.1f;
         Assert.AreEqual(expected, thrust, 1f);
     }
+
+    [Test]
+    public void Gimbal_OpposesPitchError_NegativeFeedback()
+    {
+        // Позитивна помилка кута → від'ємний gimbal (стабілізація)
+        Vector3 g = fuzzy.CalculateGimbal(15f, 0f, 0f, 0f);
+        Assert.Less(g.x, 0f);
+        Vector3 gNeg = fuzzy.CalculateGimbal(-15f, 0f, 0f, 0f);
+        Assert.Greater(gNeg.x, 0f);
+    }
+
+    [Test]
+    public void Thrust_NeverNegative_OrNaN()
+    {
+        float t = fuzzy.CalculateThrust(0.5f, -80f, 30000f);
+        Assert.IsFalse(float.IsNaN(t));
+        Assert.GreaterOrEqual(t, 0f);
+    }
 }

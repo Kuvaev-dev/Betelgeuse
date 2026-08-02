@@ -39,20 +39,23 @@ public static class RocketVisualBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(root, false);
 
-        // Палітра: білий / сірий / чорний (естетика дипломної демо)
-        var white = VisualMaterials.Lit(new Color(0.96f, 0.96f, 0.97f), 0.12f, 0.82f);
-        var whiteMatte = VisualMaterials.Lit(new Color(0.86f, 0.86f, 0.88f), 0.08f, 0.4f);
-        var black = VisualMaterials.Lit(new Color(0.06f, 0.06f, 0.07f), 0.55f, 0.35f);
-        var metal = VisualMaterials.Lit(new Color(0.58f, 0.58f, 0.6f), 0.9f, 0.72f);
-        var carbon = VisualMaterials.Lit(new Color(0.12f, 0.12f, 0.13f), 0.35f, 0.4f);
-        var silver = VisualMaterials.Lit(new Color(0.78f, 0.78f, 0.8f), 0.85f, 0.65f,
-            new Color(0.15f, 0.15f, 0.16f));
-        var heat = VisualMaterials.Lit(new Color(0.18f, 0.16f, 0.14f), 0.7f, 0.3f);
-        var gold = VisualMaterials.Lit(new Color(0.7f, 0.7f, 0.72f), 0.75f, 0.55f);
-        var darkMetal = VisualMaterials.Lit(new Color(0.25f, 0.25f, 0.27f), 0.88f, 0.48f);
-        var copper = VisualMaterials.Lit(new Color(0.45f, 0.42f, 0.4f), 0.9f, 0.5f);
-        var accent = VisualMaterials.Lit(new Color(0.35f, 0.35f, 0.37f), 0.3f, 0.55f,
-            new Color(0.2f, 0.2f, 0.22f));
+        // Палітра: cold-white body + carbon + cyan mission accent (сучасний GNC-демо look)
+        Color cyan = new Color(0.25f, 0.78f, 1f);
+        var white = VisualMaterials.Lit(new Color(0.97f, 0.975f, 0.985f), 0.1f, 0.88f);
+        var whiteMatte = VisualMaterials.Lit(new Color(0.88f, 0.89f, 0.91f), 0.06f, 0.42f);
+        var black = VisualMaterials.Lit(new Color(0.05f, 0.055f, 0.065f), 0.6f, 0.38f);
+        var metal = VisualMaterials.Lit(new Color(0.62f, 0.64f, 0.68f), 0.92f, 0.78f);
+        var carbon = VisualMaterials.Lit(new Color(0.1f, 0.11f, 0.125f), 0.4f, 0.42f);
+        var silver = VisualMaterials.Lit(new Color(0.82f, 0.84f, 0.88f), 0.9f, 0.72f,
+            new Color(0.2f, 0.25f, 0.3f) * 0.25f);
+        var heat = VisualMaterials.Lit(new Color(0.16f, 0.14f, 0.13f), 0.75f, 0.32f);
+        var gold = VisualMaterials.Lit(new Color(0.72f, 0.74f, 0.78f), 0.8f, 0.6f);
+        var darkMetal = VisualMaterials.Lit(new Color(0.22f, 0.23f, 0.26f), 0.9f, 0.5f);
+        var copper = VisualMaterials.Lit(new Color(0.5f, 0.42f, 0.35f), 0.92f, 0.52f);
+        var accent = VisualMaterials.Lit(new Color(0.12f, 0.16f, 0.2f), 0.35f, 0.6f, cyan * 0.35f);
+        var led = VisualMaterials.Lit(cyan * 0.4f, 0.15f, 0.75f, cyan * 1.1f);
+        var noseGlow = VisualMaterials.Lit(new Color(0.9f, 0.92f, 0.95f), 0.2f, 0.7f,
+            cyan * 0.15f);
 
         // ── Корпус (пропорції first stage ~42 м) ──
         Cyl("Octaweb", visual.transform, 1.5f, Radius * 2.28f, 1.4f, black);
@@ -78,11 +81,11 @@ public static class RocketVisualBuilder
 
         // Ніс
         Prim(PrimitiveType.Sphere, "Nose", visual.transform,
-            new Vector3(0f, 39.6f, 0f), new Vector3(Radius * 1.9f, 3.5f, Radius * 1.9f), white);
+            new Vector3(0f, 39.6f, 0f), new Vector3(Radius * 1.9f, 3.5f, Radius * 1.9f), noseGlow);
         Prim(PrimitiveType.Sphere, "Tip", visual.transform,
             new Vector3(0f, 41.5f, 0f), new Vector3(Radius * 0.75f, 1.0f, Radius * 0.75f), metal);
 
-        // COPV / венти (сірі)
+        // COPV / венти
         for (int i = 0; i < 8; i++)
         {
             float a = i * 45f * Mathf.Deg2Rad;
@@ -92,18 +95,27 @@ public static class RocketVisualBuilder
                 Vector3.one * (0.32f + (i % 3) * 0.07f), metal);
         }
 
-        // Місійна пластина (монохром)
+        // Місійна пластина BETELGEUSE + cyan accent strip
         Prim(PrimitiveType.Cube, "Decal", visual.transform,
-            new Vector3(0f, 25.5f, Radius + 0.07f), new Vector3(2.5f, 3.8f, 0.09f), black);
+            new Vector3(0f, 25.5f, Radius + 0.07f), new Vector3(2.6f, 4.0f, 0.09f), black);
         Prim(PrimitiveType.Cube, "DecalTrim", visual.transform,
-            new Vector3(0f, 26.6f, Radius + 0.1f), new Vector3(1.7f, 0.28f, 0.07f), silver);
+            new Vector3(0f, 26.8f, Radius + 0.1f), new Vector3(1.9f, 0.22f, 0.07f), led);
         Prim(PrimitiveType.Cube, "DecalTrim2", visual.transform,
-            new Vector3(0f, 24.4f, Radius + 0.1f), new Vector3(1.7f, 0.18f, 0.07f), darkMetal);
+            new Vector3(0f, 24.2f, Radius + 0.1f), new Vector3(1.9f, 0.14f, 0.07f), darkMetal);
         for (int i = 0; i < 9; i++)
         {
             Prim(PrimitiveType.Cube, $"Letter_{i}", visual.transform,
-                new Vector3(-1.0f + i * 0.25f, 25.5f, Radius + 0.12f),
-                new Vector3(0.11f, 0.85f + (i % 2) * 0.2f, 0.05f), white);
+                new Vector3(-1.05f + i * 0.26f, 25.5f, Radius + 0.12f),
+                new Vector3(0.12f, 0.9f + (i % 2) * 0.18f, 0.05f), white);
+        }
+
+        // Вертикальні LED-смуги (mission aesthetic)
+        for (int s = 0; s < 2; s++)
+        {
+            float side = s == 0 ? 1f : -1f;
+            Prim(PrimitiveType.Cube, $"LedStrip_{s}", visual.transform,
+                new Vector3(side * (Radius + 0.02f) * 0.7f, 22f, Radius + 0.04f),
+                new Vector3(0.08f, 18f, 0.06f), led);
         }
 
         // Raceway
@@ -143,25 +155,34 @@ public static class RocketVisualBuilder
         BuildNozzles(visual.transform, heat, metal, copper);
         BuildEngineFX(visual.transform);
 
-        // Нейтральне підсвічування (сіро-біле)
+        // Кінематографічне підсвічування корпусу
         var bodyLight = new GameObject("BodyFill");
         bodyLight.transform.SetParent(visual.transform, false);
-        bodyLight.transform.localPosition = new Vector3(10f, 24f, -8f);
+        bodyLight.transform.localPosition = new Vector3(11f, 24f, -9f);
         var bl = bodyLight.AddComponent<Light>();
         bl.type = LightType.Point;
-        bl.color = new Color(0.92f, 0.92f, 0.95f);
-        bl.intensity = 7.5f;
-        bl.range = 55f;
+        bl.color = new Color(0.9f, 0.93f, 1f);
+        bl.intensity = 9f;
+        bl.range = 60f;
         bl.shadows = LightShadows.None;
 
         var rimLight = new GameObject("BodyRim");
         rimLight.transform.SetParent(visual.transform, false);
-        rimLight.transform.localPosition = new Vector3(-12f, 28f, 6f);
+        rimLight.transform.localPosition = new Vector3(-12f, 28f, 7f);
         var rl = rimLight.AddComponent<Light>();
         rl.type = LightType.Point;
-        rl.color = new Color(0.75f, 0.75f, 0.8f);
-        rl.intensity = 4f;
-        rl.range = 45f;
+        rl.color = new Color(0.45f, 0.7f, 1f);
+        rl.intensity = 5.5f;
+        rl.range = 50f;
+
+        var bellyLight = new GameObject("BodyBelly");
+        bellyLight.transform.SetParent(visual.transform, false);
+        bellyLight.transform.localPosition = new Vector3(0f, 8f, -10f);
+        var bel = bellyLight.AddComponent<Light>();
+        bel.type = LightType.Point;
+        bel.color = new Color(1f, 0.85f, 0.7f);
+        bel.intensity = 3.5f;
+        bel.range = 40f;
 
         var cap = root.GetComponent<CapsuleCollider>();
         if (cap != null)
@@ -298,9 +319,9 @@ public static class RocketVisualBuilder
         lightGo.transform.localPosition = new Vector3(0f, -2.4f, 0f);
         var light = lightGo.AddComponent<Light>();
         light.type = LightType.Point;
-        light.color = new Color(1f, 0.55f, 0.18f);
+        light.color = new Color(0.6f, 0.8f, 1f);
         light.intensity = 0f;
-        light.range = 120f;
+        light.range = 130f;
         light.shadows = LightShadows.None;
 
         var fx = visual.gameObject.AddComponent<RocketEngineFX>();
@@ -312,17 +333,19 @@ public static class RocketVisualBuilder
 
     static void ConfigureFlame(ParticleSystem ps)
     {
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
-        main.loop = true;
         main.playOnAwake = false;
+        main.loop = true;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.28f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(45f, 95f);
         main.startSize = new ParticleSystem.MinMaxCurve(1.6f, 5.2f);
+        // Raptor-inspired: cool white-blue core → warm amber outer
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(1f, 0.96f, 0.8f, 1f),
-            new Color(1f, 0.38f, 0.06f, 0.92f));
+            new Color(0.85f, 0.95f, 1f, 1f),
+            new Color(1f, 0.45f, 0.12f, 0.92f));
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.maxParticles = 600;
+        main.maxParticles = 750;
         main.gravityModifier = 0f;
 
         var emission = ps.emission;
@@ -330,8 +353,8 @@ public static class RocketVisualBuilder
 
         var shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 9f;
-        shape.radius = 1.6f;
+        shape.angle = 8f;
+        shape.radius = 1.7f;
 
         var col = ps.colorOverLifetime;
         col.enabled = true;
@@ -339,25 +362,27 @@ public static class RocketVisualBuilder
         g.SetKeys(
             new[]
             {
-                new GradientColorKey(new Color(1f, 0.98f, 0.88f), 0f),
-                new GradientColorKey(new Color(1f, 0.55f, 0.1f), 0.32f),
-                new GradientColorKey(new Color(0.65f, 0.1f, 0.03f), 1f)
+                new GradientColorKey(new Color(0.9f, 0.97f, 1f), 0f),
+                new GradientColorKey(new Color(0.55f, 0.8f, 1f), 0.18f),
+                new GradientColorKey(new Color(1f, 0.55f, 0.15f), 0.45f),
+                new GradientColorKey(new Color(0.55f, 0.12f, 0.04f), 1f)
             },
             new[]
             {
                 new GradientAlphaKey(1f, 0f),
-                new GradientAlphaKey(0.8f, 0.28f),
+                new GradientAlphaKey(0.85f, 0.25f),
+                new GradientAlphaKey(0.45f, 0.6f),
                 new GradientAlphaKey(0f, 1f)
             });
         col.color = g;
 
         var size = ps.sizeOverLifetime;
         size.enabled = true;
-        size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.45f, 1f, 1.6f));
+        size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.4f, 1f, 1.75f));
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;
-        rend.sharedMaterial = VisualMaterials.Particle(new Color(1f, 0.58f, 0.18f, 1f));
+        rend.sharedMaterial = VisualMaterials.Particle(new Color(0.7f, 0.85f, 1f, 1f));
     }
 
     /// <summary>
@@ -366,9 +391,10 @@ public static class RocketVisualBuilder
     /// </summary>
     static void ConfigureSmoke(ParticleSystem ps)
     {
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
-        main.loop = true;
         main.playOnAwake = false;
+        main.loop = true;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.45f, 0.95f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(18f, 40f);
         main.startSize = new ParticleSystem.MinMaxCurve(1.2f, 3.2f);
@@ -418,9 +444,10 @@ public static class RocketVisualBuilder
 
     static void ConfigureSparks(ParticleSystem ps)
     {
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
-        main.loop = true;
         main.playOnAwake = false;
+        main.loop = true;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.4f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(55f, 130f);
         main.startSize = new ParticleSystem.MinMaxCurve(0.12f, 0.42f);

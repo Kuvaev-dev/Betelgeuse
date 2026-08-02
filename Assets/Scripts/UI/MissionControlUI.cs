@@ -59,22 +59,23 @@ public class MissionControlUI : MonoBehaviour
     bool rebuilding;
     string lastExportPath;
 
-    // Сіро-біла естетика (акцент — білий/срібло; статус — м'які тони)
-    static readonly Color C_Panel = new(0.09f, 0.09f, 0.1f, 0.94f);
-    static readonly Color C_PanelSoft = new(0.12f, 0.12f, 0.13f, 0.9f);
-    static readonly Color C_Edge = new(0.5f, 0.5f, 0.54f, 0.45f);
-    static readonly Color C_Cyan = new(0.92f, 0.92f, 0.95f, 1f); // accent white
-    static readonly Color C_Amber = new(0.78f, 0.78f, 0.8f, 1f);
-    static readonly Color C_Ok = new(0.72f, 0.86f, 0.74f, 1f);
-    static readonly Color C_Alert = new(0.88f, 0.55f, 0.55f, 1f);
-    static readonly Color C_Text = new(0.95f, 0.95f, 0.96f, 1f);
-    static readonly Color C_Muted = new(0.58f, 0.58f, 0.62f, 1f);
-    static readonly Color C_Btn = new(0.16f, 0.16f, 0.18f, 0.98f);
-    static readonly Color C_BtnActive = new(0.32f, 0.32f, 0.36f, 1f);
-    static readonly Color C_BtnHover = new(0.24f, 0.24f, 0.27f, 1f);
-    static readonly Color C_GraphA = new(0.9f, 0.9f, 0.92f, 1f);
-    static readonly Color C_GraphB = new(0.72f, 0.72f, 0.76f, 1f);
-    static readonly Color C_GraphC = new(0.55f, 0.55f, 0.58f, 1f);
+    // Контрастна mission-control палітра (читабельність UA/EN)
+    static readonly Color C_Panel = UiTypography.Panel;
+    static readonly Color C_PanelSoft = UiTypography.PanelSoft;
+    static readonly Color C_Edge = UiTypography.Edge;
+    static readonly Color C_Cyan = UiTypography.Accent;
+    static readonly Color C_Accent = UiTypography.Accent;
+    static readonly Color C_Amber = UiTypography.Amber;
+    static readonly Color C_Ok = UiTypography.Ok;
+    static readonly Color C_Alert = UiTypography.Alert;
+    static readonly Color C_Text = UiTypography.Text;
+    static readonly Color C_Muted = UiTypography.Muted;
+    static readonly Color C_Btn = UiTypography.Btn;
+    static readonly Color C_BtnActive = UiTypography.BtnActive;
+    static readonly Color C_BtnHover = new(0.16f, 0.24f, 0.36f, 1f);
+    static readonly Color C_GraphA = new(0.85f, 0.85f, 0.9f, 1f);
+    static readonly Color C_GraphB = new(0.75f, 0.7f, 0.55f, 1f);
+    static readonly Color C_GraphC = new(0.6f, 0.75f, 0.65f, 1f);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void AutoCreate()
@@ -187,7 +188,9 @@ public class MissionControlUI : MonoBehaviour
         var scaler = canvasGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
+        scaler.referencePixelsPerUnit = 100f;
         canvasGo.AddComponent<GraphicRaycaster>();
         EnsureEventSystem();
 
@@ -204,7 +207,8 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildTopMenu(Transform parent)
     {
-        topMenuGo = CreatePanel("TopMenu", parent, new Color(0.11f, 0.11f, 0.12f, 0.96f));
+        // Одна смуга швидких дій (без дубля мови — вона вже в top bar)
+        topMenuGo = CreatePanel("TopMenu", parent, new Color(0.07f, 0.09f, 0.13f, 0.97f));
         var rt = topMenuGo.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0, 1);
         rt.anchorMax = new Vector2(1, 1);
@@ -214,22 +218,28 @@ public class MissionControlUI : MonoBehaviour
         Outline(topMenuGo, 1f);
 
         float x = 16f;
-        MenuBtn(topMenuGo.transform, ref x, UILocale.T("btn_lang"), () => UILocale.Toggle());
-        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Панелі" : "Panels", TogglePanels);
-        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Траєкторія" : "Trajectory", OnToggleTrajectoryLine);
-        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Слідкувати F" : "Follow F", OnCamFollow);
-        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Огляд T" : "Overview T", OnFullTrajectoryView);
-        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Експорт" : "Export", OnExportResults);
-        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Звіти" : "Reports", OnOpenExportFolder);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Панелі [H]" : "Panels [H]", TogglePanels);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Старт [Space]" : "Start [Space]", OnStartLanding);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Стоп [Esc]" : "Stop [Esc]", OnStop);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Траєкторія [L]" : "Trajectory [L]", OnToggleTrajectoryLine);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Слідкувати [F]" : "Follow [F]", OnCamFollow);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Огляд [T]" : "Overview [T]", OnFullTrajectoryView);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Ручне [C]" : "Manual [C]", OnCamManual);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Скинути [R]" : "Reset [R]", OnCamReset);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Експорт [E]" : "Export [E]", OnExportResults);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Звіти [O]" : "Reports [O]", OnOpenExportFolder);
+        MenuBtn(topMenuGo.transform, ref x, UILocale.IsUK ? "Мова [G]" : "Lang [G]", () => UILocale.Toggle());
 
         var tip = CreateText(topMenuGo.transform,
-            UILocale.IsUK ? "H — сховати панелі  ·  Ctrl+колесо — зум над UI" : "H — hide panels  ·  Ctrl+scroll — zoom over UI",
-            11, C_Muted);
+            UILocale.IsUK
+                ? "1–4 алгоритм  ·  Space старт  ·  Esc стоп  ·  H панелі"
+                : "1–4 algorithm  ·  Space start  ·  Esc stop  ·  H panels",
+            13, C_Muted);
         var trt = tip.rectTransform;
         trt.anchorMin = trt.anchorMax = new Vector2(1, 0.5f);
         trt.pivot = new Vector2(1, 0.5f);
         trt.anchoredPosition = new Vector2(-16, 0);
-        trt.sizeDelta = new Vector2(420, 24);
+        trt.sizeDelta = new Vector2(480, 26);
         tip.alignment = TextAlignmentOptions.Right;
     }
 
@@ -240,14 +250,77 @@ public class MissionControlUI : MonoBehaviour
         rt.anchorMin = rt.anchorMax = new Vector2(0, 0.5f);
         rt.pivot = new Vector2(0, 0.5f);
         rt.anchoredPosition = new Vector2(x, 0);
-        rt.sizeDelta = new Vector2(Mathf.Max(90f, label.Length * 8.5f + 24f), 24);
+        rt.sizeDelta = new Vector2(Mathf.Max(96f, label.Length * 9.2f + 28f), 26);
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = go.GetComponent<Image>();
-        var t = CreateText(go.transform, label, 11, C_Text, FontStyles.Bold);
+        var t = CreateText(go.transform, label, 13, C_Text, FontStyles.Bold);
         StretchFull(t.rectTransform, 4, 2, 4, 2);
         t.alignment = TextAlignmentOptions.Center;
         btn.onClick.AddListener(action);
         x += rt.sizeDelta.x + 8f;
+    }
+
+    void HandleHotkeys()
+    {
+        // Не перехоплювати, якщо UI InputField у фокусі
+        if (UnityEngine.EventSystems.EventSystem.current != null
+            && UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null)
+        {
+            var sel = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+            if (sel.GetComponent<TMPro.TMP_InputField>() != null
+                || sel.GetComponent<UnityEngine.UI.InputField>() != null)
+                return;
+        }
+
+        bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+
+        if (Input.GetKeyDown(KeyCode.H) && !ctrl) TogglePanels();
+        if (Input.GetKeyDown(KeyCode.Space)) OnStartLanding();
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (resultShown) HideLandingResult();
+            else OnStop();
+        }
+        if (Input.GetKeyDown(KeyCode.L)) OnToggleTrajectoryLine();
+        if (Input.GetKeyDown(KeyCode.F)) OnCamFollow();
+        if (Input.GetKeyDown(KeyCode.T)) OnFullTrajectoryView();
+        if (Input.GetKeyDown(KeyCode.C)) OnCamManual();
+        if (Input.GetKeyDown(KeyCode.R)) OnCamReset();
+        if (Input.GetKeyDown(KeyCode.E)) OnExportResults();
+        if (Input.GetKeyDown(KeyCode.O)) OnOpenExportFolder();
+        if (Input.GetKeyDown(KeyCode.G)) UILocale.Toggle();
+
+        // Алгоритми 1–4
+        if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
+            SelectMode(RocketPhysics.ControlMode.PID);
+        if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
+            SelectMode(RocketPhysics.ControlMode.Fuzzy);
+        if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
+            SelectMode(RocketPhysics.ControlMode.Neural);
+        if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
+            SelectMode(RocketPhysics.ControlMode.Hybrid);
+
+        if (Input.GetKeyDown(KeyCode.P)) OnStartCompare();
+        if (Input.GetKeyDown(KeyCode.X)) OnCancelCompare();
+    }
+
+    void SelectMode(RocketPhysics.ControlMode mode)
+    {
+        if (rocket == null) return;
+        if (sim != null && sim.IsExperimentRunning) return;
+        HideLandingResult();
+        ClearGraphs();
+        ResetFlightPeaks();
+        overviewCam = false;
+        ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
+        rocket.PrepareMode(mode);
+        RefreshCamLabel();
+        NotifyInfo(string.Format(UILocale.T("msg_selected"), UILocale.ModeName(mode)));
+        if (txtHint)
+        {
+            txtHint.gameObject.SetActive(true);
+            txtHint.text = UILocale.ModeName(mode) + "  →  Space / " + UILocale.T("btn_start");
+        }
     }
 
     void TogglePanels()
@@ -289,7 +362,7 @@ public class MissionControlUI : MonoBehaviour
         art.anchoredPosition = Vector2.zero;
         art.sizeDelta = new Vector2(0, 2);
 
-        txtTitle = CreateText(bar.transform, UILocale.T("app_title"), 22, C_Cyan, FontStyles.Bold);
+        txtTitle = CreateText(bar.transform, UILocale.T("app_title"), 24, C_Cyan, FontStyles.Bold);
         Pin(txtTitle.rectTransform, 0, 0.55f, 0, 0.55f, 24, 4, 200, 30);
 
         txtSubtitle = CreateText(bar.transform, UILocale.T("app_sub"), 13, C_Muted);
@@ -361,7 +434,7 @@ public class MissionControlUI : MonoBehaviour
         crt.anchorMax = new Vector2(1, 1);
         crt.pivot = new Vector2(0.5f, 1);
         crt.anchoredPosition = Vector2.zero;
-        crt.sizeDelta = new Vector2(0, 1200);
+        crt.sizeDelta = new Vector2(0, 400); // перерахується після контенту
 
         var scroll = panel.AddComponent<ScrollRect>();
         scroll.viewport = vrt;
@@ -412,7 +485,9 @@ public class MissionControlUI : MonoBehaviour
 
         y -= 6f;
         txtHdrInsight = Header(root, UILocale.T("h_insight"), ref y);
-        txtInsight = CreateText(root, UILocale.T("ins_wait"), 12, C_Text);
+        txtInsight = CreateText(root, UILocale.T("ins_wait"), 14, C_Text);
+        txtInsight.enableWordWrapping = true;
+        txtInsight.overflowMode = TextOverflowModes.Truncate;
         txtInsight.enableWordWrapping = true;
         txtInsight.alignment = TextAlignmentOptions.TopLeft;
         txtInsight.overflowMode = TextOverflowModes.Overflow;
@@ -428,21 +503,24 @@ public class MissionControlUI : MonoBehaviour
         graphVel = MakeGraph(root, "Vy", UILocale.T("u_ms"), C_GraphB, ref y, -3.5f, "F1");
         graphThr = MakeGraph(root, UILocale.T("m_thr"), UILocale.T("u_kn"), C_GraphC, ref y, null, "F0");
 
-        crt.sizeDelta = new Vector2(0, Mathf.Max(1600f, -y + 40f));
+        // Точна висота контенту — без зайвого порожнього низу
+        crt.sizeDelta = new Vector2(0, Mathf.Max(200f, -y + 28f));
     }
 
     void BuildRightPanel(Transform parent)
     {
+        const float padX = 14f;
+        const float innerW = 300f;
+
         var panel = CreatePanel("RightPanel", parent, C_Panel);
         rightPanelGo = panel;
-        DockRight(panel.GetComponent<RectTransform>(), 14, 108, 58, 360);
+        DockRight(panel.GetComponent<RectTransform>(), 12, 108, 52, 328);
         Outline(panel);
 
-        // Scrollable content for short screens
         var viewport = CreatePanel("Viewport", panel.transform, new Color(0, 0, 0, 0));
         viewport.GetComponent<Image>().raycastTarget = false;
         var vrt = viewport.GetComponent<RectTransform>();
-        StretchFull(vrt, 0, 0, 0, 0);
+        StretchFull(vrt, 0, 4, 0, 4);
         viewport.AddComponent<RectMask2D>();
 
         var content = CreatePanel("Content", viewport.transform, new Color(0, 0, 0, 0));
@@ -452,7 +530,7 @@ public class MissionControlUI : MonoBehaviour
         crt.anchorMax = new Vector2(1, 1);
         crt.pivot = new Vector2(0.5f, 1);
         crt.anchoredPosition = Vector2.zero;
-        crt.sizeDelta = new Vector2(0, 980);
+        crt.sizeDelta = new Vector2(0, 400);
 
         var scroll = panel.AddComponent<ScrollRect>();
         scroll.viewport = vrt;
@@ -460,15 +538,15 @@ public class MissionControlUI : MonoBehaviour
         scroll.horizontal = false;
         scroll.vertical = true;
         scroll.movementType = ScrollRect.MovementType.Clamped;
-        scroll.scrollSensitivity = 30f;
+        scroll.scrollSensitivity = 36f;
 
-        float y = -14f;
-        txtHow = CreateText(content.transform, UILocale.T("how"), 12, C_Cyan, FontStyles.Bold);
-        PinTL(txtHow.rectTransform, 14, y, 330, 20);
-        y -= 26f;
+        float y = -12f;
+        txtHow = CreateText(content.transform, UILocale.T("how"), 11, C_Accent, FontStyles.Bold);
+        PinTL(txtHow.rectTransform, padX, y, innerW, 18);
+        y -= 22f;
 
+        // ── 1. Алгоритм ──
         Header(content.transform, UILocale.T("h_step1"), ref y);
-
         modeButtons.Clear();
         modeButtonImages.Clear();
         modeButtons.Add(ModeButton(content.transform, UILocale.T("mode_btn_a"),
@@ -480,47 +558,50 @@ public class MissionControlUI : MonoBehaviour
         modeButtons.Add(ModeButton(content.transform, UILocale.T("mode_btn_d"),
             UILocale.T("mode_sub_d"), RocketPhysics.ControlMode.Hybrid, ref y));
 
-        y -= 4f;
+        y -= 8f;
+        // ── 2. Керування ──
         Header(content.transform, UILocale.T("h_step2"), ref y);
+        ActionButton(content.transform, UILocale.T("btn_start"), new Color(0.16f, 0.28f, 0.2f, 1f), ref y, OnStartLanding);
+        ActionButton(content.transform, UILocale.T("btn_stop"), new Color(0.28f, 0.16f, 0.16f, 1f), ref y, OnStop);
+        ActionButton(content.transform, UILocale.T("btn_compare"), C_Btn, ref y, OnStartCompare);
+        ActionButton(content.transform, UILocale.T("btn_cancel"), C_Btn, ref y, OnCancelCompare);
 
-        ActionButton(content.transform, UILocale.T("btn_start"), new Color(0.22f, 0.22f, 0.24f), ref y, OnStartLanding);
-        ActionButton(content.transform, UILocale.T("btn_stop"), new Color(0.18f, 0.16f, 0.16f), ref y, OnStop);
-        ActionButton(content.transform, UILocale.T("btn_compare"), new Color(0.2f, 0.2f, 0.22f), ref y, OnStartCompare);
-        ActionButton(content.transform, UILocale.T("btn_cancel"), new Color(0.17f, 0.15f, 0.15f), ref y, OnCancelCompare);
-
-        y -= 2f;
+        y -= 8f;
+        // ── Камера (компактно) ──
         Header(content.transform, UILocale.T("h_cam"), ref y);
-        ActionButton(content.transform, UILocale.T("btn_follow"), C_Btn, ref y, OnCamFollow);
-        ActionButton(content.transform, UILocale.T("btn_traj_view"), C_Btn, ref y, OnFullTrajectoryView);
-        ActionButton(content.transform, UILocale.T("btn_manual"), C_Btn, ref y, OnCamManual);
-        ActionButton(content.transform, UILocale.T("btn_reset_cam"), C_Btn, ref y, OnCamReset);
+        ActionButton(content.transform, UILocale.T("btn_follow") + "  [F]", C_Btn, ref y, OnCamFollow);
+        ActionButton(content.transform, UILocale.T("btn_traj_view") + "  [T]", C_Btn, ref y, OnFullTrajectoryView);
+        ActionButton(content.transform, UILocale.T("btn_manual") + "  [C]", C_Btn, ref y, OnCamManual);
+        ActionButton(content.transform, UILocale.T("btn_reset_cam") + "  [R]", C_Btn, ref y, OnCamReset);
 
-        // Trajectory line toggle
         var trajGo = CreatePanel("TrajToggle", content.transform, C_BtnActive);
-        PinTL(trajGo.GetComponent<RectTransform>(), 14, y, 322, 40);
+        PinTL(trajGo.GetComponent<RectTransform>(), padX, y, innerW, 36);
         trajToggleBtn = trajGo.AddComponent<Button>();
         trajToggleBtn.targetGraphic = trajGo.GetComponent<Image>();
-        txtTrajBtn = CreateText(trajGo.transform, UILocale.T("btn_traj_on"), 13, C_Text, FontStyles.Bold);
-        StretchFull(txtTrajBtn.rectTransform, 4, 2, 4, 2);
+        txtTrajBtn = CreateText(trajGo.transform, UILocale.T("btn_traj_on"), 12, C_Text, FontStyles.Bold);
+        StretchFull(txtTrajBtn.rectTransform, 6, 3, 6, 3);
         txtTrajBtn.alignment = TextAlignmentOptions.Center;
         trajToggleBtn.onClick.AddListener(OnToggleTrajectoryLine);
-        y -= 46f;
+        y -= 40f;
         UpdateTrajButtonLabel();
 
-        txtCamMode = CreateText(content.transform, UILocale.T("cam_prefix") + UILocale.T("cam_follow"), 12, C_Cyan, FontStyles.Bold);
-        PinTL(txtCamMode.rectTransform, 16, y, 320, 18);
+        txtCamMode = CreateText(content.transform, UILocale.T("cam_prefix") + UILocale.T("cam_follow"), 11, C_Accent, FontStyles.Bold);
+        PinTL(txtCamMode.rectTransform, padX + 2, y, innerW - 4, 18);
         y -= 20f;
-        txtCamHelp = CreateText(content.transform, UILocale.T("cam_help"), 11, C_Muted);
-        txtCamHelp.enableWordWrapping = true;
-        PinTL(txtCamHelp.rectTransform, 16, y, 320, 40);
-        y -= 44f;
+        txtCamHelp = CreateText(content.transform,
+            UILocale.IsUK ? "LMB orbit · scroll · WASD" : "LMB orbit · scroll · WASD",
+            11, C_Muted);
+        PinTL(txtCamHelp.rectTransform, padX + 2, y, innerW - 4, 16);
+        y -= 20f;
 
-        y -= 2f;
+        y -= 4f;
+        // ── Експорт ──
         Header(content.transform, UILocale.T("h_export"), ref y);
-        ActionButton(content.transform, UILocale.T("btn_export"), C_BtnActive, ref y, OnExportResults);
-        ActionButton(content.transform, UILocale.T("btn_folder"), C_Btn, ref y, OnOpenExportFolder);
+        ActionButton(content.transform, UILocale.T("btn_export") + "  [E]", C_BtnActive, ref y, OnExportResults);
+        ActionButton(content.transform, UILocale.T("btn_folder") + "  [O]", C_Btn, ref y, OnOpenExportFolder);
 
-        y -= 2f;
+        y -= 4f;
+        // ── Умови тесту ──
         Header(content.transform, UILocale.T("h_step3"), ref y);
         txtTestsVal = SliderLine(content.transform, UILocale.T("sl_tests"), 5, 40, 15, ref y, out testsSlider);
         txtWindVal = SliderLine(content.transform, UILocale.T("sl_wind"), 0, 25, 10, ref y, out windSlider);
@@ -528,24 +609,31 @@ public class MissionControlUI : MonoBehaviour
         noiseToggle = ToggleLine(content.transform, UILocale.T("tg_noise"), true, ref y);
         trainToggle = ToggleLine(content.transform, UILocale.T("tg_train"), true, ref y);
 
-        y -= 4f;
+        y -= 6f;
+        // ── Результати порівняння ──
         Header(content.transform, UILocale.T("h_results"), ref y);
         txtPid = Stat(content.transform, UILocale.T("stat_a"), ref y);
         txtFuzzy = Stat(content.transform, UILocale.T("stat_b"), ref y);
         txtNeural = Stat(content.transform, UILocale.T("stat_c"), ref y);
         txtHybrid = Stat(content.transform, UILocale.T("stat_d"), ref y);
 
-        y -= 2f;
-        txtWinner = CreateText(content.transform, UILocale.T("winner_none"), 13, C_Ok, FontStyles.Bold);
-        PinTL(txtWinner.rectTransform, 14, y, 330, 22);
-        y -= 26f;
+        y -= 4f;
+        txtWinner = CreateText(content.transform, UILocale.T("winner_none"), 12, C_Ok, FontStyles.Bold);
+        PinTL(txtWinner.rectTransform, padX, y, innerW, 20);
+        y -= 24f;
 
-        txtInfo = CreateText(content.transform, UILocale.T("tip"), 12, C_Muted);
+        // Плашка повідомлень (фон + текст)
+        var infoBg = CreatePanel("InfoBox", content.transform, C_PanelSoft);
+        PinTL(infoBg.GetComponent<RectTransform>(), padX, y, innerW, 72);
+        Outline(infoBg, 1f);
+        txtInfo = CreateText(infoBg.transform, UILocale.T("tip"), 11, C_Muted);
+        StretchFull(txtInfo.rectTransform, 8, 6, 8, 6);
         txtInfo.enableWordWrapping = true;
+        txtInfo.overflowMode = TextOverflowModes.Truncate;
         txtInfo.alignment = TextAlignmentOptions.TopLeft;
-        PinTL(txtInfo.rectTransform, 14, y, 330, 80);
+        y -= 80f;
 
-        crt.sizeDelta = new Vector2(0, Mathf.Max(1600f, -y + 50f));
+        crt.sizeDelta = new Vector2(0, Mathf.Max(180f, -y + 16f));
     }
 
     // ─── User actions ───
@@ -606,7 +694,7 @@ public class MissionControlUI : MonoBehaviour
         if (sim != null && sim.IsExperimentRunning)
         {
             sim.CancelExperiment();
-            NotifyInfo("⏹ Авто-тест зупиняється…");
+            NotifyInfo(UILocale.IsUK ? "Авто-тест зупиняється..." : "Stopping auto-test...");
             return;
         }
         if (rocket == null) return;
@@ -826,8 +914,18 @@ public class MissionControlUI : MonoBehaviour
         }
         if (txtResultBody)
         {
-            txtResultBody.text = m.BuildUserSummary(maxV, maxA, maxM, maxH) + UILocale.T("res_footer");
+            // Без повторюваного заголовка (він уже в txtResultTitle)
+            txtResultBody.text = m.BuildUserSummary(maxV, maxA, maxM, maxH, includeTitle: false)
+                                 + "\n" + UILocale.T("res_footer");
             txtResultBody.color = C_Text;
+        }
+        // Не дублювати повний текст у лівій панелі «Висновок»
+        if (txtInsight != null)
+        {
+            txtInsight.text = ok
+                ? string.Format(UILocale.T("ins_ok"), m.SuccessScore)
+                : (UILocale.IsUK ? "Див. вікно результату →" : "See result dialog →");
+            txtInsight.color = ok ? C_Ok : C_Alert;
         }
 
         try
@@ -860,89 +958,87 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildResultOverlay(Transform parent)
     {
-        resultRoot = CreatePanel("ResultOverlay", parent, new Color(0, 0, 0, 0.35f));
+        resultRoot = CreatePanel("ResultOverlay", parent, new Color(0.02f, 0.02f, 0.03f, 0.78f));
         var rt = resultRoot.GetComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(360, 70);
-        rt.offsetMax = new Vector2(-380, -110);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
         resultRoot.GetComponent<Image>().raycastTarget = true;
+        resultRoot.transform.SetAsLastSibling();
 
-        var card = CreatePanel("ResultCard", resultRoot.transform, new Color(0.12f, 0.12f, 0.13f, 0.96f));
+        // Картка вища — текст і кнопки не перекриваються
+        var card = CreatePanel("ResultCard", resultRoot.transform, new Color(0.08f, 0.08f, 0.1f, 0.98f));
         resultPanelBg = card.GetComponent<Image>();
         var crt = card.GetComponent<RectTransform>();
-        crt.anchorMin = new Vector2(0.5f, 0.5f);
-        crt.anchorMax = new Vector2(0.5f, 0.5f);
+        crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
         crt.pivot = new Vector2(0.5f, 0.5f);
-        crt.sizeDelta = new Vector2(520, 320);
+        crt.sizeDelta = new Vector2(580, 460);
         Outline(card, 2f);
 
-        txtResultTitle = CreateText(card.transform, "РЕЗУЛЬТАТ", 26, C_Ok, FontStyles.Bold);
-        Pin(txtResultTitle.rectTransform, 0.5f, 1, 0.5f, 1, 0, -24, 480, 40);
+        // Заголовок зверху
+        txtResultTitle = CreateText(card.transform, "РЕЗУЛЬТАТ", 24, C_Ok, FontStyles.Bold);
+        var trtTitle = txtResultTitle.rectTransform;
+        trtTitle.anchorMin = new Vector2(0, 1);
+        trtTitle.anchorMax = new Vector2(1, 1);
+        trtTitle.pivot = new Vector2(0.5f, 1);
+        trtTitle.anchoredPosition = new Vector2(0, -20);
+        trtTitle.sizeDelta = new Vector2(-40, 36);
         txtResultTitle.alignment = TextAlignmentOptions.Center;
 
-        txtResultBody = CreateText(card.transform, "", 15, C_Text);
+        // Тіло: між заголовком і кнопками (низ = 110 px під кнопки)
+        txtResultBody = CreateText(card.transform, "", 16, C_Text);
         txtResultBody.enableWordWrapping = true;
         txtResultBody.overflowMode = TextOverflowModes.Overflow;
         txtResultBody.alignment = TextAlignmentOptions.TopLeft;
+        txtResultBody.lineSpacing = 4f;
         var brt = txtResultBody.rectTransform;
         brt.anchorMin = new Vector2(0, 0);
         brt.anchorMax = new Vector2(1, 1);
-        brt.offsetMin = new Vector2(28, 110);
-        brt.offsetMax = new Vector2(-28, -70);
+        brt.offsetMin = new Vector2(28, 110);   // місце під кнопки
+        brt.offsetMax = new Vector2(-28, -64);  // місце під заголовок
 
-        // Close button
+        // Ряд кнопок: [Траєкторія] [Експорт]  — одна лінія
+        float btnY = 58f;
+        var trGo = CreatePanel("ShowTraj", card.transform, C_Btn);
+        var trt = trGo.GetComponent<RectTransform>();
+        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0);
+        trt.pivot = new Vector2(0.5f, 0);
+        trt.anchoredPosition = new Vector2(-115, btnY);
+        trt.sizeDelta = new Vector2(210, 38);
+        var tbtn = trGo.AddComponent<Button>();
+        tbtn.targetGraphic = trGo.GetComponent<Image>();
+        var ttxt = CreateText(trGo.transform, UILocale.T("btn_show_traj"), 14, C_Text, FontStyles.Bold);
+        StretchFull(ttxt.rectTransform, 4, 4, 4, 4);
+        ttxt.alignment = TextAlignmentOptions.Center;
+        tbtn.onClick.AddListener(() => { HideLandingResult(); OnFullTrajectoryView(); });
+
+        var exGo = CreatePanel("ExportResult", card.transform, C_Btn);
+        var ert = exGo.GetComponent<RectTransform>();
+        ert.anchorMin = ert.anchorMax = new Vector2(0.5f, 0);
+        ert.pivot = new Vector2(0.5f, 0);
+        ert.anchoredPosition = new Vector2(115, btnY);
+        ert.sizeDelta = new Vector2(210, 38);
+        var ebtn = exGo.AddComponent<Button>();
+        ebtn.targetGraphic = exGo.GetComponent<Image>();
+        var etxt = CreateText(exGo.transform, UILocale.T("btn_export_short"), 14, C_Text, FontStyles.Bold);
+        StretchFull(etxt.rectTransform, 4, 4, 4, 4);
+        etxt.alignment = TextAlignmentOptions.Center;
+        ebtn.onClick.AddListener(OnExportResults);
+
+        // OK знизу по центру
         var closeGo = CreatePanel("CloseResult", card.transform, C_BtnActive);
         var clrt = closeGo.GetComponent<RectTransform>();
-        clrt.anchorMin = new Vector2(0.5f, 0);
-        clrt.anchorMax = new Vector2(0.5f, 0);
+        clrt.anchorMin = clrt.anchorMax = new Vector2(0.5f, 0);
         clrt.pivot = new Vector2(0.5f, 0);
-        clrt.anchoredPosition = new Vector2(0, 16);
-        clrt.sizeDelta = new Vector2(220, 40);
+        clrt.anchoredPosition = new Vector2(0, 12);
+        clrt.sizeDelta = new Vector2(240, 40);
         var cbtn = closeGo.AddComponent<Button>();
         cbtn.targetGraphic = closeGo.GetComponent<Image>();
-        var ctxt = CreateText(closeGo.transform, UILocale.T("btn_ok"), 14, C_Text, FontStyles.Bold);
+        var ctxt = CreateText(closeGo.transform, UILocale.T("btn_ok"), 15, C_Text, FontStyles.Bold);
         StretchFull(ctxt.rectTransform, 4, 4, 4, 4);
         ctxt.alignment = TextAlignmentOptions.Center;
         cbtn.onClick.AddListener(HideLandingResult);
-
-        // Secondary row: trajectory + export
-        var trGo = CreatePanel("ShowTraj", card.transform, C_Btn);
-        var trt = trGo.GetComponent<RectTransform>();
-        trt.anchorMin = new Vector2(0.5f, 0);
-        trt.anchorMax = new Vector2(0.5f, 0);
-        trt.pivot = new Vector2(0.5f, 0);
-        trt.anchoredPosition = new Vector2(-110, 62);
-        trt.sizeDelta = new Vector2(200, 36);
-        var tbtn = trGo.AddComponent<Button>();
-        tbtn.targetGraphic = trGo.GetComponent<Image>();
-        var ttxt = CreateText(trGo.transform, UILocale.T("btn_show_traj"), 13, C_Text, FontStyles.Bold);
-        StretchFull(ttxt.rectTransform, 4, 4, 4, 4);
-        ttxt.alignment = TextAlignmentOptions.Center;
-        tbtn.onClick.AddListener(() =>
-        {
-            HideLandingResult();
-            OnFullTrajectoryView();
-        });
-
-        var exGo = CreatePanel("ExportResult", card.transform, C_BtnActive);
-        var ert = exGo.GetComponent<RectTransform>();
-        ert.anchorMin = new Vector2(0.5f, 0);
-        ert.anchorMax = new Vector2(0.5f, 0);
-        ert.pivot = new Vector2(0.5f, 0);
-        ert.anchoredPosition = new Vector2(110, 62);
-        ert.sizeDelta = new Vector2(200, 36);
-        var ebtn = exGo.AddComponent<Button>();
-        ebtn.targetGraphic = exGo.GetComponent<Image>();
-        var etxt = CreateText(exGo.transform, UILocale.T("btn_export_short"), 13, C_Text, FontStyles.Bold);
-        StretchFull(etxt.rectTransform, 4, 4, 4, 4);
-        etxt.alignment = TextAlignmentOptions.Center;
-        ebtn.onClick.AddListener(() =>
-        {
-            OnExportResults();
-        });
-
-        crt.sizeDelta = new Vector2(540, 360);
 
         resultRoot.SetActive(false);
     }
@@ -1022,8 +1118,7 @@ public class MissionControlUI : MonoBehaviour
     {
         if (!built) return;
 
-        if (Input.GetKeyDown(KeyCode.H) && !Input.GetKey(KeyCode.LeftControl))
-            TogglePanels();
+        HandleHotkeys();
 
         if (rocket == null) return;
         var s = rocket.state;
@@ -1285,40 +1380,35 @@ public class MissionControlUI : MonoBehaviour
         var go = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         go.transform.SetParent(parent, false);
         var tmp = go.GetComponent<TextMeshProUGUI>();
-        tmp.text = text;
-        tmp.fontSize = size;
-        tmp.color = col;
-        tmp.fontStyle = style;
+        UiTypography.Apply(tmp, size, col, style);
+        tmp.text = text ?? "";
         tmp.alignment = TextAlignmentOptions.Left;
-        tmp.raycastTarget = false;
-        tmp.enableWordWrapping = false;
-        tmp.overflowMode = TextOverflowModes.Ellipsis;
         return tmp;
     }
 
     TMP_Text Header(Transform parent, string title, ref float y)
     {
-        var t = CreateText(parent, title, 12, C_Cyan, FontStyles.Bold);
-        PinTL(t.rectTransform, 14, y, 320, 20);
+        var t = CreateText(parent, title, 11, C_Accent, FontStyles.Bold);
+        PinTL(t.rectTransform, 14, y, 300, 18);
         y -= 20f;
-        var line = CreatePanel("line", parent, C_Edge);
-        PinTL(line.GetComponent<RectTransform>(), 14, y + 2, 322, 1);
-        y -= 8f;
+        var line = CreatePanel("line", parent, new Color(C_Edge.r, C_Edge.g, C_Edge.b, 0.35f));
+        PinTL(line.GetComponent<RectTransform>(), 14, y + 4, 300, 1);
+        y -= 6f;
         return t;
     }
 
     TMP_Text Metric(Transform parent, string key, string unit, ref float y)
     {
-        var k = CreateText(parent, key, 12, C_Muted);
-        PinTL(k.rectTransform, 16, y, 168, 18);
+        var k = CreateText(parent, key, 13, C_Muted);
+        PinTL(k.rectTransform, 16, y, 168, 22);
         metricLabels.Add(k);
-        var v = CreateText(parent, "—", 16, C_Text, FontStyles.Bold);
+        var v = CreateText(parent, "—", 18, C_Text, FontStyles.Bold);
         v.alignment = TextAlignmentOptions.Right;
-        PinTL(v.rectTransform, 160, y - 1, 100, 20);
-        var u = CreateText(parent, unit, 11, C_Muted);
+        PinTL(v.rectTransform, 160, y - 1, 100, 24);
+        var u = CreateText(parent, unit, 12, C_Muted);
         u.alignment = TextAlignmentOptions.Left;
-        PinTL(u.rectTransform, 264, y, 50, 18);
-        y -= 24f;
+        PinTL(u.rectTransform, 264, y, 50, 22);
+        y -= 28f;
         return v;
     }
 
@@ -1331,16 +1421,16 @@ public class MissionControlUI : MonoBehaviour
 
     TMP_Text CriterionLine(Transform parent, string label, ref float y)
     {
-        var t = CreateText(parent, "○  " + label, 12, C_Muted);
-        PinTL(t.rectTransform, 16, y, 300, 18);
-        y -= 20f;
+        var t = CreateText(parent, "[ ]  " + label, 12, C_Muted);
+        PinTL(t.rectTransform, 16, y, 300, 22);
+        y -= 24f;
         return t;
     }
 
     static void UpdateCriterion(TMP_Text t, bool ok, string detail, bool emphasize)
     {
         if (t == null) return;
-        t.text = (ok ? "●  " : "○  ") + detail;
+        t.text = (ok ? "[+]  " : "[ ]  ") + detail;
         t.color = ok ? C_Ok : (emphasize ? C_Alert : C_Amber);
     }
 
@@ -1357,12 +1447,15 @@ public class MissionControlUI : MonoBehaviour
             return;
         }
 
+        if (resultShown)
+            return; // текст уже в модалці — не дублювати в лівій панелі
+
         if (s.simulationFinished && rocket.metrics != null && rocket.metrics.totalFlightTime > 0.05f)
         {
             bool ok = rocket.metrics.isSuccessfulLanding;
             txtInsight.text = ok
                 ? string.Format(UILocale.T("ins_ok"), rocket.metrics.SuccessScore)
-                : rocket.metrics.BuildUserSummary(maxV, maxA, maxM, maxH).Replace("\n\n", "\n");
+                : (UILocale.IsUK ? "Див. вікно результату" : "See result dialog");
             txtInsight.color = ok ? C_Ok : C_Alert;
             return;
         }
@@ -1454,23 +1547,28 @@ public class MissionControlUI : MonoBehaviour
 
     Button ModeButton(Transform parent, string title, string subtitle, RocketPhysics.ControlMode mode, ref float y)
     {
+        const float w = 300f;
         var go = CreatePanel("Mode_" + mode, parent, C_Btn);
-        PinTL(go.GetComponent<RectTransform>(), 14, y, 322, 44);
+        PinTL(go.GetComponent<RectTransform>(), 14, y, w, 34);
         var btn = go.AddComponent<Button>();
         var img = go.GetComponent<Image>();
         btn.targetGraphic = img;
         var colors = btn.colors;
-        colors.highlightedColor = new Color(0.85f, 0.95f, 1f);
-        colors.pressedColor = C_Cyan;
-        colors.fadeDuration = 0.08f;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1.12f, 1.12f, 1.14f);
+        colors.pressedColor = new Color(0.78f, 0.78f, 0.8f);
+        colors.selectedColor = Color.white;
+        colors.fadeDuration = 0.06f;
         btn.colors = colors;
         modeButtonImages.Add(img);
 
-        var txt = CreateText(go.transform, title, 14, C_Text, FontStyles.Bold);
-        PinTL(txt.rectTransform, 12, -6, 298, 20);
-
-        var sub = CreateText(go.transform, subtitle, 11, C_Muted);
-        PinTL(sub.rectTransform, 12, -24, 298, 16);
+        var txt = CreateText(go.transform, title, 12, C_Text, FontStyles.Bold);
+        StretchFull(txt.rectTransform, 10, 3, 10, 3);
+        txt.alignment = TextAlignmentOptions.MidlineLeft;
+        txt.enableWordWrapping = false;
+        txt.overflowMode = TextOverflowModes.Ellipsis;
+        txt.raycastTarget = false;
+        txt.transform.SetAsLastSibling();
 
         btn.onClick.AddListener(() =>
         {
@@ -1491,41 +1589,45 @@ public class MissionControlUI : MonoBehaviour
             if (txtHint)
             {
                 txtHint.gameObject.SetActive(true);
-                txtHint.text = title + "  →  " + UILocale.T("btn_start");
+                txtHint.text = title + "  ->  Space";
             }
         });
-        y -= 50f;
+        y -= 42f;
         return btn;
     }
 
     void ActionButton(Transform parent, string label, Color col, ref float y, UnityEngine.Events.UnityAction action)
     {
+        const float w = 300f;
         var go = CreatePanel("Action", parent, col);
-        PinTL(go.GetComponent<RectTransform>(), 14, y, 322, 40);
+        PinTL(go.GetComponent<RectTransform>(), 14, y, w, 32);
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = go.GetComponent<Image>();
         var colors = btn.colors;
-        colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f);
-        colors.pressedColor = new Color(0.7f, 0.7f, 0.7f);
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1.12f, 1.12f, 1.12f);
+        colors.pressedColor = new Color(0.72f, 0.72f, 0.72f);
         btn.colors = colors;
-        var txt = CreateText(go.transform, label, 14, C_Text, FontStyles.Bold);
-        StretchFull(txt.rectTransform, 4, 2, 4, 2);
+        var txt = CreateText(go.transform, label, 12, C_Text, FontStyles.Bold);
+        StretchFull(txt.rectTransform, 6, 2, 6, 2);
         txt.alignment = TextAlignmentOptions.Center;
+        txt.overflowMode = TextOverflowModes.Ellipsis;
+        txt.raycastTarget = false;
         btn.onClick.AddListener(action);
-        y -= 46f;
+        y -= 38f;
     }
 
     TMP_Text SliderLine(Transform parent, string label, float min, float max, float val, ref float y, out Slider slider)
     {
-        var k = CreateText(parent, label, 12, C_Muted);
-        PinTL(k.rectTransform, 16, y, 180, 16);
-        var v = CreateText(parent, val.ToString("F0"), 13, C_Cyan, FontStyles.Bold);
+        var k = CreateText(parent, label, 11, C_Muted);
+        PinTL(k.rectTransform, 14, y, 200, 16);
+        var v = CreateText(parent, val.ToString("F0"), 12, C_Accent, FontStyles.Bold);
         v.alignment = TextAlignmentOptions.Right;
-        PinTL(v.rectTransform, 250, y, 70, 16);
+        PinTL(v.rectTransform, 220, y, 90, 16);
         y -= 18f;
 
-        var sGo = CreatePanel("SliderBG", parent, new Color(0.02f, 0.03f, 0.07f, 1f));
-        PinTL(sGo.GetComponent<RectTransform>(), 16, y, 308, 14);
+        var sGo = CreatePanel("SliderBG", parent, new Color(0.06f, 0.06f, 0.08f, 1f));
+        PinTL(sGo.GetComponent<RectTransform>(), 14, y, 300, 16);
         slider = sGo.AddComponent<Slider>();
         slider.minValue = min;
         slider.maxValue = max;
@@ -1554,40 +1656,40 @@ public class MissionControlUI : MonoBehaviour
     {
         var row = CreatePanel("ToggleRow", parent, new Color(0, 0, 0, 0));
         row.GetComponent<Image>().raycastTarget = false;
-        PinTL(row.GetComponent<RectTransform>(), 16, y, 308, 24);
+        PinTL(row.GetComponent<RectTransform>(), 14, y, 300, 26);
 
         var box = CreatePanel("Box", row.transform, C_Btn);
         var brt = box.GetComponent<RectTransform>();
         brt.anchorMin = brt.anchorMax = new Vector2(0, 0.5f);
         brt.pivot = new Vector2(0, 0.5f);
         brt.anchoredPosition = Vector2.zero;
-        brt.sizeDelta = new Vector2(20, 20);
+        brt.sizeDelta = new Vector2(22, 22);
 
-        var check = CreatePanel("Check", box.transform, C_Cyan);
-        StretchFull(check.GetComponent<RectTransform>(), 3, 3, 3, 3);
+        var check = CreatePanel("Check", box.transform, C_Accent);
+        StretchFull(check.GetComponent<RectTransform>(), 4, 4, 4, 4);
 
-        var txt = CreateText(row.transform, label, 12, C_Text);
+        var txt = CreateText(row.transform, label, 11, C_Text);
         var trt = txt.rectTransform;
         trt.anchorMin = trt.anchorMax = new Vector2(0, 0.5f);
         trt.pivot = new Vector2(0, 0.5f);
-        trt.anchoredPosition = new Vector2(30, 0);
-        trt.sizeDelta = new Vector2(270, 20);
+        trt.anchoredPosition = new Vector2(32, 0);
+        trt.sizeDelta = new Vector2(260, 20);
 
         var toggle = row.AddComponent<Toggle>();
         toggle.targetGraphic = box.GetComponent<Image>();
         toggle.graphic = check.GetComponent<Image>();
         toggle.isOn = on;
-        y -= 26f;
+        y -= 30f;
         return toggle;
     }
 
     TMP_Text Stat(Transform parent, string name, ref float y)
     {
-        var k = CreateText(parent, name, 13, C_Muted);
-        PinTL(k.rectTransform, 16, y, 160, 20);
-        var v = CreateText(parent, "—", 14, C_Text, FontStyles.Bold);
+        var k = CreateText(parent, name, 11, C_Muted);
+        PinTL(k.rectTransform, 14, y, 160, 18);
+        var v = CreateText(parent, "—", 12, C_Text, FontStyles.Bold);
         v.alignment = TextAlignmentOptions.Right;
-        PinTL(v.rectTransform, 170, y, 150, 20);
+        PinTL(v.rectTransform, 170, y, 140, 18);
         y -= 22f;
         return v;
     }

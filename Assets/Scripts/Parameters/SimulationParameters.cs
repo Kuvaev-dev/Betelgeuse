@@ -8,9 +8,9 @@ using UnityEngine;
 public class SimulationParameters : ScriptableObject
 {
     [Header("Початкові умови")]
-    public Vector3 startPosition = new Vector3(0, 2500f, 0);
-    public Vector3 startVelocity = new Vector3(0, -100f, 0);
-    public Vector3 startEulerAngles = new Vector3(0, 0, 5f);
+    public Vector3 startPosition = new Vector3(0, 1600f, 0);
+    public Vector3 startVelocity = new Vector3(0, -60f, 0);
+    public Vector3 startEulerAngles = new Vector3(0, 0, 1.5f);
 
     [Header("Характеристики ракети")]
     public float dryMass = 25600f;

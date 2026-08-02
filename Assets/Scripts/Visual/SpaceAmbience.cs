@@ -1,21 +1,19 @@
 using UnityEngine;
 
 /// <summary>
-/// Легка «жива» атмосфера космосу:
-/// — мерехтіння сонячної інтенсивності (Perlin);
-/// — повільне обертання та пульсація туманностей.
-/// Не впливає на фізику — лише візуальний шар.
+/// Легка атмосфера: мерехтіння сонця, twinkle зірок. Без drift зайвих об’єктів.
 /// </summary>
 public class SpaceAmbience : MonoBehaviour
 {
     Light sun;
-    float sunBase = 1.4f;
-    readonly System.Collections.Generic.List<Transform> nebulae = new();
-    readonly System.Collections.Generic.List<Vector3> nebulaBaseScale = new();
-    readonly System.Collections.Generic.List<Light> padBeacons = new();
-    float beaconPhase;
+    float sunBase = 1.25f;
+    readonly System.Collections.Generic.List<MeshRenderer> brightStars = new();
+    readonly System.Collections.Generic.List<Color> starBaseEmit = new();
+    readonly System.Collections.Generic.List<Light> padLights = new();
+    MaterialPropertyBlock mpb;
+    int emissionId = -1;
+    float phase;
 
-    /// <summary>Створює або повертає єдиний екземпляр SpaceAmbience.</summary>
     public static SpaceAmbience Ensure()
     {
         var existing = FindFirstObjectByType<SpaceAmbience>();
@@ -24,65 +22,71 @@ public class SpaceAmbience : MonoBehaviour
         return go.AddComponent<SpaceAmbience>();
     }
 
-    /// <summary>
-    /// Прив'язка до збудованого EnvironmentRoot після EnvironmentBuilder.Build().
-    /// </summary>
+    void Awake() => EnsureMpb();
+
+    void EnsureMpb()
+    {
+        if (mpb == null) mpb = new MaterialPropertyBlock();
+        if (emissionId < 0) emissionId = Shader.PropertyToID("_EmissionColor");
+    }
+
     public void Bind(Transform environmentRoot, ParticleSystem starPs, Light directionalSun)
     {
-        _ = starPs; // bind for future star twinkle
+        _ = starPs;
+        EnsureMpb();
         sun = directionalSun;
         if (sun != null) sunBase = sun.intensity;
 
-        nebulae.Clear();
-        nebulaBaseScale.Clear();
-        padBeacons.Clear();
+        brightStars.Clear();
+        starBaseEmit.Clear();
+        padLights.Clear();
         if (environmentRoot == null) return;
 
-        foreach (var t in environmentRoot.GetComponentsInChildren<Transform>())
+        foreach (var t in environmentRoot.GetComponentsInChildren<Transform>(true))
         {
             if (t == null) continue;
-            if (t.name.StartsWith("Nebula_"))
+            if (t.name == "BStar" || t.name.StartsWith("BStar"))
             {
-                nebulae.Add(t);
-                nebulaBaseScale.Add(t.localScale);
+                var r = t.GetComponent<MeshRenderer>();
+                if (r == null || r.sharedMaterial == null) continue;
+                if (!r.sharedMaterial.HasProperty(emissionId)) continue;
+                brightStars.Add(r);
+                starBaseEmit.Add(r.sharedMaterial.GetColor(emissionId));
             }
         }
 
-        foreach (var l in environmentRoot.GetComponentsInChildren<Light>())
+        foreach (var l in environmentRoot.GetComponentsInChildren<Light>(true))
         {
-            if (l != null && l.name.Contains("Beacon"))
-                padBeacons.Add(l);
+            if (l != null && l.type == LightType.Point && l.name.Contains("Pad"))
+                padLights.Add(l);
         }
     }
 
     void LateUpdate()
     {
-        // М'яке мерехтіння «сонця»
-        if (sun != null)
-        {
-            float n = Mathf.PerlinNoise(Time.time * 0.12f, 1.7f);
-            sun.intensity = sunBase * (0.94f + 0.12f * n);
-        }
-
-        // Drift туманностей
+        EnsureMpb();
         float t = Time.time;
-        for (int i = 0; i < nebulae.Count; i++)
+
+        if (sun != null)
+            sun.intensity = sunBase * (0.94f + 0.1f * Mathf.PerlinNoise(t * 0.08f, 1.2f));
+
+        phase += Time.deltaTime;
+        for (int i = 0; i < padLights.Count; i++)
         {
-            var n = nebulae[i];
-            if (n == null) continue;
-            n.Rotate(Vector3.up, (0.35f + i * 0.04f) * Time.deltaTime, Space.World);
-            float pulse = 1f + 0.03f * Mathf.Sin(t * 0.14f + i * 0.7f);
-            n.localScale = nebulaBaseScale[i] * pulse;
+            var b = padLights[i];
+            if (b == null) continue;
+            b.intensity = 20f * (0.9f + 0.1f * Mathf.Sin(phase * 1.5f + i));
         }
 
-        // Пульс маяків pad
-        beaconPhase += Time.deltaTime;
-        for (int i = 0; i < padBeacons.Count; i++)
+        int n = Mathf.Min(brightStars.Count, starBaseEmit.Count);
+        for (int i = 0; i < n; i++)
         {
-            var b = padBeacons[i];
-            if (b == null) continue;
-            float baseI = i == 0 ? 12f : 7f;
-            b.intensity = baseI * (0.75f + 0.25f * Mathf.Sin(beaconPhase * 2.2f + i));
+            var r = brightStars[i];
+            if (r == null) continue;
+            float tw = 0.75f + 0.3f * Mathf.PerlinNoise(t * 0.55f + i * 0.4f, i * 0.11f);
+            mpb.Clear();
+            mpb.SetColor(emissionId, starBaseEmit[i] * tw);
+            r.SetPropertyBlock(mpb);
         }
     }
 }

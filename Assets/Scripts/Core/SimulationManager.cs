@@ -209,10 +209,7 @@ public class SimulationManager : MonoBehaviour
             }
 
             if (!rocketPhysics.state.simulationFinished)
-            {
-                rocketPhysics.state.simulationFinished = true;
-                rocketPhysics.state.isLanded = true;
-            }
+                rocketPhysics.ForceFinish(asTimeout: true);
 
             results.Add(CloneMetrics(rocketPhysics.metrics));
         }

@@ -69,16 +69,10 @@ public class TelemetryGraph : MonoBehaviour
         var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         go.transform.SetParent(parent, false);
         var tmp = go.GetComponent<TextMeshProUGUI>();
-        tmp.fontSize = size;
-        tmp.color = c;
+        UiTypography.Apply(tmp, Mathf.Max(14f, size + 2f), c);
         tmp.alignment = align;
-        tmp.raycastTarget = false;
         tmp.enableWordWrapping = false;
         tmp.overflowMode = TextOverflowModes.Overflow;
-        // Slight shadow for readability on graph
-        var outline = go.AddComponent<UnityEngine.UI.Outline>();
-        outline.effectColor = new Color(0, 0, 0, 0.75f);
-        outline.effectDistance = new Vector2(1f, -1f);
         return tmp;
     }
 
@@ -290,7 +284,7 @@ public class TelemetryGraph : MonoBehaviour
         if (lblCur)
         {
             float cur = samples[n - 1];
-            lblCur.text = $"● {cur.ToString(valueFormat)}{u}";
+            lblCur.text = cur.ToString(valueFormat) + u;
             lblCur.color = lineColor;
         }
         if (lblTitle)

@@ -90,9 +90,9 @@ public static class SceneBootstrap
         try { cam.tag = "MainCamera"; } catch { /* tag missing */ }
 
         cam.farClipPlane = 16000f;
-        cam.fieldOfView = 46f;
+        cam.fieldOfView = 48f;
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.01f, 0.012f, 0.035f);
+        cam.backgroundColor = new Color(0.01f, 0.01f, 0.012f);
         cam.allowHDR = true;
 
         var follow = cam.GetComponent<CameraFollow>();

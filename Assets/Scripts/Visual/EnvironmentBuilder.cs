@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Космічне середовище: глибоке небо, зорі, туманності, обрій, landing pad.
-/// Акуратна композиція без «артефактних» фігур біля pad.
+/// Посадка на Місяць: реголіт + кратери + чистий industrial pad
+/// (без темних блоків на білій поверхні).
 /// </summary>
 public static class EnvironmentBuilder
 {
@@ -17,48 +17,145 @@ public static class EnvironmentBuilder
 
         var root = new GameObject("EnvironmentRoot");
 
-        BuildGround(root.transform);
+        BuildLunarSurface(root.transform);
         BuildLandingPad(root.transform);
-        BuildDistanceRings(root.transform);
         var starPs = BuildStarField(root.transform);
-        BuildSkyScenery(root.transform);
-        BuildPadInfrastructure(root.transform);
-        BuildApproachLights(root.transform);
+        BuildSubtleHorizon(root.transform);
+        BuildApproachCorridor(root.transform);
 
         var amb = SpaceAmbience.Ensure();
         amb.Bind(root.transform, starPs, sun);
     }
 
-    static void BuildGround(Transform parent)
+    /// <summary>
+    /// Круглий місячний диск (Cylinder, не Plane/квадрат):
+    /// концентричні кільця реголіту → м’який край, кратери, каміння.
+    /// </summary>
+    static void BuildLunarSurface(Transform parent)
     {
-        var ground = Prim(PrimitiveType.Plane, "Ground", parent,
-            Vector3.zero, new Vector3(500f, 1f, 500f));
-        VisualMaterials.Apply(ground, new Color(0.035f, 0.036f, 0.04f), 0.06f, 0.1f);
-        NoShadow(ground);
+        var surface = new GameObject("LunarSurface");
+        surface.transform.SetParent(parent, false);
 
-        // Далека площина (не «квадрат-диск» біля pad)
-        var far = Prim(PrimitiveType.Plane, "FarPlane", parent,
-            new Vector3(0f, -1f, 0f), new Vector3(4000f, 1f, 4000f));
-        VisualMaterials.Apply(far, new Color(0.018f, 0.018f, 0.022f), 0.02f, 0.04f);
-        NoShadow(far);
+        Color regolith = new Color(0.48f, 0.46f, 0.43f);
+        Color regolithMid = new Color(0.38f, 0.36f, 0.34f);
+        Color regolithDark = new Color(0.26f, 0.25f, 0.24f);
+        Color regolithLight = new Color(0.58f, 0.56f, 0.52f);
+        Color regolithEdge = new Color(0.18f, 0.17f, 0.16f);
 
-        // Легкий рельєф далеко від pad (не біля центру)
-        var rng = new System.Random(19);
+        // ── Концентричні КРУГЛІ диски (scale.x/z = діаметр) ──
+        // Зовнішній «горизонт» місяця
+        var moonFar = Prim(PrimitiveType.Cylinder, "MoonDisk_Far", surface.transform,
+            new Vector3(0f, -0.8f, 0f), new Vector3(4200f, 0.35f, 4200f));
+        VisualMaterials.Apply(moonFar, regolithEdge, 0.03f, 0.06f);
+        NoShadow(moonFar);
+
+        // Середнє кільце
+        var moonMid = Prim(PrimitiveType.Cylinder, "MoonDisk_Mid", surface.transform,
+            new Vector3(0f, -0.35f, 0f), new Vector3(2400f, 0.4f, 2400f));
+        VisualMaterials.Apply(moonMid, regolithDark, 0.04f, 0.08f);
+        NoShadow(moonMid);
+
+        // Основна поверхня навколо pad
+        var moonMain = Prim(PrimitiveType.Cylinder, "MoonDisk_Main", surface.transform,
+            new Vector3(0f, -0.05f, 0f), new Vector3(1400f, 0.45f, 1400f));
+        VisualMaterials.Apply(moonMain, regolithMid, 0.05f, 0.12f);
+
+        // Ближнє поле (трохи світліше — пил біля pad)
+        var moonNear = Prim(PrimitiveType.Cylinder, "MoonDisk_Near", surface.transform,
+            new Vector3(0f, 0.02f, 0f), new Vector3(420f, 0.22f, 420f));
+        VisualMaterials.Apply(moonNear, regolith, 0.06f, 0.14f);
+
+        // М’який обід ближнього поля (перехід)
+        var moonHalo = Prim(PrimitiveType.Cylinder, "MoonDisk_Halo", surface.transform,
+            new Vector3(0f, 0.01f, 0f), new Vector3(520f, 0.12f, 520f));
+        VisualMaterials.Apply(moonHalo, Color.Lerp(regolith, regolithMid, 0.5f), 0.05f, 0.1f);
+        NoShadow(moonHalo);
+
+        var rng = new System.Random(42);
+
+        // Кратери — лише на круглому диску (dist < 1050)
         for (int i = 0; i < 28; i++)
         {
             float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
-            float d = 180f + (float)rng.NextDouble() * 900f;
-            float x = Mathf.Cos(ang) * d;
-            float z = Mathf.Sin(ang) * d;
-            float s = 25f + (float)rng.NextDouble() * 55f;
-            var patch = Prim(PrimitiveType.Cylinder, "Terrain", parent,
-                new Vector3(x, -0.35f, z), new Vector3(s, 0.25f, s * (0.7f + (float)rng.NextDouble() * 0.5f)));
-            float g = 0.03f + (float)rng.NextDouble() * 0.035f;
-            VisualMaterials.Apply(patch, new Color(g, g, g * 1.05f), 0.05f, 0.08f);
-            NoShadow(patch);
+            float dist = 160f + (float)rng.NextDouble() * 900f;
+            if (dist > 1050f) continue;
+            float x = Mathf.Cos(ang) * dist;
+            float z = Mathf.Sin(ang) * dist;
+            float r = 10f + (float)rng.NextDouble() * 42f;
+
+            var floor = Prim(PrimitiveType.Cylinder, $"CraterFloor_{i}", surface.transform,
+                new Vector3(x, -0.12f, z), new Vector3(r * 1.55f, 0.14f, r * 1.55f));
+            VisualMaterials.Apply(floor, Color.Lerp(regolithDark, regolithMid, 0.3f), 0.04f, 0.1f);
+            NoShadow(floor);
+
+            var rim = Prim(PrimitiveType.Cylinder, $"CraterRim_{i}", surface.transform,
+                new Vector3(x, 0.1f, z), new Vector3(r * 2.0f, 0.2f, r * 2.0f));
+            VisualMaterials.Apply(rim, Color.Lerp(regolith, regolithLight, 0.45f), 0.06f, 0.16f);
+            NoShadow(rim);
+
+            // Іноді яскравий внутрішній вал
+            if (i % 3 == 0)
+            {
+                var inner = Prim(PrimitiveType.Cylinder, $"CraterInner_{i}", surface.transform,
+                    new Vector3(x, 0.02f, z), new Vector3(r * 1.15f, 0.08f, r * 1.15f));
+                VisualMaterials.Apply(inner, Color.Lerp(regolithMid, regolithLight, 0.2f), 0.05f, 0.12f);
+                NoShadow(inner);
+            }
+        }
+
+        // Каміння
+        for (int i = 0; i < 70; i++)
+        {
+            float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
+            float dist = 120f + (float)rng.NextDouble() * 850f;
+            if (dist > 1100f) continue;
+            float x = Mathf.Cos(ang) * dist;
+            float z = Mathf.Sin(ang) * dist;
+            float s = 1.0f + (float)rng.NextDouble() * 5.0f;
+            float h = s * (0.35f + (float)rng.NextDouble() * 0.55f);
+
+            var rock = Prim(PrimitiveType.Sphere, $"Rock_{i}", surface.transform,
+                new Vector3(x, h * 0.32f, z),
+                new Vector3(s, h, s * (0.65f + (float)rng.NextDouble() * 0.55f)));
+            Color rc = Color.Lerp(regolithDark, regolithLight, (float)rng.NextDouble());
+            VisualMaterials.Apply(rock, rc, 0.1f, 0.2f);
+            NoShadow(rock);
+        }
+
+        // Низькі круглі пагорби реголіту
+        for (int i = 0; i < 24; i++)
+        {
+            float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
+            float dist = 200f + (float)rng.NextDouble() * 750f;
+            if (dist > 1000f) continue;
+            float x = Mathf.Cos(ang) * dist;
+            float z = Mathf.Sin(ang) * dist;
+            float d = 35f + (float)rng.NextDouble() * 70f;
+
+            var hill = Prim(PrimitiveType.Cylinder, $"Hill_{i}", surface.transform,
+                new Vector3(x, 0.05f, z),
+                new Vector3(d, 0.4f + (float)rng.NextDouble() * 0.7f, d));
+            VisualMaterials.Apply(hill, Color.Lerp(regolith, regolithLight, 0.3f), 0.05f, 0.14f);
+            NoShadow(hill);
+        }
+
+        // Кільцеві «хвилі» пилу навколо pad (естетика)
+        float[] dustR = { 160f, 220f, 300f, 380f };
+        for (int i = 0; i < dustR.Length; i++)
+        {
+            var dust = Prim(PrimitiveType.Cylinder, $"DustRing_{i}", surface.transform,
+                new Vector3(0f, 0.04f + i * 0.015f, 0f),
+                new Vector3(dustR[i] * 2f, 0.08f, dustR[i] * 2f));
+            Color dc = Color.Lerp(regolith, regolithLight, 0.15f + i * 0.08f);
+            VisualMaterials.Apply(dust, dc, 0.04f, 0.1f);
+            NoShadow(dust);
         }
     }
 
+    /// <summary>
+    /// Чистий landing pad: світла палуба + білий хрест + тонкі кільця.
+    /// Жодних темних кубів/блоків на білій поверхні.
+    /// </summary>
     static void BuildLandingPad(Transform parent)
     {
         var old = GameObject.Find("LandingPad");
@@ -67,92 +164,107 @@ public static class EnvironmentBuilder
         var pad = new GameObject("LandingPad");
         pad.transform.SetParent(parent, false);
 
-        var apron = Prim(PrimitiveType.Cylinder, "PadApron", pad.transform,
-            new Vector3(0f, 0.05f, 0f), new Vector3(88f, 0.1f, 88f));
-        VisualMaterials.Apply(apron, new Color(0.08f, 0.08f, 0.09f), 0.3f, 0.32f);
+        Color deckCol = new Color(0.72f, 0.73f, 0.76f);   // світлий метал/бетон
+        Color white = new Color(0.97f, 0.97f, 0.99f);
+        Color mark = new Color(0.92f, 0.93f, 0.95f);
+        Color amber = new Color(1f, 0.72f, 0.28f);
+        Color edge = new Color(0.5f, 0.52f, 0.56f);
 
+        // Підкладка — злегка піднята над реголітом
+        var basePlate = Prim(PrimitiveType.Cylinder, "PadBase", pad.transform,
+            new Vector3(0f, 0.25f, 0f), new Vector3(130f, 0.28f, 130f));
+        VisualMaterials.ApplyBright(basePlate, edge);
+
+        // Головна палуба (єдиний світлий диск — без «дір»)
         var deck = Prim(PrimitiveType.Cylinder, "PadDeck", pad.transform,
-            new Vector3(0f, 0.2f, 0f), new Vector3(52f, 0.14f, 52f));
-        VisualMaterials.Apply(deck, new Color(0.15f, 0.15f, 0.16f), 0.45f, 0.42f);
+            new Vector3(0f, 0.55f, 0f), new Vector3(110f, 0.22f, 110f));
+        VisualMaterials.ApplyBright(deck, deckCol);
 
-        var target = Prim(PrimitiveType.Cylinder, "PadTarget", pad.transform,
-            new Vector3(0f, 0.32f, 0f), new Vector3(22f, 0.05f, 22f));
-        VisualMaterials.Apply(target, new Color(0.2f, 0.2f, 0.22f), 0.35f, 0.48f);
-        NoShadow(target);
-
-        float[] rs = { 0.9f, 0.58f, 0.3f, 0.12f };
-        for (int i = 0; i < rs.Length; i++)
+        // Тонкі білі кільця-маркери (підняті над палубою, solid light)
+        // Лише обід: використовуємо дуже тонкий по висоті диск світліший за deck
+        float[] ringD = { 100f, 72f, 44f, 22f };
+        for (int i = 0; i < ringD.Length; i++)
         {
-            float g = 0.5f + i * 0.1f;
-            var ring = Prim(PrimitiveType.Cylinder, $"PadRing_{i}", pad.transform,
-                new Vector3(0f, 0.38f + i * 0.015f, 0f),
-                new Vector3(52f * rs[i], 0.05f, 52f * rs[i]));
-            VisualMaterials.Apply(ring, new Color(g, g, g + 0.02f), 0.15f, 0.6f,
-                new Color(0.15f, 0.15f, 0.18f) * (0.4f + i * 0.1f));
-            NoShadow(ring);
+            var ring = Prim(PrimitiveType.Cylinder, $"Ring_{i}", pad.transform,
+                new Vector3(0f, 0.72f + i * 0.03f, 0f),
+                new Vector3(ringD[i], 0.06f, ringD[i]));
+            // Світліше за deck — виглядає як намальоване кільце/зона
+            VisualMaterials.ApplyUnlit(ring, mark, white * 0.85f);
         }
 
-        foreach (var x in new[] { true, false })
-        {
-            var bar = Prim(PrimitiveType.Cube, x ? "CX" : "CZ", pad.transform,
-                new Vector3(0f, 0.4f, 0f),
-                x ? new Vector3(44f, 0.05f, 1.05f) : new Vector3(1.05f, 0.05f, 44f));
-            VisualMaterials.Apply(bar, new Color(0.88f, 0.88f, 0.9f), 0.15f, 0.55f,
-                new Color(0.22f, 0.22f, 0.25f));
-            NoShadow(bar);
-        }
+        // Білий прицільний хрест (тонкий, чистий)
+        var cx = Prim(PrimitiveType.Cube, "CrossX", pad.transform,
+            new Vector3(0f, 0.85f, 0f), new Vector3(96f, 0.1f, 3.5f));
+        VisualMaterials.ApplyUnlit(cx, white, white);
 
-        var bull = Prim(PrimitiveType.Cylinder, "Bull", pad.transform,
-            new Vector3(0f, 0.42f, 0f), new Vector3(3f, 0.04f, 3f));
-        VisualMaterials.Apply(bull, new Color(0.92f, 0.92f, 0.94f), 0.2f, 0.55f,
-            new Color(0.3f, 0.3f, 0.32f));
-        NoShadow(bull);
+        var cz = Prim(PrimitiveType.Cube, "CrossZ", pad.transform,
+            new Vector3(0f, 0.85f, 0f), new Vector3(3.5f, 0.1f, 96f));
+        VisualMaterials.ApplyUnlit(cz, white, white);
 
+        // Центр — amber + біла точка (без зайвих шарів)
+        var bull = Prim(PrimitiveType.Cylinder, "Bullseye", pad.transform,
+            new Vector3(0f, 0.92f, 0f), new Vector3(10f, 0.08f, 10f));
+        VisualMaterials.ApplyUnlit(bull, amber, amber);
+
+        var center = Prim(PrimitiveType.Cylinder, "CenterDot", pad.transform,
+            new Vector3(0f, 0.98f, 0f), new Vector3(3.5f, 0.06f, 3.5f));
+        VisualMaterials.ApplyUnlit(center, white, white);
+
+        // Маяки ПОЗА палубою (не на білому колі)
         for (int i = 0; i < 4; i++)
         {
             float a = (i * 90f + 45f) * Mathf.Deg2Rad;
-            Vector3 bp = new Vector3(Mathf.Sin(a) * 30f, 0f, Mathf.Cos(a) * 30f);
-            var pole = Prim(PrimitiveType.Cylinder, $"Tow_{i}", pad.transform,
-                bp + Vector3.up * 6.5f, new Vector3(0.6f, 6.5f, 0.6f));
-            VisualMaterials.Apply(pole, new Color(0.32f, 0.32f, 0.34f), 0.55f, 0.4f);
-            var head = Prim(PrimitiveType.Sphere, $"TH_{i}", pad.transform,
-                bp + Vector3.up * 13.2f, Vector3.one * 1.15f);
-            VisualMaterials.Apply(head, new Color(0.92f, 0.93f, 0.95f), 0.12f, 0.75f,
-                new Color(0.4f, 0.42f, 0.5f));
+            // 72 м — за краєм палуби 55 м radius
+            Vector3 p = new Vector3(Mathf.Sin(a) * 72f, 0f, Mathf.Cos(a) * 72f);
 
-            var lg = new GameObject($"Spot_{i}");
-            lg.transform.SetParent(pad.transform, false);
-            lg.transform.position = bp + Vector3.up * 13f;
-            var spot = lg.AddComponent<Light>();
+            var pole = Prim(PrimitiveType.Cylinder, $"BeaconPole_{i}", pad.transform,
+                p + Vector3.up * 3f, new Vector3(1.2f, 3f, 1.2f));
+            VisualMaterials.ApplyBright(pole, new Color(0.45f, 0.46f, 0.5f));
+
+            var lamp = Prim(PrimitiveType.Sphere, $"BeaconLamp_{i}", pad.transform,
+                p + Vector3.up * 6.2f, Vector3.one * 2.2f);
+            VisualMaterials.ApplyUnlit(lamp, white, white);
+
+            var spotGo = new GameObject($"PadSpot_{i}");
+            spotGo.transform.SetParent(pad.transform, false);
+            spotGo.transform.position = p + Vector3.up * 6.5f;
+            var spot = spotGo.AddComponent<Light>();
             spot.type = LightType.Spot;
             spot.color = new Color(0.95f, 0.96f, 1f);
-            spot.intensity = 48f;
-            spot.range = 90f;
-            spot.spotAngle = 62f;
-            spot.shadows = LightShadows.Soft;
-            lg.transform.rotation = Quaternion.LookRotation((-bp + Vector3.up * -7f).normalized);
+            spot.intensity = 100f;
+            spot.range = 160f;
+            spot.spotAngle = 70f;
+            spot.shadows = LightShadows.None;
+            spotGo.transform.rotation = Quaternion.LookRotation(
+                (Vector3.zero - p + Vector3.down * 8f).normalized);
         }
 
+        // М'яке заповнення світлом над pad
         var fill = new GameObject("PadFill");
         fill.transform.SetParent(pad.transform, false);
-        fill.transform.position = new Vector3(0f, 11f, 0f);
+        fill.transform.position = new Vector3(0f, 25f, 0f);
         var fl = fill.AddComponent<Light>();
         fl.type = LightType.Point;
-        fl.color = new Color(0.8f, 0.85f, 1f);
-        fl.intensity = 14f;
-        fl.range = 75f;
+        fl.color = new Color(0.95f, 0.95f, 1f);
+        fl.intensity = 50f;
+        fl.range = 160f;
     }
 
-    static void BuildDistanceRings(Transform parent)
+    static void BuildApproachCorridor(Transform parent)
     {
-        float[] r = { 120f, 280f, 520f };
-        foreach (float radius in r)
+        // Низькі вогні на реголіті — підхід до pad
+        for (int i = 1; i <= 14; i++)
         {
-            var ring = Prim(PrimitiveType.Cylinder, $"DRing_{radius}", parent,
-                new Vector3(0f, 0.04f, 0f), new Vector3(radius * 2f, 0.045f, radius * 2f));
-            VisualMaterials.Apply(ring, new Color(0.1f, 0.11f, 0.13f), 0.08f, 0.2f,
-                new Color(0.05f, 0.06f, 0.08f));
-            NoShadow(ring);
+            float z = 70f + i * 40f;
+            foreach (float x in new[] { -24f, 24f })
+            {
+                var lamp = Prim(PrimitiveType.Sphere, "AppLight", parent,
+                    new Vector3(x, 0.6f, z), Vector3.one * 1.3f);
+                Color c = i % 4 == 0
+                    ? new Color(1f, 0.55f, 0.22f)
+                    : new Color(0.92f, 0.93f, 0.96f);
+                VisualMaterials.ApplyUnlit(lamp, c, c);
+            }
         }
     }
 
@@ -164,151 +276,48 @@ public static class EnvironmentBuilder
         var go = new GameObject("Stars");
         go.transform.SetParent(root.transform, false);
         var ps = go.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
         var main = ps.main;
+        main.playOnAwake = false;
         main.loop = false;
-        main.playOnAwake = true;
         main.duration = 0.5f;
         main.startLifetime = 99999f;
         main.startSpeed = 0f;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.6f, 4.5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.35f, 2.2f);
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(0.7f, 0.75f, 0.9f, 0.9f),
-            new Color(1f, 0.97f, 0.92f, 1f));
-        main.maxParticles = 4000;
+            new Color(0.85f, 0.87f, 0.95f, 0.9f), Color.white);
+        main.maxParticles = 3000;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
 
         var em = ps.emission;
         em.rateOverTime = 0f;
-        em.SetBursts(new[] { new ParticleSystem.Burst(0f, 3600) });
+        em.SetBursts(new[] { new ParticleSystem.Burst(0f, 2700) });
 
         var sh = ps.shape;
         sh.shapeType = ParticleSystemShapeType.Sphere;
-        sh.radius = 5000f;
-        sh.radiusThickness = 0.45f;
+        sh.radius = 5200f;
+        sh.radiusThickness = 0.5f;
 
         var rend = go.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;
         rend.sharedMaterial = VisualMaterials.Particle(Color.white);
         rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-        var rng = new System.Random(5);
-        for (int i = 0; i < 70; i++)
-        {
-            Vector3 dir = RandSphere(rng);
-            if (dir.y < 0.08f) dir.y = Mathf.Abs(dir.y) + 0.2f;
-            dir.Normalize();
-            float dist = 3000f + (float)rng.NextDouble() * 1600f;
-            float s = 1.8f + (float)rng.NextDouble() * 5f;
-            var star = Prim(PrimitiveType.Sphere, "BStar", root.transform, dir * dist, Vector3.one * s);
-            Color c = Color.Lerp(new Color(0.75f, 0.82f, 1f), new Color(1f, 0.92f, 0.8f), (float)rng.NextDouble());
-            if (i % 19 == 0) c = new Color(1f, 0.55f, 0.4f);
-            VisualMaterials.Apply(star, c, 0f, 0f, c * (1.1f + (float)rng.NextDouble() * 0.5f));
-            NoShadow(star);
-        }
-
+        ps.Play();
         return ps;
     }
 
-    /// <summary>Туманності, Чумацький Шлях, атмосферний обрій — далеко від pad.</summary>
-    static void BuildSkyScenery(Transform parent)
+    static void BuildSubtleHorizon(Transform parent)
     {
-        var sky = new GameObject("SkyScenery");
+        var sky = new GameObject("SkyMinimal");
         sky.transform.SetParent(parent, false);
-        var rng = new System.Random(21);
 
-        // Туманності (далеко, м'які)
-        Color[] nebCols =
-        {
-            new Color(0.2f, 0.08f, 0.35f),
-            new Color(0.06f, 0.12f, 0.32f),
-            new Color(0.15f, 0.05f, 0.22f),
-            new Color(0.08f, 0.16f, 0.28f),
-            new Color(0.18f, 0.1f, 0.3f),
-            new Color(0.05f, 0.1f, 0.25f)
-        };
-        for (int i = 0; i < nebCols.Length; i++)
-        {
-            Vector3 dir = RandSphere(rng);
-            dir.y = Mathf.Abs(dir.y) * 0.55f + 0.2f;
-            dir.Normalize();
-            float dist = 3400f + (float)rng.NextDouble() * 1000f;
-            float sx = 400f + (float)rng.NextDouble() * 500f;
-            float sy = 280f + (float)rng.NextDouble() * 350f;
-            var neb = Prim(PrimitiveType.Sphere, $"Nebula_{i}", sky.transform,
-                dir * dist, new Vector3(sx, sy, sx * 0.85f));
-            float b = 0.1f + (float)rng.NextDouble() * 0.1f;
-            VisualMaterials.Apply(neb, nebCols[i] * 0.3f, 0f, 0f, nebCols[i] * b);
-            NoShadow(neb);
-        }
-
-        // Смуга Чумацького Шляху
-        var mw = Prim(PrimitiveType.Sphere, "MilkyWay", sky.transform,
-            new Vector3(400f, 700f, 3800f), new Vector3(5200f, 320f, 900f));
-        VisualMaterials.Apply(mw, new Color(0.12f, 0.12f, 0.18f) * 0.35f, 0f, 0f,
-            new Color(0.16f, 0.17f, 0.28f) * 0.22f);
-        NoShadow(mw);
-
-        var mw2 = Prim(PrimitiveType.Sphere, "MilkyWay2", sky.transform,
-            new Vector3(-600f, 500f, -3600f), new Vector3(4200f, 260f, 750f));
-        VisualMaterials.Apply(mw2, new Color(0.1f, 0.09f, 0.16f) * 0.3f, 0f, 0f,
-            new Color(0.18f, 0.12f, 0.28f) * 0.15f);
-        NoShadow(mw2);
-
-        // Атмосферний обрій — дуже тонкий і низький, не «стіна»
-        var limb = Prim(PrimitiveType.Cylinder, "AtmoLimb", sky.transform,
-            new Vector3(0f, 8f, 0f), new Vector3(9000f, 12f, 9000f));
-        VisualMaterials.Apply(limb, new Color(0.04f, 0.06f, 0.12f), 0f, 0f,
-            new Color(0.1f, 0.18f, 0.4f) * 0.2f);
-        NoShadow(limb);
-
-        // Далекий «сонце-диск»
+        // Сонце (різке, як на Місяці — без атмосфери)
+        Vector3 sunPos = new Vector3(-2400f, 1600f, -1800f);
         var sunDisc = Prim(PrimitiveType.Sphere, "SunDisc", sky.transform,
-            new Vector3(-3200f, 1800f, -2500f), Vector3.one * 140f);
-        VisualMaterials.Apply(sunDisc, new Color(1f, 0.96f, 0.88f), 0f, 0f,
-            new Color(1f, 0.9f, 0.65f) * 1.8f);
-        NoShadow(sunDisc);
-    }
-
-    static void BuildPadInfrastructure(Transform parent)
-    {
-        var tower = Prim(PrimitiveType.Cylinder, "RefTower", parent,
-            new Vector3(85f, 40f, 85f), new Vector3(1.0f, 80f, 1.0f));
-        VisualMaterials.Apply(tower, new Color(0.36f, 0.36f, 0.39f), 0.5f, 0.4f);
-
-        float[] marks = { 15f, 35f, 55f, 75f };
-        foreach (float h in marks)
-        {
-            var m = Prim(PrimitiveType.Cube, "TMark", parent,
-                new Vector3(85f, h, 85f), new Vector3(3.2f, 0.4f, 3.2f));
-            VisualMaterials.Apply(m, new Color(0.85f, 0.75f, 0.45f), 0.2f, 0.5f,
-                new Color(0.3f, 0.2f, 0.05f));
-            NoShadow(m);
-        }
-
-        var b = new GameObject("TowerBeacon");
-        b.transform.SetParent(parent, false);
-        b.transform.position = new Vector3(85f, 82f, 85f);
-        var bl = b.AddComponent<Light>();
-        bl.type = LightType.Point;
-        bl.color = new Color(1f, 0.75f, 0.35f);
-        bl.intensity = 8f;
-        bl.range = 55f;
-    }
-
-    static void BuildApproachLights(Transform parent)
-    {
-        for (int i = 1; i <= 12; i++)
-        {
-            float z = i * 38f;
-            foreach (float x in new[] { -17f, 17f })
-            {
-                var lamp = Prim(PrimitiveType.Sphere, "AppLight", parent,
-                    new Vector3(x, 0.5f, z), Vector3.one * 0.6f);
-                Color c = i % 4 == 0 ? new Color(0.95f, 0.45f, 0.3f) : new Color(0.8f, 0.85f, 0.95f);
-                VisualMaterials.Apply(lamp, c * 0.5f, 0.1f, 0.65f, c * 0.7f);
-                NoShadow(lamp);
-            }
-        }
+            sunPos, Vector3.one * 90f);
+        VisualMaterials.ApplyUnlit(sunDisc, new Color(1f, 0.98f, 0.94f),
+            new Color(1f, 0.95f, 0.85f));
     }
 
     static void SetupLighting(out Light sun)
@@ -321,20 +330,21 @@ public static class EnvironmentBuilder
             sun.type = LightType.Directional;
         }
         sun.name = "Sun";
-        sun.color = new Color(1f, 0.97f, 0.93f);
-        sun.intensity = 1.4f;
+        // Жорстке місячне світло
+        sun.color = new Color(1f, 0.98f, 0.95f);
+        sun.intensity = 1.85f;
         sun.shadows = LightShadows.Soft;
-        sun.shadowStrength = 0.8f;
-        sun.transform.rotation = Quaternion.Euler(32f, -45f, 0f);
+        sun.shadowStrength = 0.9f;
+        sun.transform.rotation = Quaternion.Euler(38f, -28f, 0f);
 
-        EnsureDir("FillLight", new Color(0.4f, 0.45f, 0.6f), 0.3f, Quaternion.Euler(195f, 55f, 0f));
-        EnsureDir("RimLight", new Color(0.55f, 0.6f, 0.75f), 0.25f, Quaternion.Euler(-18f, 145f, 0f));
+        // Слабкий fill (відбиття від реголіту)
+        EnsureDir("FillLight", new Color(0.45f, 0.48f, 0.55f), 0.28f, Quaternion.Euler(195f, 50f, 0f));
+        EnsureDir("RimLight", new Color(0.5f, 0.5f, 0.55f), 0.18f, Quaternion.Euler(-8f, 150f, 0f));
 
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.07f, 0.07f, 0.1f);
-        RenderSettings.ambientEquatorColor = new Color(0.045f, 0.045f, 0.055f);
-        RenderSettings.ambientGroundColor = new Color(0.025f, 0.025f, 0.03f);
-        RenderSettings.reflectionIntensity = 0.28f;
+        // Місячний ambient — сірий, не чорний
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = new Color(0.18f, 0.18f, 0.2f);
+        RenderSettings.reflectionIntensity = 0.2f;
     }
 
     static void EnsureDir(string name, Color c, float i, Quaternion r)
@@ -351,17 +361,18 @@ public static class EnvironmentBuilder
 
     static void SetupSkyAndFog()
     {
+        // На Місяці туману майже немає
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.ExponentialSquared;
-        RenderSettings.fogColor = new Color(0.04f, 0.04f, 0.055f);
-        RenderSettings.fogDensity = 0.000045f;
+        RenderSettings.fogColor = new Color(0.02f, 0.02f, 0.025f);
+        RenderSettings.fogDensity = 0.000012f;
 
         var cam = Camera.main ?? Object.FindFirstObjectByType<Camera>();
         if (cam != null)
         {
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.03f, 0.03f, 0.04f);
-            cam.farClipPlane = 14000f;
+            cam.backgroundColor = new Color(0.01f, 0.01f, 0.012f);
+            cam.farClipPlane = 16000f;
             cam.nearClipPlane = 0.3f;
         }
     }
@@ -384,14 +395,5 @@ public static class EnvironmentBuilder
         if (r == null) return;
         r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         r.receiveShadows = false;
-    }
-
-    static Vector3 RandSphere(System.Random rng)
-    {
-        float u = (float)rng.NextDouble();
-        float v = (float)rng.NextDouble();
-        float th = 2f * Mathf.PI * u;
-        float ph = Mathf.Acos(2f * v - 1f);
-        return new Vector3(Mathf.Sin(ph) * Mathf.Cos(th), Mathf.Cos(ph), Mathf.Sin(ph) * Mathf.Sin(th));
     }
 }

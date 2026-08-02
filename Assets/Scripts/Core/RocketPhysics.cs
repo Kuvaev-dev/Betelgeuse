@@ -29,9 +29,9 @@ public class RocketPhysics : MonoBehaviour
     public bool applyContinuousWind = true;
 
     private DataLogger logger;
-    private PIDController pitchPID = new PIDController();
-    private PIDController yawPID = new PIDController();
-    private PIDController thrustPID = new PIDController() { Kp = 2.8f, Ki = 0.4f, Kd = 1.5f };
+    private PIDController pitchPID = new PIDController() { Kp = 0.65f, Ki = 0.08f, Kd = 0.4f };
+    private PIDController yawPID = new PIDController() { Kp = 0.65f, Ki = 0.08f, Kd = 0.4f };
+    private PIDController thrustPID = new PIDController() { Kp = 3.2f, Ki = 0.45f, Kd = 1.8f };
 
     public FuzzyLandingController fuzzyController;
     public NeuralController neuralController;
@@ -42,9 +42,10 @@ public class RocketPhysics : MonoBehaviour
     private float currentTime;
     private TrajectoryVisualizer cachedVisualizer;
 
-    const float LeverArm = 16f;
-    const float AngularDamping = 40000f;
-    const float InertiaFactor = 25f;
+    const float LeverArm = 11f;
+    const float AngularDamping = 320000f;
+    const float InertiaFactor = 45f;
+    const float MaxOmega = 1.2f; // rad/s
     const float Cd = 0.85f;
     const float RefArea = 8.5f;
     const float G0 = 9.80665f;
@@ -67,7 +68,19 @@ public class RocketPhysics : MonoBehaviour
         if (neuralController != null) neuralController.LoadBestWeights();
         cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
 
+        SyncFixedTimestep();
         InitializeSimulation();
+    }
+
+    /// <summary>
+    /// Узгоджує Unity FixedUpdate з кроком інтегратора RK4 (інакше sim ≠ real-time).
+    /// </summary>
+    public void SyncFixedTimestep()
+    {
+        if (parameters == null) return;
+        float step = Mathf.Clamp(parameters.fixedTimeStep, 0.001f, 0.05f);
+        parameters.fixedTimeStep = step;
+        Time.fixedDeltaTime = step;
     }
 
     void InitializeSimulation()
@@ -121,52 +134,106 @@ public class RocketPhysics : MonoBehaviour
         float pitchRate = state.angularVelocity.x * Mathf.Rad2Deg;
         float yawRate = state.angularVelocity.z * Mathf.Rad2Deg;
         float horizSpeed = new Vector2(state.velocity.x, state.velocity.z).magnitude;
+        float tilt = Vector3.Angle(up, Vector3.up);
+        float h = state.position.y;
+
+        // Базова стабілізація (cross-product) — завжди
+        Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(
+            state.rotation, state.angularVelocity, maxDeg: 20f);
+        Vector3 gCmd = baseGimbal;
+        float thrustCmd = SoftLandingGuidance.ProfileThrust(h, state.velocity.y, state.TotalMass);
 
         switch (controlMode)
         {
             case ControlMode.Fuzzy when fuzzyController != null && fuzzyController.isActive:
             {
-                state.currentThrust = fuzzyController.CalculateThrust(
-                    state.position.y, state.velocity.y, state.TotalMass);
-                Vector3 g = fuzzyController.CalculateGimbal(pitchError, yawError, pitchRate, yawRate);
-                state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
+                thrustCmd = fuzzyController.CalculateThrust(h, state.velocity.y, state.TotalMass);
+                Vector3 fg = fuzzyController.CalculateGimbal(pitchError, yawError, pitchRate, yawRate);
+                gCmd = Vector3.Lerp(baseGimbal, fg, 0.4f);
                 break;
             }
             case ControlMode.Neural when neuralController != null && neuralController.isActive:
             {
                 neuralController.CalculateControl(
-                    state.position.y, state.velocity.y, state.TotalMass, state.currentThrust,
+                    h, state.velocity.y, state.TotalMass, state.currentThrust,
                     pitchError, yawError, horizSpeed,
-                    out state.currentThrust, out Vector3 g);
-                state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
+                    out thrustCmd, out Vector3 ng);
+                gCmd = Vector3.Lerp(baseGimbal, ng, 0.35f);
                 break;
             }
             case ControlMode.Hybrid when hybridController != null && hybridController.isActive:
             {
                 hybridController.CalculateControl(
-                    state.position.y, state.velocity.y, state.TotalMass, state.currentThrust,
+                    h, state.velocity.y, state.TotalMass, state.currentThrust,
                     pitchError, yawError, pitchRate, yawRate, horizSpeed,
-                    out state.currentThrust, out Vector3 g);
-                state.thrustDirection = Quaternion.Euler(g) * Vector3.up;
+                    out thrustCmd, out Vector3 hg);
+                gCmd = Vector3.Lerp(baseGimbal, hg, 0.4f);
                 break;
             }
             default:
             {
-                float pitchCorrection = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
-                float yawCorrection = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
-                Quaternion targetGimbal = Quaternion.Euler(
-                    Mathf.Clamp(pitchCorrection * 0.8f, -28f, 28f),
+                float pc = pitchPID.Calculate(0, pitchError, parameters.fixedTimeStep);
+                float yc = yawPID.Calculate(0, yawError, parameters.fixedTimeStep);
+                gCmd = new Vector3(
+                    Mathf.Clamp(baseGimbal.x + pc * 0.25f, -20f, 20f),
                     0f,
-                    Mathf.Clamp(yawCorrection * 0.8f, -28f, 28f));
-                state.thrustDirection = targetGimbal * Vector3.up;
-                state.currentThrust = CalculateThrustPID();
+                    Mathf.Clamp(baseGimbal.z + yc * 0.25f, -20f, 20f));
+                thrustCmd = CalculateThrustPID();
                 break;
             }
         }
 
-        state.currentThrust = Mathf.Clamp(state.currentThrust, 0f, state.maxThrust);
+        // При великому нахилі — тільки вирівнювання, мінімальна тяга
+        float upright = SoftLandingGuidance.UprightThrustScale(tilt);
+        thrustCmd *= upright;
+        if (tilt > 25f)
+        {
+            gCmd = baseGimbal; // чистий stabilizer
+            thrustCmd = Mathf.Min(thrustCmd, state.TotalMass * AtmosphereModel.GetGravity(h) * 0.85f);
+        }
+
+        gCmd.x = Mathf.Clamp(gCmd.x, -20f, 20f);
+        gCmd.y = 0f;
+        gCmd.z = Mathf.Clamp(gCmd.z, -20f, 20f);
+        state.thrustDirection = (Quaternion.Euler(gCmd) * Vector3.up).normalized;
+
+        if (tilt < 20f)
+            ApplyLateralGuidance();
+
+        state.currentThrust = Mathf.Clamp(thrustCmd, 0f, state.maxThrust);
         if (state.currentFuelMass <= 0f) state.currentThrust = 0f;
-        // Engine VFX: RocketEngineFX (on Visual) drives flame/smoke from thrust
+    }
+
+    /// <summary>
+    /// Guidance до центру pad: при майже вертикальному корпусі
+    /// gx ≈ +k·z + c·vz, gz ≈ −k·x − c·vx (див. DOCS / модель сил).
+    /// </summary>
+    void ApplyLateralGuidance()
+    {
+        float h = Mathf.Max(0f, state.position.y);
+        if (h > 1200f) return;
+
+        float tilt = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
+        if (tilt > 35f) return; // спочатку вирівняти корпус
+
+        float fade = Mathf.Clamp01(1f - h / 1200f);
+        float kPos = 0.028f * fade;
+        float kVel = 0.08f * fade;
+        if (h < 80f)
+        {
+            kPos *= 1.2f;
+            kVel *= 1.15f;
+        }
+
+        float gx = Mathf.Clamp(kPos * state.position.z + kVel * state.velocity.z, -8f, 8f);
+        float gz = Mathf.Clamp(-(kPos * state.position.x + kVel * state.velocity.x), -8f, 8f);
+
+        Vector3 td = state.thrustDirection.normalized;
+        float curX = Mathf.Atan2(-td.z, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
+        float curZ = Mathf.Atan2(td.x, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
+        float nx = Mathf.Clamp(curX + gx, -28f, 28f);
+        float nz = Mathf.Clamp(curZ + gz, -28f, 28f);
+        state.thrustDirection = (Quaternion.Euler(nx, 0f, nz) * Vector3.up).normalized;
     }
 
     void RungeKutta4Step(float dt)
@@ -200,8 +267,17 @@ public class RocketPhysics : MonoBehaviour
         Vector3 angularAcceleration = localTorque / I;
 
         state.angularVelocity += angularAcceleration * dt;
-        state.rotation *= Quaternion.Euler(state.angularVelocity * dt * Mathf.Rad2Deg);
-        state.rotation = Quaternion.Normalize(state.rotation);
+        // Обмеження ω — анти-перекид
+        if (state.angularVelocity.sqrMagnitude > MaxOmega * MaxOmega)
+            state.angularVelocity = state.angularVelocity.normalized * MaxOmega;
+
+        float wMag = state.angularVelocity.magnitude;
+        if (wMag > 1e-8f)
+        {
+            float deg = wMag * dt * Mathf.Rad2Deg;
+            state.rotation = Quaternion.Normalize(
+                state.rotation * Quaternion.AngleAxis(deg, state.angularVelocity / wMag));
+        }
     }
 
     Vector3 CalculateAccelerationAt(Vector3 pos, Vector3 vel)
@@ -225,12 +301,11 @@ public class RocketPhysics : MonoBehaviour
     float CalculateThrustPID()
     {
         float h = Mathf.Max(0f, state.position.y);
-        float targetVelocity = Mathf.Clamp(-Mathf.Sqrt(2f * 1.6f * h), -75f, -2f);
-        if (h < 6f) targetVelocity = -1.5f;
-
+        float profile = SoftLandingGuidance.ProfileThrust(h, state.velocity.y, state.TotalMass);
+        float targetVelocity = SoftLandingGuidance.TargetDescentRate(h);
         float pidOutput = thrustPID.Calculate(targetVelocity, state.velocity.y, parameters.fixedTimeStep);
-        float gravityCompensation = state.TotalMass * AtmosphereModel.GetGravity(h);
-        return gravityCompensation + pidOutput * 12000f;
+        // PID fine-tune поверх профілю
+        return profile + pidOutput * 10000f;
     }
 
     void FinishLanding(bool timeout)
@@ -319,6 +394,7 @@ public class RocketPhysics : MonoBehaviour
         yawPID.Reset();
         thrustPID.Reset();
 
+        SyncFixedTimestep();
         InitializeSimulation();
         if (logger != null) logger.Initialize();
         if (cachedVisualizer == null)
@@ -344,6 +420,7 @@ public class RocketPhysics : MonoBehaviour
         yawPID.Reset();
         thrustPID.Reset();
 
+        SyncFixedTimestep();
         InitializeSimulation();
         if (logger != null) logger.Initialize();
         if (cachedVisualizer == null)
@@ -351,6 +428,15 @@ public class RocketPhysics : MonoBehaviour
         cachedVisualizer?.Clear();
         MissionControlUI.Instance?.HideLandingResult();
         SnapCamera();
+    }
+
+    /// <summary>
+    /// Примусове завершення з метриками (для Monte-Carlo timeout / STOP з оцінкою).
+    /// </summary>
+    public void ForceFinish(bool asTimeout)
+    {
+        if (state.simulationFinished) return;
+        FinishLanding(timeout: asTimeout);
     }
 
     /// <summary>

@@ -47,34 +47,42 @@ public class LandingMetrics
     }
 
     /// <summary>Текстовий висновок українською: чому успіх / невдача.</summary>
-    public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 25f, float maxH = 5f)
+    /// <param name="includeTitle">false — коли заголовок уже є в UI-модалці</param>
+    public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 25f, float maxH = 5f,
+        bool includeTitle = true)
     {
         var sb = new StringBuilder();
         if (isSuccessfulLanding)
         {
-            sb.AppendLine("ПОСАДКУ ВИКОНАНО УСПІШНО");
-            sb.AppendLine();
-            sb.AppendLine($"• Швидкість приземлення: {touchdownVelocity:F1} м/с  (норма < {maxV})");
-            sb.AppendLine($"• Нахил корпусу: {landingAngleError:F1}°  (норма < {maxA}°)");
-            sb.AppendLine($"• Відхилення від pad: {horizontalMiss:F1} м  (норма < {maxM} м)");
-            sb.AppendLine($"• Бічна швидкість: {horizontalSpeed:F1} м/с  (норма < {maxH})");
+            if (includeTitle)
+            {
+                sb.AppendLine("ПОСАДКУ ВИКОНАНО УСПІШНО");
+                sb.AppendLine();
+            }
+            sb.AppendLine($"• Швидкість: {touchdownVelocity:F1} м/с  (норма < {maxV})");
+            sb.AppendLine($"• Нахил: {landingAngleError:F1}°  (норма < {maxA}°)");
+            sb.AppendLine($"• Промах: {horizontalMiss:F1} м  (норма < {maxM} м)");
+            sb.AppendLine($"• Бічна V: {horizontalSpeed:F1} м/с  (норма < {maxH})");
             sb.AppendLine($"• Оцінка: {SuccessScore:F0} / 100");
             return sb.ToString().TrimEnd();
         }
 
-        sb.AppendLine("ПОСАДКА НЕВДАЛА");
-        sb.AppendLine();
+        if (includeTitle)
+        {
+            sb.AppendLine("ПОСАДКА НЕВДАЛА");
+            sb.AppendLine();
+        }
         sb.AppendLine("Причини:");
         if (timedOut)
-            sb.AppendLine("• Час симуляції вичерпано (ракета не сіла вчасно)");
+            sb.AppendLine("• Час симуляції вичерпано");
         if (touchdownVelocity >= maxV)
-            sb.AppendLine($"• Занадто швидке приземлення: {touchdownVelocity:F1} м/с  (треба < {maxV})");
+            sb.AppendLine($"• Швидкість {touchdownVelocity:F1} м/с  (треба < {maxV})");
         if (landingAngleError >= maxA)
-            sb.AppendLine($"• Занадто великий нахил: {landingAngleError:F1}°  (треба < {maxA}°)");
+            sb.AppendLine($"• Нахил {landingAngleError:F1}°  (треба < {maxA}°)");
         if (horizontalMiss >= maxM)
-            sb.AppendLine($"• Промах повз pad: {horizontalMiss:F1} м  (треба < {maxM} м)");
+            sb.AppendLine($"• Промах {horizontalMiss:F1} м  (треба < {maxM} м)");
         if (horizontalSpeed >= maxH)
-            sb.AppendLine($"• Велика бічна швидкість: {horizontalSpeed:F1} м/с  (треба < {maxH})");
+            sb.AppendLine($"• Бічна V {horizontalSpeed:F1} м/с  (треба < {maxH})");
         sb.AppendLine();
         sb.AppendLine($"Оцінка: {SuccessScore:F0} / 100");
         return sb.ToString().TrimEnd();

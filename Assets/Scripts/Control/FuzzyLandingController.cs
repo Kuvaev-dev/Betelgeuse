@@ -1,10 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Нечіткий контролер посадки: zero-order Sugeno (TSK-0), не Mamdani.
-/// Канали: тяга (фазифікація висоти × |Vy|) та gimbal (|кут| × |ω|).
-/// AND = product; дефазифікація = зважене середнє чітких консеквентів таблиці 5×5.
-/// Біля землі (&lt;25 м) — м'яка корекція під soft-landing профіль.
+/// Нечіткий контролер посадки: zero-order Sugeno (TSK-0).
+/// База: soft-landing профіль; корекція: таблиця 5×5 (h × |Vy|) + gimbal fuzzy.
 /// </summary>
 public class FuzzyLandingController : MonoBehaviour
 {
@@ -12,38 +10,37 @@ public class FuzzyLandingController : MonoBehaviour
     public bool isActive = true;
 
     [Header("Межі фазифікації")]
-    public float heightScale = 3000f;
-    public float velocityScale = 120f;
+    public float heightScale = 2800f;
+    public float velocityScale = 110f;
     public float maxGimbalDeg = 28f;
+    [Range(0.15f, 0.7f)] public float fuzzyThrustWeight = 0.45f;
 
-    // Консеквенти тяги (множник до mg) — 5×5 правило
-    // Рядки: VL, L, M, H, VH висота; стовпці: VS, S, M, F, VF швидкість спуску
+    // Множники до mg — рядки: VL..VH висота; стовпці: VS..VF |Vy|
     static readonly float[,] ThrustTable =
     {
-        { 1.05f, 1.35f, 1.90f, 2.45f, 2.85f }, // Very Low
-        { 1.08f, 1.40f, 1.85f, 2.30f, 2.70f }, // Low
-        { 1.02f, 1.25f, 1.55f, 2.00f, 2.40f }, // Medium
-        { 0.95f, 1.10f, 1.35f, 1.70f, 2.10f }, // High
-        { 0.88f, 0.98f, 1.15f, 1.45f, 1.85f }  // Very High
+        { 1.12f, 1.45f, 1.95f, 2.40f, 2.75f },
+        { 1.10f, 1.38f, 1.80f, 2.25f, 2.60f },
+        { 1.05f, 1.28f, 1.55f, 1.95f, 2.35f },
+        { 0.98f, 1.15f, 1.38f, 1.70f, 2.10f },
+        { 0.92f, 1.05f, 1.22f, 1.50f, 1.90f }
     };
 
-    // Консеквенти gimbal (градуси абсолютної корекції)
     static readonly float[,] GimbalTable =
     {
-        { 0f,  4f, 10f, 18f, 26f }, // мала помилка кута
-        { 2f,  8f, 14f, 22f, 28f },
-        { 6f, 12f, 18f, 24f, 30f },
-        { 10f, 16f, 22f, 28f, 32f },
-        { 14f, 20f, 26f, 30f, 34f } // велика помилка
+        { 0f,  5f, 11f, 18f, 24f },
+        { 3f,  9f, 15f, 22f, 27f },
+        { 7f, 13f, 19f, 25f, 30f },
+        { 11f, 17f, 23f, 28f, 32f },
+        { 15f, 21f, 26f, 30f, 34f }
     };
 
     public float CalculateThrust(float height, float verticalVelocity, float mass)
     {
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
-        if (!isActive) return mass * g * 1.1f;
+        float profile = SoftLandingGuidance.ProfileThrust(height, verticalVelocity, mass);
+        if (!isActive) return profile;
 
         float h = Mathf.Clamp01(height / heightScale);
-        // 0 = майже зависання, 1 = номінальний спуск, >1 небезпечно швидко
         float v = Mathf.Clamp(Mathf.Abs(Mathf.Min(0f, verticalVelocity)) / velocityScale, 0f, 1.5f);
 
         float[] muH = Membership5(h, 0f, 0.12f, 0.28f, 0.50f, 0.72f, 1f);
@@ -62,36 +59,26 @@ public class FuzzyLandingController : MonoBehaviour
             }
         }
 
-        float mult = sumW > 1e-6f ? sumY / sumW : 1.1f;
-
-        // М'який soft-landing профіль біля землі
-        if (height < 25f)
-        {
-            float targetVy = height < 6f ? -1.2f : -Mathf.Sqrt(2f * 1.4f * height);
-            float err = targetVy - verticalVelocity; // >0 якщо падаємо швидше за профіль
-            mult += Mathf.Clamp(err * 0.04f, -0.15f, 0.55f);
-        }
-
-        mult = Mathf.Clamp(mult, 0.75f, 2.95f);
-        return Mathf.Min(mass * g * mult, mass * g * 2.95f);
+        float mult = sumW > 1e-6f ? sumY / sumW : 1.15f;
+        float fuzzyThrust = mass * g * Mathf.Clamp(mult, 0.85f, 2.9f);
+        return SoftLandingGuidance.BlendThrust(profile, fuzzyThrust, fuzzyThrustWeight, mass, height);
     }
 
-    /// <summary>
-    /// Нечіткий gimbal: фазифікація |pitch/yaw error| та |angular rate proxy|.
-    /// </summary>
     public Vector3 CalculateGimbal(float pitchErrorDeg, float yawErrorDeg, float pitchRateDeg = 0f, float yawRateDeg = 0f)
     {
-        if (!isActive) return Vector3.zero;
+        if (!isActive)
+            return SoftLandingGuidance.AttitudeGimbal(pitchErrorDeg, yawErrorDeg, pitchRateDeg, yawRateDeg, maxGimbalDeg);
 
         float pitch = FuzzyAxis(pitchErrorDeg, pitchRateDeg);
         float yaw = FuzzyAxis(yawErrorDeg, yawRateDeg);
+        // Змішуємо з класичним PD для гарантованої стабільності
+        Vector3 pd = SoftLandingGuidance.AttitudeGimbal(pitchErrorDeg, yawErrorDeg, pitchRateDeg, yawRateDeg, maxGimbalDeg);
         return new Vector3(
-            Mathf.Clamp(pitch, -maxGimbalDeg, maxGimbalDeg),
+            Mathf.Clamp(Mathf.Lerp(pd.x, pitch, 0.55f), -maxGimbalDeg, maxGimbalDeg),
             0f,
-            Mathf.Clamp(yaw, -maxGimbalDeg, maxGimbalDeg));
+            Mathf.Clamp(Mathf.Lerp(pd.z, yaw, 0.55f), -maxGimbalDeg, maxGimbalDeg));
     }
 
-    // Зворотна сумісність зі старим API
     public Vector3 CalculateGimbal(float pitchError, float yawError)
         => CalculateGimbal(pitchError, yawError, 0f, 0f);
 
@@ -116,13 +103,10 @@ public class FuzzyLandingController : MonoBehaviour
         }
 
         float mag = sumW > 1e-6f ? sumY / sumW : 0f;
-        return -Mathf.Sign(errorDeg) * mag;
+        float rateDamp = Mathf.Clamp(rateDeg * 0.25f, -12f, 12f);
+        return -Mathf.Sign(errorDeg) * mag - rateDamp;
     }
 
-    /// <summary>
-    /// 5 трикутних/трапецієподібних MF на [0,1]: NB-NS-Z-PS-PB стиль для скаляра.
-    /// centers: c0..c4 на відрізку [lo, hi] через p0..p5.
-    /// </summary>
     static float[] Membership5(float x, float p0, float p1, float p2, float p3, float p4, float p5)
     {
         return new[]

@@ -22,10 +22,10 @@ public class TrajectoryVisualizer : MonoBehaviour
     public float maxWidth = 55f;
     public float widthScalePerMeter = 0.012f;
 
-    // Сіро-біла палітра
-    public Color goodColor = new(0.85f, 0.9f, 0.88f, 1f);
-    public Color badColor = new(0.75f, 0.55f, 0.55f, 1f);
-    public Color normalColor = new(0.92f, 0.92f, 0.95f, 1f);
+    // Cyan mission / success green / fail coral
+    public Color goodColor = new(0.35f, 0.95f, 0.65f, 1f);
+    public Color badColor = new(1f, 0.4f, 0.42f, 1f);
+    public Color normalColor = new(0.45f, 0.85f, 1f, 1f);
 
     readonly List<Vector3> points = new();
     Vector3 lastPoint;

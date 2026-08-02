@@ -123,33 +123,25 @@ public class NeuralController : MonoBehaviour
         };
     }
 
-    /// <summary>Тяга за MLP (вихід 0 → множник mg).</summary>
+    /// <summary>Тяга: soft-landing + residual MLP.</summary>
     public float CalculateThrust(float height, float verticalVelocity, float mass, float currentThrust, float angleError)
     {
-        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
-        if (!isActive) return mass * g * 1.1f;
-
-        float horiz = 0f; // fallback; RocketPhysics передає через CalculateControl
-        var x = BuildFeatures(height, verticalVelocity, mass, angleError, horiz);
-        // легкий feedback поточної тяги через bias-корекцію
-        float tNorm = currentThrust / Mathf.Max(1f, mass * g);
-        x[2] = Mathf.Clamp01(x[2] * 0.7f + Mathf.Clamp01(tNorm / 3f) * 0.3f);
-
-        float[] y = Forward(x);
-        float mult = Mathf.Clamp(1.15f + y[0] * 0.85f, 0.8f, 2.9f);
-        return mass * g * mult;
+        CalculateControl(height, verticalVelocity, mass, currentThrust, angleError, 0f, 0f,
+            out float thrust, out _);
+        return thrust;
     }
 
-    /// <summary>Повний вихід MLP: thrust + gimbal pitch/yaw bias.</summary>
+    /// <summary>Повний вихід MLP: thrust + gimbal. База = soft-landing, NN = residual.</summary>
     public void CalculateControl(float height, float verticalVelocity, float mass, float currentThrust,
         float pitchError, float yawError, float horizSpeed,
         out float thrust, out Vector3 gimbalEuler)
     {
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
+        float profile = SoftLandingGuidance.ProfileThrust(height, verticalVelocity, mass);
         if (!isActive)
         {
-            thrust = mass * g * 1.1f;
-            gimbalEuler = Vector3.zero;
+            thrust = profile;
+            gimbalEuler = SoftLandingGuidance.AttitudeGimbal(pitchError, yawError);
             return;
         }
 
@@ -157,23 +149,23 @@ public class NeuralController : MonoBehaviour
         var x = BuildFeatures(height, verticalVelocity, mass, tilt, horizSpeed);
         float[] y = Forward(x);
 
-        float mult = Mathf.Clamp(1.15f + y[0] * 0.85f, 0.8f, 2.9f);
-        thrust = mass * g * mult;
+        float mult = Mathf.Clamp(1.12f + y[0] * 0.75f, 0.85f, 2.85f);
+        float nnThrust = mass * g * mult;
+        // NN лише корегує профіль — гарантія soft-landing навіть без навчання
+        float nnWeight = height < 60f ? 0.22f : 0.40f;
+        thrust = SoftLandingGuidance.BlendThrust(profile, nnThrust, nnWeight, mass, height);
 
-        float pitchBias = Mathf.Clamp(y[1] * 12f, -20f, 20f);
-        // пропорційна стабілізація + нейро-корекція
-        float pitch = Mathf.Clamp(pitchError * 0.85f + pitchBias * Mathf.Sign(pitchError + 1e-4f) * 0.25f, -28f, 28f);
-        float yaw = Mathf.Clamp(yawError * 0.85f, -28f, 28f);
+        Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(pitchError, yawError, 0f, 0f);
+        float pitchBias = Mathf.Clamp(y[1] * 8f, -10f, 10f);
+        float pitch = Mathf.Clamp(baseGimbal.x - pitchBias * Mathf.Sign(pitchError + 1e-4f) * 0.25f, -28f, 28f);
+        float yaw = Mathf.Clamp(baseGimbal.z, -28f, 28f);
         gimbalEuler = new Vector3(pitch, 0f, yaw);
     }
 
     public Vector3 CalculateGimbal(float pitchError, float yawError)
     {
-        if (!isActive) return Vector3.zero;
-        return new Vector3(
-            Mathf.Clamp(pitchError * 0.9f, -28f, 28f),
-            0f,
-            Mathf.Clamp(yawError * 0.9f, -28f, 28f));
+        if (!isActive) return SoftLandingGuidance.AttitudeGimbal(pitchError, yawError);
+        return SoftLandingGuidance.AttitudeGimbal(pitchError, yawError);
     }
 
     /// <summary>
@@ -183,12 +175,14 @@ public class NeuralController : MonoBehaviour
     {
         if (!enableTraining) return;
 
-        float cost = touchdownVelocity * 0.45f
-                   + angleError * 0.25f
-                   + Mathf.Max(0f, 4000f - fuelRemaining) / 1000f * 0.1f
-                   + horizontalMiss * 0.02f
-                   + (touchdownVelocity > 3.5f ? 8f : 0f)
-                   + (angleError > 7f ? 6f : 0f);
+        // Cost для ES(1+1): м'яка посадка + кут + промах + паливо + штрафи критеріїв
+        float cost = touchdownVelocity * 0.50f
+                   + angleError * 0.28f
+                   + Mathf.Max(0f, 4000f - fuelRemaining) / 1000f * 0.08f
+                   + horizontalMiss * 0.035f
+                   + (touchdownVelocity > 3.5f ? 12f : 0f)
+                   + (angleError > 7f ? 9f : 0f)
+                   + (horizontalMiss > 25f ? 7f : 0f);
 
         if (cost < bestCost)
         {

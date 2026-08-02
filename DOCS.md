@@ -163,24 +163,36 @@ Assets/Tests/
 - Окремий fuzzy-канал gimbal: \|кут\| × \|ω\| → кут відхилення тяги.
 - Біля землі (<25 м) — м’яка корекція під soft-landing профіль.
 
-### 6.3 Neural — MLP + ES(1+λ)
+### 6.3 Neural — MLP + ES(1+1)
 
 - Архітектура: **5 → 8 → 2** (tanh hidden, linear out).
 - Входи (нормовані): висота, вертикальна швидкість, маса, нахил, \|V_horiz\|.
 - Виходи: множник тяги, bias gimbal.
-- Навчання: еволюційна стратегія — мутація ваг від еліти, cost = f(V_touch, кут, паливо, промах).
-- Ваги зберігаються у `BestWeights_Neural.json` (корінь проєкту).
+- **Gimbal:** негативний зворотний зв’язок `−k·error` (+ обмежений нейро-bias), узгоджено з Fuzzy/PID.
+- Біля землі (&lt;30 м) — soft-landing профіль як у Fuzzy.
+- Навчання: ES(1+1) — мутація ваг від еліти після епізоду; cost = f(V_touch, кут, паливо, промах).
+- Ваги: `BestWeights_Neural.json` (корінь проєкту).
 
 ### 6.4 Hybrid Neuro-Fuzzy ★
 
 ```
-thrust = clamp( lerp(fuzzy, neural, α), fuzzy ± residualMax )
-gimbal = lerp(fuzzyGimbal, neuralGimbal, β)
+thrust = clamp( lerp(fuzzy, neural, α(h)), fuzzy ± residualMax )
+gimbal = lerp(fuzzyGimbal, neuralGimbal, β(h))
 ```
 
-- α ≈ 0.20 (thrust blend), β ≈ 0.15 (gimbal blend).
-- Residual обмежений (`maxResidualMult` ≈ 0.30 · mg), щоб нейромережа не «зламала» стійку fuzzy-базу.
-- Це і є центральна ідея теми: **інтерпретована нечітка логіка + адаптивне ML**.
+- α ≈ 0.20 (thrust), β ≈ 0.15 (gimbal); при h&lt;40 м α,β → 0 (пріоритет fuzzy).
+- Residual обмежений (`maxResidualMult` ≈ 0.30 · mg).
+- Центральна ідея теми: **інтерпретована нечітка логіка + адаптивне ML**.
+
+### 6.5 Спільне бічне наведення (усі режими)
+
+У `RocketPhysics.ApplyLateralGuidance` (h &lt; 1200 м, tilt &lt; 35°):
+
+```
+gx ≈ +k·z + c·vz ,   gz ≈ −k·x − c·vx
+```
+
+малий bias gimbal спрямовує апарат до центру pad.
 
 ---
 
@@ -333,14 +345,15 @@ Unity.exe -batchmode -nographics -projectPath <path> -runTests -testPlatform Edi
 
 | Вимога теми | Статус | Де |
 |-------------|--------|-----|
-| Модель посадки ракетоносія | ✅ | `RocketPhysics` RK4 + атмосфера |
-| Нечітка логіка | ✅ | `FuzzyLandingController` Sugeno-0 |
-| Машинне навчання | ✅ | `NeuralController` MLP+ES |
-| Інтелектуальна гібридна система | ✅ | `HybridController` Neuro-Fuzzy |
+| Модель посадки ракетоносія | ✅ | `RocketPhysics` RK4 + `SoftLandingGuidance` + lateral GNC |
+| Нечітка логіка | ✅ | `FuzzyLandingController` Sugeno-0 поверх soft-landing |
+| Машинне навчання | ✅ | `NeuralController` MLP residual + ES, база = soft-landing |
+| Інтелектуальна гібридна система | ✅ | `HybridController` Neuro-Fuzzy (profile + fuzzy + NN) |
 | Порівняння / дослідження | ✅ | `SimulationManager` Monte-Carlo |
 | Експорт результатів і графіків | ✅ | `ResearchExporter` CSV/JSON/MD/SVG |
-| Демонстраційний UI | ✅ | `MissionControlUI` UA/EN |
-| Тести | ✅ | EditMode + PlayMode |
+| Демонстраційний UI | ✅ | `MissionControlUI` UA/EN + hotkeys + Segoe UI SDF |
+| Візуалізація космосу / апарата | ✅ | мінімальний void + industrial pad + rocket FX |
+| Тести | ✅ | EditMode + PlayMode (GNC sign, фізика, fuzzy, metrics) |
 
 **Рекомендована демо-послідовність для захисту:**  
 1) D Гібрид → ЗАПУСТИТИ → показати телеметрію/Δ.  

@@ -72,7 +72,7 @@ public class MissionControlTheme : MonoBehaviour
                 tmp.color = Cyan;
                 tmp.fontStyle = FontStyles.Bold;
             }
-            tmp.characterSpacing = 1.5f;
+            UiTypography.Apply(tmp, tmp.fontSize > 1f ? tmp.fontSize : 16f, tmp.color, tmp.fontStyle);
         }
 
         foreach (var btn in FindObjectsByType<Button>(FindObjectsSortMode.None))
