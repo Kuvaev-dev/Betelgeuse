@@ -21,3 +21,7 @@ MonoBehaviour:
   isp: 311
   fixedTimeStep: 0.005
   maxSimulationTime: 400
+  maxTouchdownVelocity: 3.5
+  maxLandingAngle: 7
+  maxHorizontalMiss: 25
+  maxHorizontalSpeed: 5

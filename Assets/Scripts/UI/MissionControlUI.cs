@@ -342,19 +342,19 @@ public class MissionControlUI : MonoBehaviour
         // top bar + menu always visible for settings
         if (txtHideBtn != null)
             txtHideBtn.text = panelsHidden
-                ? (UILocale.IsUK ? "Показати UI" : "Show UI")
-                : (UILocale.IsUK ? "Сховати UI" : "Hide UI");
+                ? (UILocale.IsUK ? "Показати" : "Show UI")
+                : (UILocale.IsUK ? "Сховати" : "Hide UI");
     }
 
     void BuildTopBar(Transform parent)
     {
         var bar = CreatePanel("TopBar", parent, C_Panel);
         topBarGo = bar;
-        DockTop(bar.GetComponent<RectTransform>(), 70f);
+        DockTop(bar.GetComponent<RectTransform>(), 64f);
         Outline(bar, 1.5f);
 
-        // Accent line under top bar
-        var accent = CreatePanel("TopAccent", bar.transform, C_Cyan * 0.7f);
+        // Тонка лінія знизу
+        var accent = CreatePanel("TopAccent", bar.transform, new Color(C_Edge.r, C_Edge.g, C_Edge.b, 0.7f));
         var art = accent.GetComponent<RectTransform>();
         art.anchorMin = new Vector2(0, 0);
         art.anchorMax = new Vector2(1, 0);
@@ -362,21 +362,76 @@ public class MissionControlUI : MonoBehaviour
         art.anchoredPosition = Vector2.zero;
         art.sizeDelta = new Vector2(0, 2);
 
-        txtTitle = CreateText(bar.transform, UILocale.T("app_title"), 24, C_Cyan, FontStyles.Bold);
-        Pin(txtTitle.rectTransform, 0, 0.55f, 0, 0.55f, 24, 4, 200, 30);
+        // ── ЛІВОРУЧ: назва + підзаголовок ──
+        txtTitle = CreateText(bar.transform, UILocale.T("app_title"), 20, C_Accent, FontStyles.Bold);
+        var trTitle = txtTitle.rectTransform;
+        trTitle.anchorMin = trTitle.anchorMax = new Vector2(0, 0.5f);
+        trTitle.pivot = new Vector2(0, 0.5f);
+        trTitle.anchoredPosition = new Vector2(20, 8);
+        trTitle.sizeDelta = new Vector2(220, 28);
 
-        txtSubtitle = CreateText(bar.transform, UILocale.T("app_sub"), 13, C_Muted);
-        Pin(txtSubtitle.rectTransform, 0, 0.28f, 0, 0.28f, 24, 0, 360, 22);
+        txtSubtitle = CreateText(bar.transform, UILocale.T("app_sub"), 11, C_Muted);
+        var trSub = txtSubtitle.rectTransform;
+        trSub.anchorMin = trSub.anchorMax = new Vector2(0, 0.5f);
+        trSub.pivot = new Vector2(0, 0.5f);
+        trSub.anchoredPosition = new Vector2(20, -12);
+        trSub.sizeDelta = new Vector2(340, 18);
 
-        txtMode = CreateText(bar.transform, UILocale.T("algo_fmt").Replace("{0}", "—"), 16, C_Amber, FontStyles.Bold);
-        Pin(txtMode.rectTransform, 0.5f, 0.5f, 0.5f, 0.5f, 0, 0, 420, 34);
+        // ── ЦЕНТР: поточний алгоритм ──
+        txtMode = CreateText(bar.transform, UILocale.T("algo_fmt").Replace("{0}", "—"), 14, C_Amber, FontStyles.Bold);
         txtMode.alignment = TextAlignmentOptions.Center;
+        var trMode = txtMode.rectTransform;
+        trMode.anchorMin = trMode.anchorMax = new Vector2(0.5f, 0.5f);
+        trMode.pivot = new Vector2(0.5f, 0.5f);
+        trMode.anchoredPosition = Vector2.zero;
+        trMode.sizeDelta = new Vector2(380, 28);
 
-        txtTime = CreateText(bar.transform, string.Format(UILocale.T("time_fmt"), 0f), 15, C_Text);
-        Pin(txtTime.rectTransform, 1, 0.5f, 1, 0.5f, -300, 0, 140, 30);
+        // ── ПРАВОРУЧ (зліва направо до краю): час | мова | сховати | статус ──
+        // Статус — крайній справа
+        var statusRow = CreatePanel("StatusRow", bar.transform, new Color(0, 0, 0, 0));
+        statusRow.GetComponent<Image>().raycastTarget = false;
+        var srRt = statusRow.GetComponent<RectTransform>();
+        srRt.anchorMin = srRt.anchorMax = new Vector2(1, 0.5f);
+        srRt.pivot = new Vector2(1, 0.5f);
+        srRt.anchoredPosition = new Vector2(-16, 0);
+        srRt.sizeDelta = new Vector2(150, 32);
 
+        var dot = CreatePanel("Dot", statusRow.transform, C_Muted);
+        var drt = dot.GetComponent<RectTransform>();
+        drt.anchorMin = drt.anchorMax = new Vector2(0, 0.5f);
+        drt.pivot = new Vector2(0, 0.5f);
+        drt.anchoredPosition = new Vector2(0, 0);
+        drt.sizeDelta = new Vector2(9, 9);
+        statusDot = dot.GetComponent<Image>();
+
+        txtStatus = CreateText(statusRow.transform, UILocale.T("st_ready"), 13, C_Muted, FontStyles.Bold);
+        var srt = txtStatus.rectTransform;
+        srt.anchorMin = srt.anchorMax = new Vector2(0, 0.5f);
+        srt.pivot = new Vector2(0, 0.5f);
+        srt.anchoredPosition = new Vector2(16, 0);
+        srt.sizeDelta = new Vector2(130, 26);
+
+        // Сховати UI
+        var hideGo = CreatePanel("HideBtn", bar.transform, C_BtnActive);
+        var hideRt = hideGo.GetComponent<RectTransform>();
+        hideRt.anchorMin = hideRt.anchorMax = new Vector2(1, 0.5f);
+        hideRt.pivot = new Vector2(1, 0.5f);
+        hideRt.anchoredPosition = new Vector2(-178, 0);
+        hideRt.sizeDelta = new Vector2(100, 30);
+        var hideBtn = hideGo.AddComponent<Button>();
+        hideBtn.targetGraphic = hideGo.GetComponent<Image>();
+        txtHideBtn = CreateText(hideGo.transform, UILocale.IsUK ? "Сховати" : "Hide UI", 12, C_Text, FontStyles.Bold);
+        StretchFull(txtHideBtn.rectTransform, 4, 2, 4, 2);
+        txtHideBtn.alignment = TextAlignmentOptions.Center;
+        hideBtn.onClick.AddListener(TogglePanels);
+
+        // Мова
         var langGo = CreatePanel("LangBtn", bar.transform, C_Btn);
-        Pin(langGo.GetComponent<RectTransform>(), 1, 0.5f, 1, 0.5f, -520, 0, 120, 34);
+        var langRt = langGo.GetComponent<RectTransform>();
+        langRt.anchorMin = langRt.anchorMax = new Vector2(1, 0.5f);
+        langRt.pivot = new Vector2(1, 0.5f);
+        langRt.anchoredPosition = new Vector2(-288, 0);
+        langRt.sizeDelta = new Vector2(100, 30);
         var langBtn = langGo.AddComponent<Button>();
         langBtn.targetGraphic = langGo.GetComponent<Image>();
         var langTxt = CreateText(langGo.transform, UILocale.T("btn_lang"), 12, C_Text, FontStyles.Bold);
@@ -384,34 +439,14 @@ public class MissionControlUI : MonoBehaviour
         langTxt.alignment = TextAlignmentOptions.Center;
         langBtn.onClick.AddListener(() => UILocale.Toggle());
 
-        var hideGo = CreatePanel("HideBtn", bar.transform, C_BtnActive);
-        Pin(hideGo.GetComponent<RectTransform>(), 1, 0.5f, 1, 0.5f, -650, 0, 120, 34);
-        var hideBtn = hideGo.AddComponent<Button>();
-        hideBtn.targetGraphic = hideGo.GetComponent<Image>();
-        txtHideBtn = CreateText(hideGo.transform, UILocale.IsUK ? "Сховати UI" : "Hide UI", 12, C_Text, FontStyles.Bold);
-        StretchFull(txtHideBtn.rectTransform, 4, 2, 4, 2);
-        txtHideBtn.alignment = TextAlignmentOptions.Center;
-        hideBtn.onClick.AddListener(TogglePanels);
-
-        // Status with dot
-        var statusRow = CreatePanel("StatusRow", bar.transform, new Color(0, 0, 0, 0));
-        statusRow.GetComponent<Image>().raycastTarget = false;
-        Pin(statusRow.GetComponent<RectTransform>(), 1, 0.5f, 1, 0.5f, -16, 0, 200, 36);
-
-        var dot = CreatePanel("Dot", statusRow.transform, C_Muted);
-        var drt = dot.GetComponent<RectTransform>();
-        drt.anchorMin = drt.anchorMax = new Vector2(0, 0.5f);
-        drt.pivot = new Vector2(0, 0.5f);
-        drt.anchoredPosition = new Vector2(0, 0);
-        drt.sizeDelta = new Vector2(10, 10);
-        statusDot = dot.GetComponent<Image>();
-
-        txtStatus = CreateText(statusRow.transform, UILocale.T("st_ready"), 14, C_Muted, FontStyles.Bold);
-        var srt = txtStatus.rectTransform;
-        srt.anchorMin = srt.anchorMax = new Vector2(0, 0.5f);
-        srt.pivot = new Vector2(0, 0.5f);
-        srt.anchoredPosition = new Vector2(18, 0);
-        srt.sizeDelta = new Vector2(170, 28);
+        // Час симуляції
+        txtTime = CreateText(bar.transform, string.Format(UILocale.T("time_fmt"), 0f), 13, C_Text);
+        txtTime.alignment = TextAlignmentOptions.Right;
+        var trTime = txtTime.rectTransform;
+        trTime.anchorMin = trTime.anchorMax = new Vector2(1, 0.5f);
+        trTime.pivot = new Vector2(1, 0.5f);
+        trTime.anchoredPosition = new Vector2(-408, 0);
+        trTime.sizeDelta = new Vector2(120, 28);
     }
 
     void BuildLeftPanel(Transform parent)
@@ -901,10 +936,11 @@ public class MissionControlUI : MonoBehaviour
         resultShown = true;
         resultRoot.SetActive(true);
 
-        float maxV = rocket?.parameters != null ? rocket.parameters.maxTouchdownVelocity : 3.5f;
-        float maxA = rocket?.parameters != null ? rocket.parameters.maxLandingAngle : 7f;
-        float maxM = rocket?.parameters != null ? rocket.parameters.maxHorizontalMiss : 25f;
-        float maxH = rocket?.parameters != null ? rocket.parameters.maxHorizontalSpeed : 5f;
+        var p = rocket?.parameters;
+        float maxV = p != null && p.maxTouchdownVelocity > 0.1f ? p.maxTouchdownVelocity : 3.5f;
+        float maxA = p != null && p.maxLandingAngle > 0.1f ? p.maxLandingAngle : 7f;
+        float maxM = p != null && p.maxHorizontalMiss > 0.1f ? p.maxHorizontalMiss : 25f;
+        float maxH = p != null && p.maxHorizontalSpeed > 0.1f ? p.maxHorizontalSpeed : 5f;
 
         bool ok = m.isSuccessfulLanding;
         if (txtResultTitle)
@@ -1399,16 +1435,20 @@ public class MissionControlUI : MonoBehaviour
 
     TMP_Text Metric(Transform parent, string key, string unit, ref float y)
     {
-        var k = CreateText(parent, key, 13, C_Muted);
-        PinTL(k.rectTransform, 16, y, 168, 22);
+        // Підпис зліва · число біля правого краю · одиниця впритул справа
+        var k = CreateText(parent, key, 12, C_Muted);
+        PinTL(k.rectTransform, 14, y, 155, 20);
         metricLabels.Add(k);
-        var v = CreateText(parent, "—", 18, C_Text, FontStyles.Bold);
+
+        var v = CreateText(parent, "—", 15, C_Text, FontStyles.Bold);
         v.alignment = TextAlignmentOptions.Right;
-        PinTL(v.rectTransform, 160, y - 1, 100, 24);
-        var u = CreateText(parent, unit, 12, C_Muted);
+        // Правий край числа ~ x=278 (панель ~330)
+        PinTL(v.rectTransform, 168, y, 110, 22);
+
+        var u = CreateText(parent, unit, 11, C_Muted);
         u.alignment = TextAlignmentOptions.Left;
-        PinTL(u.rectTransform, 264, y, 50, 22);
-        y -= 28f;
+        PinTL(u.rectTransform, 282, y, 40, 20);
+        y -= 26f;
         return v;
     }
 

@@ -53,17 +53,18 @@ public class RocketPhysics : MonoBehaviour
     void Start()
     {
         logger = GetComponent<DataLogger>();
+        if (logger == null) logger = gameObject.AddComponent<DataLogger>();
         logger.Initialize();
 
         if (fuzzyController == null) fuzzyController = GetComponent<FuzzyLandingController>();
+        if (fuzzyController == null) fuzzyController = gameObject.AddComponent<FuzzyLandingController>();
         if (neuralController == null) neuralController = GetComponent<NeuralController>();
+        if (neuralController == null) neuralController = gameObject.AddComponent<NeuralController>();
         if (hybridController == null) hybridController = GetComponent<HybridController>();
         if (hybridController == null)
-        {
             hybridController = gameObject.AddComponent<HybridController>();
-            hybridController.fuzzy = fuzzyController;
-            hybridController.neural = neuralController;
-        }
+        hybridController.fuzzy = fuzzyController;
+        hybridController.neural = neuralController;
 
         if (neuralController != null) neuralController.LoadBestWeights();
         cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
@@ -119,8 +120,13 @@ public class RocketPhysics : MonoBehaviour
 
         UpdateControl();
         RungeKutta4Step(dt);
+
+        // Не дозволяємо «провалитись» під pad
+        if (state.position.y < 0f)
+            state.position.y = 0f;
+
         SyncTransformWithState();
-        logger.Log(state);
+        if (logger != null) logger.Log(state);
 
         if (state.position.y <= 0.05f)
             FinishLanding(timeout: false);
@@ -285,7 +291,9 @@ public class RocketPhysics : MonoBehaviour
         Vector3 acc = Vector3.zero;
         acc.y -= AtmosphereModel.GetGravity(pos.y);
 
-        Vector3 thrustWorld = state.rotation * state.thrustDirection * state.currentThrust;
+        Vector3 td = state.thrustDirection.sqrMagnitude > 1e-6f
+            ? state.thrustDirection.normalized : Vector3.up;
+        Vector3 thrustWorld = state.rotation * td * state.currentThrust;
         acc += thrustWorld / Mathf.Max(1f, state.TotalMass);
 
         // drag relative to air (incl. wind)
@@ -325,10 +333,15 @@ public class RocketPhysics : MonoBehaviour
         metrics.totalFlightTime = state.time;
         metrics.timedOut = timeout;
 
-        float maxV = parameters != null ? parameters.maxTouchdownVelocity : 3.5f;
-        float maxA = parameters != null ? parameters.maxLandingAngle : 7f;
-        float maxM = parameters != null ? parameters.maxHorizontalMiss : 25f;
-        float maxH = parameters != null ? parameters.maxHorizontalSpeed : 5f;
+        // Захист: якщо asset не серіалізував критерії (0), беремо номінал
+        float maxV = parameters != null && parameters.maxTouchdownVelocity > 0.1f
+            ? parameters.maxTouchdownVelocity : 3.5f;
+        float maxA = parameters != null && parameters.maxLandingAngle > 0.1f
+            ? parameters.maxLandingAngle : 7f;
+        float maxM = parameters != null && parameters.maxHorizontalMiss > 0.1f
+            ? parameters.maxHorizontalMiss : 25f;
+        float maxH = parameters != null && parameters.maxHorizontalSpeed > 0.1f
+            ? parameters.maxHorizontalSpeed : 5f;
         metrics.isSuccessfulLanding = !timeout
             && metrics.touchdownVelocity < maxV
             && metrics.landingAngleError < maxA
@@ -338,7 +351,7 @@ public class RocketPhysics : MonoBehaviour
         state.velocity = Vector3.zero;
         state.angularVelocity = Vector3.zero;
 
-        logger.Save();
+        if (logger != null) logger.Save();
 
         string algorithm = controlMode switch
         {
