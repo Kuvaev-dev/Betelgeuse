@@ -15,6 +15,13 @@ public static class SceneBootstrap
 
         EnsureControllers(rocket);
 
+        // Робочі (не ідеальні) коефіцієнти A–D — різниця алгоритмів помітна
+        IdealLandingPresets.ApplyDefaultControllerTuning(
+            rocket,
+            rocket.GetComponent<FuzzyLandingController>(),
+            rocket.GetComponent<NeuralController>(),
+            rocket.GetComponent<HybridController>());
+
         RocketVisualBuilder.Build(rocket);
         EnvironmentBuilder.Build();
 

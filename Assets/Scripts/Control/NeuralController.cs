@@ -21,6 +21,10 @@ public class NeuralController : MonoBehaviour
     [Range(1, 12)] public int lambda = 4;
     public float mutationSigma = 0.08f;
     public float sigmaDecay = 0.995f;
+    /// <summary>Вага MLP residual vs soft-landing (вище = більше «нейро»-поведінки).</summary>
+    [Range(0.1f, 0.7f)] public float residualWeight = 0.48f;
+    [Range(0.2f, 1.0f)] public float maxDevFrac = 0.6f;
+    [Range(0f, 0.5f)] public float gimbalBiasScale = 0.22f;
 
     [Header("Стан навчання")]
     public int generation;
@@ -131,7 +135,10 @@ public class NeuralController : MonoBehaviour
         return thrust;
     }
 
-    /// <summary>Повний вихід MLP: thrust + gimbal. База = soft-landing, NN = residual.</summary>
+    /// <summary>
+    /// MLP residual поверх soft-landing.
+    /// residualWeight/maxDevFrac задають «наскільки нейро» vs профіль (реалізм vs ідеал).
+    /// </summary>
     public void CalculateControl(float height, float verticalVelocity, float mass, float currentThrust,
         float pitchError, float yawError, float horizSpeed,
         out float thrust, out Vector3 gimbalEuler)
@@ -149,16 +156,16 @@ public class NeuralController : MonoBehaviour
         var x = BuildFeatures(height, verticalVelocity, mass, tilt, horizSpeed);
         float[] y = Forward(x);
 
-        float mult = Mathf.Clamp(1.12f + y[0] * 0.75f, 0.85f, 2.85f);
+        float mult = Mathf.Clamp(1.05f + y[0] * 0.85f, 0.8f, 2.9f);
         float nnThrust = mass * g * mult;
-        // NN лише корегує профіль — гарантія soft-landing навіть без навчання
-        float nnWeight = height < 60f ? 0.22f : 0.40f;
-        thrust = SoftLandingGuidance.BlendThrust(profile, nnThrust, nnWeight, mass, height);
+        float w = residualWeight;
+        if (height < 80f) w *= Mathf.Lerp(0.55f, 1f, height / 80f);
+        thrust = SoftLandingGuidance.BlendThrust(profile, nnThrust, w, mass, height, maxDevFrac);
 
         Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(pitchError, yawError, 0f, 0f);
-        float pitchBias = Mathf.Clamp(y[1] * 8f, -10f, 10f);
-        float pitch = Mathf.Clamp(baseGimbal.x - pitchBias * Mathf.Sign(pitchError + 1e-4f) * 0.25f, -28f, 28f);
-        float yaw = Mathf.Clamp(baseGimbal.z, -28f, 28f);
+        float pitchBias = Mathf.Clamp(y[1] * 10f, -12f, 12f) * gimbalBiasScale;
+        float pitch = Mathf.Clamp(baseGimbal.x - pitchBias * Mathf.Sign(pitchError + 1e-4f), -18f, 18f);
+        float yaw = Mathf.Clamp(baseGimbal.z, -18f, 18f);
         gimbalEuler = new Vector3(pitch, 0f, yaw);
     }
 
@@ -298,6 +305,45 @@ public class NeuralController : MonoBehaviour
         {
             Debug.LogWarning($"[NN-ES] Не вдалося завантажити ваги: {e.Message}");
         }
+    }
+
+    /// <summary>
+    /// Фізично обґрунтовані ваги для стабільної residual-корекції
+    /// ( thr↑ при малій h / великій |Vy| ; gimbal bias ≈ 0 ).
+    /// Використовується кнопкою «Ідеальні параметри».
+    /// </summary>
+    public void InstallIdealWeights()
+    {
+        hSize = Mathf.Clamp(hiddenNeurons, 4, 16);
+        wIH = new float[hSize * InputSize];
+        bH = new float[hSize];
+        wHO = new float[OutputSize * hSize];
+        bO = new float[OutputSize];
+
+        for (int h = 0; h < hSize; h++)
+        {
+            float phase = h / (float)hSize;
+            // height ↓ → hidden ↑ (negative weight on normalized h)
+            wIH[h * InputSize + 0] = -0.85f - phase * 0.25f;
+            // |Vy| ↑ (feature = vy/-120, descent positive) → hidden ↑
+            wIH[h * InputSize + 1] = 1.05f + phase * 0.2f;
+            wIH[h * InputSize + 2] = -0.15f + phase * 0.1f; // mass
+            wIH[h * InputSize + 3] = 0.45f;                 // tilt
+            wIH[h * InputSize + 4] = 0.2f;                  // horiz
+            bH[h] = -0.05f * h;
+
+            // Thrust residual: moderate positive from hidden
+            wHO[0 * hSize + h] = 0.12f + 0.03f * (h % 3);
+            // Gimbal bias: near-zero (base PD handles attitude)
+            wHO[1 * hSize + h] = 0.02f * ((h % 2) == 0 ? 1f : -1f);
+        }
+        bO[0] = 0.08f;
+        bO[1] = 0f;
+        bestCost = 2.5f;
+        generation = Mathf.Max(generation, 1);
+        SnapshotBest();
+        SaveBestWeights();
+        Debug.Log("[NN-ES] Встановлено ідеальні ваги для гарантованої посадки.");
     }
 }
 

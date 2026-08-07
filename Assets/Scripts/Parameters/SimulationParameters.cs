@@ -7,10 +7,10 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "LandingParams", menuName = "Betelgeuse/Simulation Parameters")]
 public class SimulationParameters : ScriptableObject
 {
-    [Header("Початкові умови")]
-    public Vector3 startPosition = new Vector3(0, 1600f, 0);
-    public Vector3 startVelocity = new Vector3(0, -60f, 0);
-    public Vector3 startEulerAngles = new Vector3(0, 0, 1.5f);
+    [Header("Початкові умови (номінал — складніший за «Ідеал»)")]
+    public Vector3 startPosition = new Vector3(0, 1800f, 0);
+    public Vector3 startVelocity = new Vector3(0, -72f, 0);
+    public Vector3 startEulerAngles = new Vector3(0, 0, 3.5f);
 
     [Header("Характеристики ракети")]
     public float dryMass = 25600f;

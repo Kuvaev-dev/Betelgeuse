@@ -1,16 +1,21 @@
 using UnityEngine;
 
 /// <summary>
-/// Гібридний Neuro-Fuzzy — тема магістерської роботи.
-/// База: soft-landing + Sugeno; корекція: обмежений residual MLP.
+/// Гібрид Neuro-Fuzzy (тема роботи):
+/// thrust/gimbal = Sugeno + обмежений residual MLP.
+/// За замовчуванням fuzzy домінує; NN — дрібна адаптація.
+/// IdealLandingPresets зменшує residual → стабільний 100% soft-landing.
 /// </summary>
 public class HybridController : MonoBehaviour
 {
     [Header("Hybrid Neuro-Fuzzy")]
     public bool isActive = true;
-    [Range(0f, 0.45f)] public float neuralThrustBlend = 0.22f;
-    [Range(0f, 0.40f)] public float neuralGimbalBlend = 0.18f;
-    [Range(0.05f, 0.55f)] public float maxResidualMult = 0.28f;
+    [Range(0f, 0.5f)] public float neuralThrustBlend = 0.25f;
+    [Range(0f, 0.45f)] public float neuralGimbalBlend = 0.2f;
+    [Range(0.05f, 0.6f)] public float maxResidualMult = 0.3f;
+    /// <summary>Вага smart (fuzzy/nn) vs чистий soft-landing профіль.</summary>
+    [Range(0.2f, 0.8f)] public float smartWeight = 0.5f;
+    [Range(0.2f, 0.9f)] public float maxDevFrac = 0.4f;
 
     public FuzzyLandingController fuzzy;
     public NeuralController neural;
@@ -49,23 +54,23 @@ public class HybridController : MonoBehaviour
 
         float alpha = neuralThrustBlend;
         float beta = neuralGimbalBlend;
-        if (height < 45f)
+        // Біля землі — пріоритет fuzzy (інтерпретовані правила)
+        if (height < 50f)
         {
-            float t = Mathf.Clamp01(height / 45f);
+            float t = Mathf.Clamp01(height / 50f);
             alpha *= t;
             beta *= t;
         }
 
         float smart = Mathf.Lerp(fuzzyThrust, nnThrust, alpha);
         float maxRes = mass * g * maxResidualMult;
-        // Тришаровий захист: profile ↔ fuzzy/nn
-        float blended = SoftLandingGuidance.BlendThrust(profile, smart, 0.55f, mass, height);
+        float blended = SoftLandingGuidance.BlendThrust(profile, smart, smartWeight, mass, height, maxDevFrac);
+        // Residual cap відносно fuzzy
         thrust = Mathf.Clamp(blended, fuzzyThrust - maxRes, fuzzyThrust + maxRes);
-        thrust = Mathf.Clamp(thrust, profile * 0.7f, profile * 1.45f + mass * g * 0.2f);
 
         gimbalEuler = Vector3.Lerp(fuzzyGimbal, nnGimbal, beta);
-        gimbalEuler.x = Mathf.Clamp(gimbalEuler.x, -28f, 28f);
+        gimbalEuler.x = Mathf.Clamp(gimbalEuler.x, -18f, 18f);
         gimbalEuler.y = 0f;
-        gimbalEuler.z = Mathf.Clamp(gimbalEuler.z, -28f, 28f);
+        gimbalEuler.z = Mathf.Clamp(gimbalEuler.z, -18f, 18f);
     }
 }

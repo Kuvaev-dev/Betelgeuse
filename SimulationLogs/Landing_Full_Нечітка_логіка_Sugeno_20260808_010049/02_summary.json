@@ -1,0 +1,26 @@
+﻿{
+  "project": "Betelgeuse",
+  "type": "single_landing",
+  "timestamp": "20260808_010049",
+  "algorithm": "Нечітка логіка (Sugeno)",
+  "thesisTopic": "Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання",
+  "sampleCount": 1466,
+  "criteria": {
+    "maxTouchdownVelocity": 3.5,
+    "maxLandingAngle": 7,
+    "maxHorizontalMiss": 25,
+    "maxHorizontalSpeed": 5
+  },
+  "results": {
+    "successful": false,
+    "timedOut": false,
+    "touchdownVelocity_mps": 0.657,
+    "landingAngle_deg": 0.27,
+    "horizontalMiss_m": 1899.979,
+    "horizontalSpeed_mps": 59.941,
+    "fuelRemaining_kg": 6544.677,
+    "maxAltitude_m": 1400,
+    "flightTime_s": 60.174,
+    "successScore": 69.73
+  }
+}

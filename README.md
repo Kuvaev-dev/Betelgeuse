@@ -10,9 +10,10 @@ Unity (URP) + C# симулятор GNC посадки першого ступе
 
 1. Unity **6000.x** (URP) → `Assets/Scenes/SampleScene.unity` → **Play**
 2. Справа: оберіть алгоритм (**D Гібрид** рекомендовано)
-3. Натисніть **«ЗАПУСТИТИ ПОСАДКУ»**
-4. Або **«ПОРІВНЯТИ ВСІ»** для Monte-Carlo експерименту
-5. **«ЕКСПОРТУВАТИ РЕЗУЛЬТАТИ»** → CSV + JSON + Markdown у `SimulationLogs/`
+3. (Опційно) **«ІДЕАЛЬНІ ПАРАМЕТРИ (100%)»** `[I]` — номінал без вітру/шуму
+4. Натисніть **«ЗАПУСТИТИ ПОСАДКУ»**
+5. Або **«ПОРІВНЯТИ ВСІ»** для Monte-Carlo експерименту
+6. **«ЕКСПОРТУВАТИ РЕЗУЛЬТАТИ»** → CSV + JSON + Markdown у `SimulationLogs/`
 
 ## Режими керування
 
@@ -29,12 +30,14 @@ Unity (URP) + C# симулятор GNC посадки першого ступе
 |---------|-----|
 | **1 / 2 / 3 / 4** | PID / Fuzzy / Neural / Hybrid |
 | **Space** | Запустити посадку |
+| **I** | Ідеальні параметри (100% soft-landing) |
 | **Esc** | Стоп / закрити результат |
 | **H** | Сховати / показати панелі |
 | **F / T / C / R** | Follow / Overview / Manual / Reset cam |
 | **L** | Лінія траєкторії |
 | **E / O** | Експорт / відкрити папку звітів |
 | **G** | Мова UA ↔ EN |
+| **Y** | Тема UI (Dark / Cyan / Amber / Light) |
 | **P / X** | Порівняти всі / скасувати |
 
 ## Камера
@@ -83,13 +86,15 @@ Tests/     EditMode + PlayMode (Unity Test Framework)
 
 ## Ключові алгоритмічні гарантії
 
-- **SoftLandingGuidance** — спільна база для A/B/C/D (профіль v=−√(2ah) + PD)
-- **RK4** узгоджений з `Time.fixedDeltaTime`
-- **Gimbal** — негативний FB + rate damp
-- **Lateral guidance** до pad (h &lt; 1200 м)
-- **Hybrid** = profile + Sugeno + residual MLP
-- **UI**: `UiTypography` — читабельний TMP + контрастна палітра
-- Старт: h≈2200 м, Vᵧ≈−85 м/с, крен 3°
+- **A PID** — hover FF + PID (без повного профілю на висоті)
+- **B Fuzzy** — Sugeno 5×5, weight≈0.55 (помітно ≠ PID)
+- **C Neural** — MLP residual weight≈0.48 + ES
+- **D Hybrid** — Sugeno + обмежений NN residual ★
+- Спільне: RK4, TVC-PD, lateral, термінал h&lt;25 м → soft-landing
+- **Номінал:** h≈1800 / Vᵧ≈−72 / крен 3.5° — алгоритми **різняться**
+- **Одиночний старт** бере вітер/шум з UI (`ApplyFlightDisturbances`) — не лише Monte-Carlo
+- **Ідеал `[I]`:** h≈1400 / Vᵧ≈−48 / вітер=0 / шум OFF + per-mode тюнінг → успіх A–D
+- Під pad: сірий реголіт + кратери; палуба/кільця без змін (`SmoothMesh` 96 seg)
 
 ## Автор
 

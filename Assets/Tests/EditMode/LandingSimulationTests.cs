@@ -11,12 +11,33 @@ public class LandingSimulationTests
     const float MaxThrust = 845000f;
 
     [Test]
-    public void Profile_NominalStart_TouchdownBelow3_5()
+    public void Profile_IdealStart_TouchdownBelow3_5()
     {
         float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
-            startH: 1600f, startVy: -60f, mass: Mass, maxThrust: MaxThrust);
+            startH: IdealLandingPresets.StartHeight,
+            startVy: IdealLandingPresets.StartVy,
+            mass: Mass, maxThrust: MaxThrust);
         Assert.Less(vTouch, 3.5f, $"Touchdown |Vy|={vTouch:F2} м/с");
-        Assert.Less(vTouch, 1.5f, "Nominal should be very soft");
+        Assert.Less(vTouch, 1.5f, "Ideal should be very soft");
+    }
+
+    [Test]
+    public void Profile_HardNominal_StillSoftIn1D()
+    {
+        // 1D профіль справляється і з жорсткішим стартом (3D attitude — окремо)
+        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
+            startH: 1800f, startVy: -72f, mass: Mass, maxThrust: MaxThrust);
+        Assert.Less(vTouch, 3.5f, $"Hard |Vy|={vTouch:F2}");
+    }
+
+    [Test]
+    public void Profile_IdealPresetStart_VerySoft()
+    {
+        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
+            IdealLandingPresets.StartHeight, IdealLandingPresets.StartVy,
+            IdealLandingPresets.DryMass + IdealLandingPresets.FuelMass,
+            IdealLandingPresets.MaxThrust);
+        Assert.Less(vTouch, 2.0f, $"Ideal |Vy|={vTouch:F2}");
     }
 
     [Test]

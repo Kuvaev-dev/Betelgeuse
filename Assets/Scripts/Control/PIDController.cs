@@ -1,9 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Класичний PID-регулятор з обмеженням інтеграла (anti-windup).
-/// Застосування: стабілізація тангажу/рискання та вертикальний канал тяги.
-/// u = Kp·e + Ki·∫e + Kd·de/dt
+/// Класичний PID з anti-windup (∫e clamp ±15).
+/// Режим A: вертикаль (hover FF + PID на v_target) і attitude.
+/// u = Kp·e + Ki·∫e + Kd·de/dt, e = setpoint − measured.
 /// </summary>
 [System.Serializable]
 public class PIDController

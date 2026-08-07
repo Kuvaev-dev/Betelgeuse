@@ -63,8 +63,10 @@ public class FuzzyControllerLogicTests
     {
         fuzzy.isActive = false;
         float mass = 25000f;
-        float thrust = fuzzy.CalculateThrust(500f, -50f, mass);
-        float expected = mass * AtmosphereModel.GetGravity(500f) * 1.1f;
+        float h = 500f;
+        float vy = -50f;
+        float thrust = fuzzy.CalculateThrust(h, vy, mass);
+        float expected = SoftLandingGuidance.ProfileThrust(h, vy, mass);
         Assert.AreEqual(expected, thrust, 1f);
     }
 

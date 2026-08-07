@@ -3,8 +3,8 @@ using TMPro;
 using UnityEngine.TextCore.LowLevel;
 
 /// <summary>
-/// Максимально чітка кирилиця для HUD.
-/// Segoe UI / Arial → SDF high-res atlas, Dynamic population, без outline.
+/// Максимально чіткий HUD-текст (кирилиця + латиниця).
+/// Високий SDF sampling, dilate, underlay/outline за темою.
 /// </summary>
 public static class UiTypography
 {
@@ -29,33 +29,44 @@ public static class UiTypography
 
     public static TMP_FontAsset Font => FontAsset;
 
+    public static Color Text => UiTheme.Current.Text;
+    public static Color Muted => UiTheme.Current.Muted;
+    public static Color Accent => UiTheme.Current.Accent;
+    public static Color Amber => UiTheme.Current.Amber;
+    public static Color Ok => UiTheme.Current.Ok;
+    public static Color Alert => UiTheme.Current.Alert;
+    public static Color Panel => UiTheme.Current.Panel;
+    public static Color PanelSoft => UiTheme.Current.PanelSoft;
+    public static Color Btn => UiTheme.Current.Btn;
+    public static Color BtnActive => UiTheme.Current.BtnActive;
+    public static Color Edge => UiTheme.Current.Edge;
+
     static TMP_FontAsset BuildCyrillicFont()
     {
         try
         {
-            // Arial часто чіткіший для UI-кирилиці на Windows
             UnityEngine.Font source = Resources.Load<UnityEngine.Font>("Fonts/SegoeUI");
             if (source == null)
             {
+                // Великий point size OS-шрифту → чіткіші гліфи в атласі
                 source = UnityEngine.Font.CreateDynamicFontFromOSFont(
-                    new[] { "Segoe UI", "Arial", "Tahoma", "Calibri" },
-                    180);
+                    new[]
+                    {
+                        "Segoe UI Semibold", "Segoe UI", "Arial",
+                        "Tahoma", "Calibri", "Microsoft Sans Serif"
+                    },
+                    256);
             }
+            if (source == null) return null;
 
-            if (source == null)
-            {
-                Debug.LogWarning("[UiTypography] Font not found.");
-                return null;
-            }
-
-            // Максимальна якість SDF
-            TMP_FontAsset fa = null;
+            TMP_FontAsset fa;
             try
             {
+                // samplingPointSize 256 + padding 20 = дуже різкий SDF
                 fa = TMP_FontAsset.CreateFontAsset(
                     source,
-                    180, // sampling — головний фактор різкості
-                    16,  // padding
+                    256,
+                    20,
                     GlyphRenderMode.SDFAA,
                     4096,
                     4096,
@@ -66,13 +77,11 @@ public static class UiTypography
             {
                 fa = TMP_FontAsset.CreateFontAsset(source);
             }
-
             if (fa == null) return null;
-            fa.name = "Betelgeuse_UI_SDF";
-
+            fa.name = "Betelgeuse_UI_SDF_HD";
             TuneMaterial(fa.material);
             Prefill(fa);
-            Debug.Log("[UiTypography] Ready: " + source.name);
+            Debug.Log("[UiTypography] HD font ready: " + source.name);
             return fa;
         }
         catch (System.Exception e)
@@ -85,32 +94,67 @@ public static class UiTypography
     static void TuneMaterial(Material mat)
     {
         if (mat == null) return;
-        // Різкі краї гліфів
+
+        // Різкість краю гліфа
         if (mat.HasProperty(ShaderUtilities.ID_GradientScale))
-            mat.SetFloat(ShaderUtilities.ID_GradientScale, 16f);
+            mat.SetFloat(ShaderUtilities.ID_GradientScale, 20f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightNormal))
-            mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0.0f);
+            mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0.15f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightBold))
-            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.35f);
-        // Ледь товстіші штрихи — читабельність UA на темному
+            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.55f);
+        // Товстіший штрих = краща читабельність на будь-якому фоні
         if (mat.HasProperty(ShaderUtilities.ID_FaceDilate))
-            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.12f);
+            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.28f);
         if (mat.HasProperty(ShaderUtilities.ID_Sharpness))
             mat.SetFloat(ShaderUtilities.ID_Sharpness, 1f);
-        // Тонка темна підкладка — контраст без «пікселів» outline
+
+        bool light = UiTheme.IsLightBackground;
+
+        // Underlay: темна тінь на темній темі; світла «обводка» на світлій
         if (mat.HasProperty(ShaderUtilities.ID_UnderlayColor))
         {
             mat.EnableKeyword("UNDERLAY_ON");
-            mat.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.55f));
-            if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetX))
-                mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0.5f);
-            if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetY))
-                mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.5f);
-            if (mat.HasProperty(ShaderUtilities.ID_UnderlayDilate))
-                mat.SetFloat(ShaderUtilities.ID_UnderlayDilate, 0.15f);
-            if (mat.HasProperty(ShaderUtilities.ID_UnderlaySoftness))
-                mat.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.2f);
+            if (light)
+            {
+                // Ледь світла підкладка + темний текст = контраст
+                mat.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(1f, 1f, 1f, 0.35f));
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetX))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0f);
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetY))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, 0f);
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlayDilate))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayDilate, 0.35f);
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlaySoftness))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.25f);
+            }
+            else
+            {
+                mat.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.85f));
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetX))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0.75f);
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetY))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.75f);
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlayDilate))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayDilate, 0.35f);
+                if (mat.HasProperty(ShaderUtilities.ID_UnderlaySoftness))
+                    mat.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.12f);
+            }
         }
+
+        // Outline для максимального контрасту
+        if (mat.HasProperty(ShaderUtilities.ID_OutlineColor))
+        {
+            mat.EnableKeyword("OUTLINE_ON");
+            if (light)
+                mat.SetColor(ShaderUtilities.ID_OutlineColor, new Color(1f, 1f, 1f, 0.55f));
+            else
+                mat.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0f, 0f, 0f, 0.75f));
+            if (mat.HasProperty(ShaderUtilities.ID_OutlineWidth))
+                mat.SetFloat(ShaderUtilities.ID_OutlineWidth, light ? 0.12f : 0.15f);
+            if (mat.HasProperty(ShaderUtilities.ID_OutlineSoftness))
+                mat.SetFloat(ShaderUtilities.ID_OutlineSoftness, 0.0f);
+        }
+
         if (mat.HasProperty(ShaderUtilities.ID_FaceColor))
             mat.SetColor(ShaderUtilities.ID_FaceColor, Color.white);
     }
@@ -122,54 +166,64 @@ public static class UiTypography
             " АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯ" +
             "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя" +
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" +
-            "0123456789" +
-            ".,;:!?%/+-*=()[]{}<>|@#_'\"°·•✓✗→←↑↓★" +
-            "—–…«»№ м/с кг кН % с т ";
+            "0123456789.,;:!?%/+-*=()[]{}<>|@#_'\"°·•→←↑↓—–…«»№" +
+            " м/с кг кН % с т /100 ОК";
         fa.TryAddCharacters(sample, out _);
     }
 
     public static void Apply(TMP_Text tmp, float size, Color color, FontStyles style = FontStyles.Normal)
     {
         if (tmp == null) return;
-
         var f = FontAsset;
         if (f != null)
         {
             tmp.font = f;
             if (f.material != null)
-                tmp.fontSharedMaterial = f.material;
+            {
+                // Завжди свіжий material під поточну тему
+                tmp.fontMaterial = new Material(f.material);
+                TuneMaterial(tmp.fontMaterial);
+            }
         }
 
-        // Без штучного +2 — розмір як передано (мін. 11 для компактної правої панелі)
-        tmp.fontSize = Mathf.Clamp(size, 11f, 42f);
+        // +1 pt до всіх розмірів, мін. 13
+        float s = size + 1f;
+        if (style == FontStyles.Bold) s += 0.5f;
+        tmp.fontSize = Mathf.Clamp(s, 13f, 48f);
+
         color.a = 1f;
+        if (UiTheme.IsLightBackground && Luma(color) > 0.5f)
+            color = UiTheme.Current.Text;
+        // На темному — не даємо «сірому» бути надто тьмяним
+        if (!UiTheme.IsLightBackground && Luma(color) < 0.45f && Luma(color) > 0.05f)
+            color = Color.Lerp(color, Color.white, 0.35f);
+
         tmp.color = color;
         tmp.fontStyle = style;
-        tmp.characterSpacing = 0.25f;
-        tmp.wordSpacing = 0f;
-        tmp.lineSpacing = 6f;
+        tmp.characterSpacing = 0.5f;
+        tmp.wordSpacing = 2f;
+        tmp.lineSpacing = 4f;
         tmp.enableKerning = true;
         tmp.extraPadding = true;
         tmp.richText = false;
         tmp.raycastTarget = false;
         tmp.isOrthographic = true;
-        tmp.outlineWidth = 0f;
-        tmp.outlineColor = new Color32(0, 0, 0, 0);
+        // Outline також на рівні TMP (дубль для надійності)
+        if (UiTheme.IsLightBackground)
+        {
+            tmp.outlineWidth = 0.12f;
+            tmp.outlineColor = new Color32(255, 255, 255, 140);
+        }
+        else
+        {
+            tmp.outlineWidth = 0.14f;
+            tmp.outlineColor = new Color32(0, 0, 0, 200);
+        }
         tmp.enableVertexGradient = false;
         tmp.overflowMode = TextOverflowModes.Overflow;
         tmp.enableWordWrapping = false;
         tmp.enableAutoSizing = false;
     }
 
-    public static readonly Color Text = new(0.98f, 0.98f, 1f, 1f);
-    public static readonly Color Muted = new(0.7f, 0.7f, 0.74f, 1f);
-    public static readonly Color Accent = new(0.92f, 0.92f, 0.96f, 1f);
-    public static readonly Color Amber = new(0.92f, 0.8f, 0.48f, 1f);
-    public static readonly Color Ok = new(0.5f, 0.9f, 0.62f, 1f);
-    public static readonly Color Alert = new(0.95f, 0.5f, 0.52f, 1f);
-    public static readonly Color Panel = new(0.04f, 0.04f, 0.05f, 0.96f);
-    public static readonly Color PanelSoft = new(0.07f, 0.07f, 0.08f, 0.94f);
-    public static readonly Color Btn = new(0.13f, 0.13f, 0.15f, 1f);
-    public static readonly Color BtnActive = new(0.26f, 0.26f, 0.3f, 1f);
-    public static readonly Color Edge = new(0.42f, 0.42f, 0.48f, 0.55f);
+    static float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 }

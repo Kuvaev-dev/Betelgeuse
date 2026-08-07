@@ -1,8 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Soft-landing профіль без bounce: feedforward m(g+a) + PD по v_target.
-/// Перевірено 1D-симуляцією (LandingSimulationTests).
+/// Спільний soft-landing профіль: v_target = −√(2 a h) + PD по помилці швидкості.
+/// Використовується як:
+/// — повна база для PID (слабкий blend) / Fuzzy / NN / Hybrid;
+/// — обов’язковий термінал (h &lt; ~25 м) для м’якого контакту.
 /// </summary>
 public static class SoftLandingGuidance
 {
@@ -17,7 +19,7 @@ public static class SoftLandingGuidance
         return -Mathf.Clamp(Mathf.Sqrt(2f * 1.3f * h), 4f, 50f);
     }
 
-    /// <summary>Тяга для профілю, Н. Без «підскоку» біля pad.</summary>
+    /// <summary>Тяга профілю, Н. Без bounce біля pad.</summary>
     public static float ProfileThrust(float height, float verticalVelocity, float mass)
     {
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
@@ -26,53 +28,48 @@ public static class SoftLandingGuidance
         float v = verticalVelocity;
         float target = TargetDescentRate(h);
 
-        // Підйом / зависання — ріжемо тягу, щоб сісти
         if (v > 0.3f)
             return hover * Mathf.Clamp(0.25f - v * 0.05f, 0.1f, 0.5f);
 
-        // Feedforward: a_up ≈ profileAccel для v=−√(2ah)
-        float aUp = h < 8f ? 0.4f : 1.15f;
+        float aUp = h < 8f ? 0.35f : (h < 80f ? 1.05f : 1.2f);
         float mult = 1f + aUp / Mathf.Max(0.1f, g);
 
-        // PD: err>0 якщо падаємо швидше за профіль (v більш від’ємна)
         float err = target - v;
-        float kp = h < 80f ? 0.07f : 0.045f;
-        mult += Mathf.Clamp(err * kp, -0.55f, 1.1f);
+        float kp = h < 80f ? 0.055f : 0.04f;
+        mult += Mathf.Clamp(err * kp, -0.4f, 0.9f);
 
-        // Аварійне гальмування
-        if (v < target - 12f)
-            mult += Mathf.Clamp((-v + target - 12f) * 0.025f, 0f, 0.85f);
+        if (v < target - 10f)
+            mult += Mathf.Clamp((-v + target - 10f) * 0.022f, 0f, 0.75f);
 
-        // Термінал: м’який контакт, без відскоку
-        if (h < 12f)
+        if (h < 15f)
         {
-            if (v < -2.8f)
-                mult = Mathf.Max(mult, 1.35f);      // ще швидко — гальмуй
-            else if (v > -0.35f)
-                mult = Mathf.Min(mult, 0.82f);      // майже стоїмо / вгору — опусти
-            else
-                mult = Mathf.Clamp(1.02f + err * 0.12f, 0.88f, 1.35f);
+            if (v < -2.5f) mult = Mathf.Max(mult, 1.28f);
+            else if (v > -0.3f) mult = Mathf.Min(mult, 0.78f);
+            else mult = Mathf.Clamp(1.0f + err * 0.1f, 0.88f, 1.28f);
         }
-        if (h < 3f)
+        if (h < 4f)
         {
-            // Фінальні метри: майже hover, трохи гальмування якщо треба
-            if (v < -1.2f) mult = Mathf.Clamp(1.25f + (-v - 1.2f) * 0.2f, 1.15f, 1.7f);
-            else mult = Mathf.Clamp(0.95f + (-v) * 0.15f, 0.75f, 1.2f);
+            if (v < -1.0f) mult = Mathf.Clamp(1.18f + (-v - 1.0f) * 0.18f, 1.1f, 1.55f);
+            else mult = Mathf.Clamp(0.92f + (-v) * 0.12f, 0.72f, 1.12f);
         }
 
-        return hover * Mathf.Clamp(mult, 0.15f, 2.75f);
+        return hover * Mathf.Clamp(mult, 0.15f, 2.5f);
     }
 
+    /// <summary>
+    /// TVC-стабілізація: τ ∝ (−td.z, td.x), td = R(cmd)·up.
+    /// Cross(worldUp, bodyUp) &gt; 0 ⇒ cmd &gt; 0 (restoring).
+    /// </summary>
     public static Vector3 AttitudeGimbal(
         Quaternion rotation, Vector3 angularVelocityBody,
-        float maxDeg = 18f, float kp = 1.15f, float kd = 0.55f)
+        float maxDeg = 14f, float kp = 0.72f, float kd = 0.95f)
     {
         Vector3 bodyUp = rotation * Vector3.up;
         Vector3 axisWorld = Vector3.Cross(Vector3.up, bodyUp);
         Vector3 axisBody = Quaternion.Inverse(rotation) * axisWorld;
 
-        float cmdX = -axisBody.x * kp - angularVelocityBody.x * kd;
-        float cmdZ = -axisBody.z * kp - angularVelocityBody.z * kd;
+        float cmdX = axisBody.x * kp + angularVelocityBody.x * kd;
+        float cmdZ = axisBody.z * kp + angularVelocityBody.z * kd;
 
         return new Vector3(
             Mathf.Clamp(cmdX * Mathf.Rad2Deg, -maxDeg, maxDeg),
@@ -80,13 +77,14 @@ public static class SoftLandingGuidance
             Mathf.Clamp(cmdZ * Mathf.Rad2Deg, -maxDeg, maxDeg));
     }
 
+    /// <summary>PD по SignedAngle-помилках (градуси) + rate damp.</summary>
     public static Vector3 AttitudeGimbal(float pitchErrorDeg, float yawErrorDeg,
-        float pitchRateDeg = 0f, float yawRateDeg = 0f, float maxDeg = 18f)
+        float pitchRateDeg = 0f, float yawRateDeg = 0f, float maxDeg = 14f)
     {
         return new Vector3(
-            Mathf.Clamp(-pitchErrorDeg * 0.9f - pitchRateDeg * 0.42f, -maxDeg, maxDeg),
+            Mathf.Clamp(-pitchErrorDeg * 0.55f - pitchRateDeg * 0.65f, -maxDeg, maxDeg),
             0f,
-            Mathf.Clamp(-yawErrorDeg * 0.9f - yawRateDeg * 0.42f, -maxDeg, maxDeg));
+            Mathf.Clamp(-yawErrorDeg * 0.55f - yawRateDeg * 0.65f, -maxDeg, maxDeg));
     }
 
     public static float UprightThrustScale(float tiltDeg)
@@ -96,18 +94,27 @@ public static class SoftLandingGuidance
         return Mathf.Lerp(1f, 0.25f, (tiltDeg - 10f) / 40f);
     }
 
-    public static float BlendThrust(float profileThrust, float smartThrust, float smartWeight, float mass, float height)
+    /// <summary>
+    /// Змішує профіль і «розумну» тягу.
+    /// Біля землі (h&lt;25 м) smartWeight → 0 — гарантія soft contact.
+    /// maxDevFrac — наскільки smart може відхилятись від профілю (реалізм алгоритмів).
+    /// </summary>
+    public static float BlendThrust(float profileThrust, float smartThrust, float smartWeight,
+        float mass, float height, float maxDevFrac = 0.45f)
     {
         float w = Mathf.Clamp01(smartWeight);
-        if (height < 45f) w *= Mathf.Clamp01(height / 45f);
+        // Термінал: усі алгоритми сходяться до soft-landing профілю
+        if (height < 25f) w *= Mathf.Clamp01(height / 25f);
+
         float blended = Mathf.Lerp(profileThrust, smartThrust, w);
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
         float hover = mass * g;
-        float maxDev = hover * (height < 30f ? 0.25f : 0.4f);
+        float maxDev = hover * Mathf.Clamp(maxDevFrac, 0.1f, 1.2f);
+        if (height < 30f) maxDev = Mathf.Min(maxDev, hover * 0.22f);
         return Mathf.Clamp(blended, profileThrust - maxDev, profileThrust + maxDev);
     }
 
-    /// <summary>1D симуляція для тестів. Повертає |Vy| на touchdown.</summary>
+    /// <summary>1D симуляція для EditMode-тестів. Повертає |Vy| на touchdown.</summary>
     public static float SimulateVerticalLanding(
         float startH, float startVy, float mass, float maxThrust,
         float dt = 0.005f, float maxTime = 200f)
