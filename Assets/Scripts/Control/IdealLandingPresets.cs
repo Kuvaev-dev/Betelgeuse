@@ -54,9 +54,11 @@ public static class IdealLandingPresets
         {
             sim.enableNoise = false;
             sim.windStrength = 0f;
-            sim.massVariationPercent = 0f;
-            sim.angleVariationDegrees = 0f;
-            sim.continuousWind = false;
+            // Не обнуляємо mass/angle variation назавжди — інакше після Ideal
+            // toggle «Шум» не впливав би на одиночний старт.
+            sim.massVariationPercent = 6f;
+            sim.angleVariationDegrees = 7f;
+            sim.continuousWind = true;
         }
         // UI-слайдери вітру/шуму скидає MissionControlUI після Apply
 

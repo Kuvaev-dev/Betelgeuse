@@ -408,7 +408,10 @@ public class RocketPhysics : MonoBehaviour
 
         if (cachedVisualizer == null)
             cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+        // Лінія траєкторії лишається видимою після посадки (Clear лише на новий старт)
         cachedVisualizer?.OnSimulationFinished(metrics.isSuccessfulLanding);
+        if (cachedVisualizer != null)
+            cachedVisualizer.SetVisible(true);
 
         // Don't train during batch Monte-Carlo (SimulationManager sets timeScale high)
         bool batch = FindFirstObjectByType<SimulationManager>() is { IsExperimentRunning: true };

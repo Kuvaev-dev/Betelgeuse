@@ -95,37 +95,35 @@ public static class UiTypography
     {
         if (mat == null) return;
 
-        // Різкість краю гліфа
+        // Максимальна різкість SDF-гліфів (кирилиця + латиниця)
         if (mat.HasProperty(ShaderUtilities.ID_GradientScale))
-            mat.SetFloat(ShaderUtilities.ID_GradientScale, 20f);
+            mat.SetFloat(ShaderUtilities.ID_GradientScale, 22f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightNormal))
-            mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0.15f);
+            mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0.12f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightBold))
-            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.55f);
-        // Товстіший штрих = краща читабельність на будь-якому фоні
+            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.5f);
         if (mat.HasProperty(ShaderUtilities.ID_FaceDilate))
-            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.28f);
+            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.18f);
         if (mat.HasProperty(ShaderUtilities.ID_Sharpness))
             mat.SetFloat(ShaderUtilities.ID_Sharpness, 1f);
 
         bool light = UiTheme.IsLightBackground;
 
-        // Underlay: темна тінь на темній темі; світла «обводка» на світлій
+        // Light: dark soft shadow (paper print). Dark: black underlay.
         if (mat.HasProperty(ShaderUtilities.ID_UnderlayColor))
         {
             mat.EnableKeyword("UNDERLAY_ON");
             if (light)
             {
-                // Ледь світла підкладка + темний текст = контраст
-                mat.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(1f, 1f, 1f, 0.35f));
+                mat.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0.05f, 0.07f, 0.1f, 0.28f));
                 if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetX))
-                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0f);
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0.4f);
                 if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetY))
-                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, 0f);
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.5f);
                 if (mat.HasProperty(ShaderUtilities.ID_UnderlayDilate))
-                    mat.SetFloat(ShaderUtilities.ID_UnderlayDilate, 0.35f);
+                    mat.SetFloat(ShaderUtilities.ID_UnderlayDilate, 0.12f);
                 if (mat.HasProperty(ShaderUtilities.ID_UnderlaySoftness))
-                    mat.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.25f);
+                    mat.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.35f);
             }
             else
             {
@@ -141,19 +139,23 @@ public static class UiTypography
             }
         }
 
-        // Outline для максимального контрасту
+        // Light: thin dark hairline outline (not white glow — that washed text out)
         if (mat.HasProperty(ShaderUtilities.ID_OutlineColor))
         {
             mat.EnableKeyword("OUTLINE_ON");
             if (light)
-                mat.SetColor(ShaderUtilities.ID_OutlineColor, new Color(1f, 1f, 1f, 0.55f));
+                mat.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0.08f, 0.1f, 0.14f, 0.35f));
             else
                 mat.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0f, 0f, 0f, 0.75f));
             if (mat.HasProperty(ShaderUtilities.ID_OutlineWidth))
-                mat.SetFloat(ShaderUtilities.ID_OutlineWidth, light ? 0.12f : 0.15f);
+                mat.SetFloat(ShaderUtilities.ID_OutlineWidth, light ? 0.06f : 0.15f);
             if (mat.HasProperty(ShaderUtilities.ID_OutlineSoftness))
-                mat.SetFloat(ShaderUtilities.ID_OutlineSoftness, 0.0f);
+                mat.SetFloat(ShaderUtilities.ID_OutlineSoftness, light ? 0.05f : 0.0f);
         }
+
+        // Light: ще тонший штрих на білих панелях
+        if (light && mat.HasProperty(ShaderUtilities.ID_FaceDilate))
+            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.08f);
 
         if (mat.HasProperty(ShaderUtilities.ID_FaceColor))
             mat.SetColor(ShaderUtilities.ID_FaceColor, Color.white);
@@ -186,15 +188,15 @@ public static class UiTypography
             }
         }
 
-        // +1 pt до всіх розмірів, мін. 13
-        float s = size + 1f;
+        // +1.5 pt, мін. 13 — чіткість на 1080p/1440p
+        float s = size + 1.5f;
         if (style == FontStyles.Bold) s += 0.5f;
         tmp.fontSize = Mathf.Clamp(s, 13f, 48f);
 
         color.a = 1f;
-        if (UiTheme.IsLightBackground && Luma(color) > 0.5f)
-            color = UiTheme.Current.Text;
-        // На темному — не даємо «сірому» бути надто тьмяним
+        // НЕ перефарбовуємо навмисно білий/світлий текст (кнопки primary на light theme).
+        // Раніше Luma>0.5 → Text (темний) ламало білий текст на зелених/синіх кнопках.
+        // На темному — підтягуємо надто тьмяний muted
         if (!UiTheme.IsLightBackground && Luma(color) < 0.45f && Luma(color) > 0.05f)
             color = Color.Lerp(color, Color.white, 0.35f);
 
@@ -208,11 +210,10 @@ public static class UiTypography
         tmp.richText = false;
         tmp.raycastTarget = false;
         tmp.isOrthographic = true;
-        // Outline також на рівні TMP (дубль для надійності)
         if (UiTheme.IsLightBackground)
         {
-            tmp.outlineWidth = 0.12f;
-            tmp.outlineColor = new Color32(255, 255, 255, 140);
+            tmp.outlineWidth = 0.05f;
+            tmp.outlineColor = new Color32(20, 24, 32, 90);
         }
         else
         {

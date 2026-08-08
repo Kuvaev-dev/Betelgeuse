@@ -143,6 +143,17 @@ public class NeuralController : MonoBehaviour
         float pitchError, float yawError, float horizSpeed,
         out float thrust, out Vector3 gimbalEuler)
     {
+        CalculateControl(height, verticalVelocity, mass, currentThrust,
+            pitchError, yawError, horizSpeed, blendWithProfile: true, out thrust, out gimbalEuler);
+    }
+
+    /// <param name="blendWithProfile">
+    /// false — «сирий» MLP thrust (для Hybrid, щоб не дублювати BlendThrust).
+    /// </param>
+    public void CalculateControl(float height, float verticalVelocity, float mass, float currentThrust,
+        float pitchError, float yawError, float horizSpeed, bool blendWithProfile,
+        out float thrust, out Vector3 gimbalEuler)
+    {
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
         float profile = SoftLandingGuidance.ProfileThrust(height, verticalVelocity, mass);
         if (!isActive)
@@ -158,9 +169,16 @@ public class NeuralController : MonoBehaviour
 
         float mult = Mathf.Clamp(1.05f + y[0] * 0.85f, 0.8f, 2.9f);
         float nnThrust = mass * g * mult;
-        float w = residualWeight;
-        if (height < 80f) w *= Mathf.Lerp(0.55f, 1f, height / 80f);
-        thrust = SoftLandingGuidance.BlendThrust(profile, nnThrust, w, mass, height, maxDevFrac);
+        if (blendWithProfile)
+        {
+            float w = residualWeight;
+            if (height < 80f) w *= Mathf.Lerp(0.55f, 1f, height / 80f);
+            thrust = SoftLandingGuidance.BlendThrust(profile, nnThrust, w, mass, height, maxDevFrac);
+        }
+        else
+        {
+            thrust = nnThrust;
+        }
 
         Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(pitchError, yawError, 0f, 0f);
         float pitchBias = Mathf.Clamp(y[1] * 10f, -12f, 12f) * gimbalBiasScale;
@@ -205,8 +223,14 @@ public class NeuralController : MonoBehaviour
             mutationSigma = Mathf.Min(0.25f, mutationSigma / sigmaDecay); // mild reheating on stall
         }
 
-        // (1+λ): мутуємо від еліти
-        MutateFromBest();
+        // ES(1+λ): λ мутантів від еліти; для online-епізоду беремо 1-го
+        // (повний λ-турнір потребує λ паралельних симуляцій — див. Monte-Carlo).
+        // Тут застосовуємо σ-масштабовану мутацію; λ впливає на силу розкиду.
+        float sigmaScale = 1f + 0.08f * Mathf.Max(0, lambda - 1);
+        MutateFromBest(mutationSigma * sigmaScale);
+        // Додаткові «віртуальні» мутації звужують σ (ефект більшої популяції)
+        for (int k = 1; k < lambda; k++)
+            mutationSigma = Mathf.Max(0.02f, mutationSigma * 0.998f);
         generation++;
     }
 
@@ -214,10 +238,10 @@ public class NeuralController : MonoBehaviour
     public void Train(float touchdownVelocity, float angleError, float fuelRemaining)
         => Train(touchdownVelocity, angleError, fuelRemaining, 0f);
 
-    void MutateFromBest()
+    void MutateFromBest(float sigma = -1f)
     {
         RestoreBest();
-        float s = mutationSigma;
+        float s = sigma > 0f ? sigma : mutationSigma;
         for (int i = 0; i < wIH.Length; i++)
             wIH[i] = bestWIH[i] + Gaussian() * s;
         for (int i = 0; i < bH.Length; i++)

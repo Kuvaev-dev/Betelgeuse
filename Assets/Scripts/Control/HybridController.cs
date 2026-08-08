@@ -1,10 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Гібрид Neuro-Fuzzy (тема роботи):
-/// thrust/gimbal = Sugeno + обмежений residual MLP.
-/// За замовчуванням fuzzy домінує; NN — дрібна адаптація.
-/// IdealLandingPresets зменшує residual → стабільний 100% soft-landing.
+/// Гібрид Neuro-Fuzzy — ядро теми МКР:
+/// сирий Sugeno + сирий MLP residual → один BlendThrust з профілем soft-landing.
+/// Біля землі (h&lt;50 м) α,β→0: пріоритет інтерпретованих fuzzy-правил.
+/// IdealLandingPresets зменшує residual для гарантованого soft-landing.
 /// </summary>
 public class HybridController : MonoBehaviour
 {
@@ -41,7 +41,8 @@ public class HybridController : MonoBehaviour
             return;
         }
 
-        float fuzzyThrust = fuzzy.CalculateThrust(height, verticalVelocity, mass);
+        // Сирі виходи (без внутрішнього blend) — blend лише один раз нижче
+        float fuzzyThrust = fuzzy.EvaluateSugenoThrust(height, verticalVelocity, mass);
         Vector3 fuzzyGimbal = fuzzy.CalculateGimbal(pitchError, yawError, pitchRate, yawRate);
 
         float nnThrust = fuzzyThrust;
@@ -49,7 +50,8 @@ public class HybridController : MonoBehaviour
         if (neural != null && neural.isActive)
         {
             neural.CalculateControl(height, verticalVelocity, mass, currentThrust,
-                pitchError, yawError, horizSpeed, out nnThrust, out nnGimbal);
+                pitchError, yawError, horizSpeed, blendWithProfile: false,
+                out nnThrust, out nnGimbal);
         }
 
         float alpha = neuralThrustBlend;
@@ -63,10 +65,11 @@ public class HybridController : MonoBehaviour
         }
 
         float smart = Mathf.Lerp(fuzzyThrust, nnThrust, alpha);
+        // Обмежити NN-residual відносно fuzzy ДО blend (не після — інакше
+        // cap може «перебити» термінал soft-landing h&lt;25 м).
         float maxRes = mass * g * maxResidualMult;
-        float blended = SoftLandingGuidance.BlendThrust(profile, smart, smartWeight, mass, height, maxDevFrac);
-        // Residual cap відносно fuzzy
-        thrust = Mathf.Clamp(blended, fuzzyThrust - maxRes, fuzzyThrust + maxRes);
+        smart = Mathf.Clamp(smart, fuzzyThrust - maxRes, fuzzyThrust + maxRes);
+        thrust = SoftLandingGuidance.BlendThrust(profile, smart, smartWeight, mass, height, maxDevFrac);
 
         gimbalEuler = Vector3.Lerp(fuzzyGimbal, nnGimbal, beta);
         gimbalEuler.x = Mathf.Clamp(gimbalEuler.x, -18f, 18f);

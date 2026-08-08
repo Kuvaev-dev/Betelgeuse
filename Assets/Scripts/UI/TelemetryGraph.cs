@@ -4,19 +4,21 @@ using TMPro;
 using System.Collections.Generic;
 
 /// <summary>
-/// Real-time strip chart: сітка, вісь 0, підписи min/max/current, поріг.
+/// Real-time strip chart з theme-aware кольорами (Light/Dark).
 /// </summary>
 [RequireComponent(typeof(RawImage))]
 public class TelemetryGraph : MonoBehaviour
 {
     public string title = "GRAPH";
     public string unit = "";
-    public Color lineColor = new(0.9f, 0.9f, 0.92f, 1f);
-    public Color fillColor = new(0.75f, 0.75f, 0.78f, 0.12f);
-    public Color gridColor = new(1f, 1f, 1f, 0.08f);
-    public Color bgColor = new(0.06f, 0.06f, 0.07f, 1f);
-    public Color axisColor = new(0.7f, 0.7f, 0.72f, 0.5f);
-    public Color thresholdColor = new(0.85f, 0.55f, 0.55f, 0.4f);
+    public Color lineColor = new(0.25f, 0.55f, 0.95f, 1f);
+    public Color fillColor = new(0.25f, 0.55f, 0.95f, 0.18f);
+    public Color gridColor = new(0.5f, 0.55f, 0.6f, 0.22f);
+    public Color bgColor = new(0.97f, 0.97f, 0.98f, 1f);
+    public Color axisColor = new(0.35f, 0.4f, 0.45f, 0.55f);
+    public Color thresholdColor = new(0.85f, 0.3f, 0.3f, 0.55f);
+    public Color borderColor = new(0.55f, 0.6f, 0.65f, 0.55f);
+    public Color labelColor = new(0.2f, 0.22f, 0.28f, 1f);
     public int maxSamples = 280;
     public float minY = 0f;
     public float maxY = 1f;
@@ -41,8 +43,35 @@ public class TelemetryGraph : MonoBehaviour
     void Awake()
     {
         image = GetComponent<RawImage>();
+        ApplyThemeColors();
         EnsureLabels();
         RebuildTexture();
+    }
+
+    public void ApplyThemeColors()
+    {
+        bool light = UiTheme.IsLightBackground;
+        if (light)
+        {
+            bgColor = new Color(0.98f, 0.985f, 0.99f, 1f);
+            gridColor = new Color(0.55f, 0.6f, 0.68f, 0.28f);
+            axisColor = new Color(0.25f, 0.3f, 0.38f, 0.55f);
+            borderColor = new Color(0.35f, 0.42f, 0.52f, 0.55f);
+            labelColor = new Color(0.12f, 0.14f, 0.18f, 1f);
+            thresholdColor = new Color(0.82f, 0.2f, 0.22f, 0.6f);
+        }
+        else
+        {
+            bgColor = new Color(0.07f, 0.08f, 0.1f, 1f);
+            gridColor = new Color(1f, 1f, 1f, 0.1f);
+            axisColor = new Color(0.75f, 0.78f, 0.85f, 0.45f);
+            borderColor = new Color(0.35f, 0.55f, 0.75f, 0.4f);
+            labelColor = new Color(0.78f, 0.82f, 0.9f, 1f);
+            thresholdColor = new Color(0.95f, 0.45f, 0.45f, 0.5f);
+        }
+        fillColor = new Color(lineColor.r, lineColor.g, lineColor.b, light ? 0.2f : 0.16f);
+        dirty = true;
+        RefreshLabelColors();
     }
 
     void EnsureLabels()
@@ -50,13 +79,13 @@ public class TelemetryGraph : MonoBehaviour
         if (lblTitle != null) return;
         var parent = transform;
 
-        lblTitle = MakeLabel(parent, "GTitle", 11, new Color(0.55f, 0.62f, 0.75f), TextAlignmentOptions.Left);
+        lblTitle = MakeLabel(parent, "GTitle", 11, labelColor, TextAlignmentOptions.Left);
         PinLabel(lblTitle.rectTransform, 0f, 1f, 0f, 1f, 4, 2, 180, 16);
 
-        lblMax = MakeLabel(parent, "GMax", 10, new Color(0.7f, 0.78f, 0.9f), TextAlignmentOptions.Right);
+        lblMax = MakeLabel(parent, "GMax", 10, labelColor, TextAlignmentOptions.Right);
         PinLabel(lblMax.rectTransform, 1f, 1f, 1f, 1f, -4, 2, 90, 14);
 
-        lblMin = MakeLabel(parent, "GMin", 10, new Color(0.7f, 0.78f, 0.9f), TextAlignmentOptions.Right);
+        lblMin = MakeLabel(parent, "GMin", 10, labelColor, TextAlignmentOptions.Right);
         PinLabel(lblMin.rectTransform, 1f, 0f, 1f, 0f, -4, 2, 90, 14);
 
         lblCur = MakeLabel(parent, "GCur", 12, lineColor, TextAlignmentOptions.Left);
@@ -64,12 +93,20 @@ public class TelemetryGraph : MonoBehaviour
         PinLabel(lblCur.rectTransform, 0f, 0f, 0f, 0f, 4, 2, 140, 16);
     }
 
+    void RefreshLabelColors()
+    {
+        if (lblTitle) { lblTitle.color = labelColor; }
+        if (lblMax) lblMax.color = labelColor;
+        if (lblMin) lblMin.color = labelColor;
+        if (lblCur) lblCur.color = lineColor;
+    }
+
     static TMP_Text MakeLabel(Transform parent, string name, float size, Color c, TextAlignmentOptions align)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         go.transform.SetParent(parent, false);
         var tmp = go.GetComponent<TextMeshProUGUI>();
-        UiTypography.Apply(tmp, Mathf.Max(14f, size + 2f), c);
+        UiTypography.Apply(tmp, Mathf.Max(13f, size + 1f), c);
         tmp.alignment = align;
         tmp.enableWordWrapping = false;
         tmp.overflowMode = TextOverflowModes.Overflow;
@@ -98,6 +135,7 @@ public class TelemetryGraph : MonoBehaviour
             wrapMode = TextureWrapMode.Clamp
         };
         image.texture = tex;
+        image.color = Color.white;
         dirty = true;
     }
 
@@ -115,8 +153,8 @@ public class TelemetryGraph : MonoBehaviour
         title = graphTitle;
         unit = graphUnit ?? "";
         lineColor = color;
-        fillColor = new Color(color.r, color.g, color.b, 0.14f);
         thresholdY = threshold;
+        ApplyThemeColors();
         if (lblTitle) lblTitle.text = string.IsNullOrEmpty(unit) ? title : $"{title} ({unit})";
         if (lblCur) lblCur.color = color;
     }
@@ -148,17 +186,16 @@ public class TelemetryGraph : MonoBehaviour
         var pixels = new Color[w * h];
         for (int i = 0; i < pixels.Length; i++) pixels[i] = bgColor;
 
-        // Subtle border
-        Color border = new(0.2f, 0.4f, 0.65f, 0.35f);
+        // Border
         for (int x = 0; x < w; x++)
         {
-            pixels[x] = border;
-            pixels[(h - 1) * w + x] = border;
+            pixels[x] = borderColor;
+            pixels[(h - 1) * w + x] = borderColor;
         }
         for (int y = 0; y < h; y++)
         {
-            pixels[y * w] = border;
-            pixels[y * w + (w - 1)] = border;
+            pixels[y * w] = borderColor;
+            pixels[y * w + (w - 1)] = borderColor;
         }
 
         // Grid
@@ -205,23 +242,21 @@ public class TelemetryGraph : MonoBehaviour
             hi += pad;
         }
 
-        // Nice round bounds for readability
         NiceBounds(ref lo, ref hi);
         DisplayMin = lo;
         DisplayMax = hi;
 
-        // Threshold band
         if (thresholdY.HasValue && thresholdY.Value >= lo && thresholdY.Value <= hi)
         {
             int ty = Mathf.RoundToInt(Mathf.InverseLerp(lo, hi, thresholdY.Value) * (h - 1));
             for (int x = 1; x < w - 1; x++)
             {
                 pixels[ty * w + x] = thresholdColor;
-                if (ty + 1 < h - 1) pixels[(ty + 1) * w + x] = Color.Lerp(pixels[(ty + 1) * w + x], thresholdColor, 0.35f);
+                if (ty + 1 < h - 1)
+                    pixels[(ty + 1) * w + x] = Color.Lerp(pixels[(ty + 1) * w + x], thresholdColor, 0.4f);
             }
         }
 
-        // Zero line
         if (showZeroLine && lo < 0f && hi > 0f)
         {
             int zy = Mathf.RoundToInt(Mathf.InverseLerp(lo, hi, 0f) * (h - 1));
@@ -232,12 +267,11 @@ public class TelemetryGraph : MonoBehaviour
         int n = samples.Count;
         float shift = maxSamples - n;
 
-        // Fill under curve
         if (showFill)
         {
             int zeroY = showZeroLine && lo < 0f && hi > 0f
                 ? Mathf.RoundToInt(Mathf.InverseLerp(lo, hi, 0f) * (h - 1))
-                : 0;
+                : 1;
             for (int i = 0; i < n; i++)
             {
                 float xf = (i + shift) / (float)(maxSamples - 1) * (w - 1);
@@ -246,11 +280,11 @@ public class TelemetryGraph : MonoBehaviour
                 int y0 = Mathf.Min(y, zeroY);
                 int y1 = Mathf.Max(y, zeroY);
                 for (int yy = y0; yy <= y1; yy++)
-                    pixels[yy * w + x] = Color.Lerp(pixels[yy * w + x], fillColor, 0.85f);
+                    pixels[yy * w + x] = Color.Lerp(pixels[yy * w + x], fillColor, 0.9f);
             }
         }
 
-        // Line
+        // Smooth line (Catmull-Rom style thick stroke)
         for (int i = 1; i < n; i++)
         {
             float x0 = (i - 1 + shift) / (float)(maxSamples - 1) * (w - 1);
@@ -260,16 +294,17 @@ public class TelemetryGraph : MonoBehaviour
             DrawLine(pixels, w, h, x0, y0, x1, y1, lineColor);
         }
 
-        // Current value marker
+        // Current marker
         {
             float xf = (n - 1 + shift) / (float)(maxSamples - 1) * (w - 1);
             int x = Mathf.Clamp(Mathf.RoundToInt(xf), 2, w - 3);
             int y = Mathf.Clamp(Mathf.RoundToInt(Mathf.InverseLerp(lo, hi, samples[n - 1]) * (h - 1)), 2, h - 3);
+            Color mk = Color.Lerp(lineColor, Color.white, 0.35f);
             for (int dx = -2; dx <= 2; dx++)
             for (int dy = -2; dy <= 2; dy++)
             {
                 if (dx * dx + dy * dy <= 5)
-                    pixels[(y + dy) * w + (x + dx)] = Color.white;
+                    pixels[(y + dy) * w + (x + dx)] = mk;
             }
             pixels[y * w + x] = lineColor;
         }
@@ -277,10 +312,9 @@ public class TelemetryGraph : MonoBehaviour
         tex.SetPixels(pixels);
         tex.Apply(false);
 
-        // Labels
         string u = string.IsNullOrEmpty(unit) ? "" : " " + unit;
-        if (lblMax) lblMax.text = hi.ToString(valueFormat) + u;
-        if (lblMin) lblMin.text = lo.ToString(valueFormat) + u;
+        if (lblMax) { lblMax.text = hi.ToString(valueFormat) + u; lblMax.color = labelColor; }
+        if (lblMin) { lblMin.text = lo.ToString(valueFormat) + u; lblMin.color = labelColor; }
         if (lblCur)
         {
             float cur = samples[n - 1];
@@ -288,7 +322,10 @@ public class TelemetryGraph : MonoBehaviour
             lblCur.color = lineColor;
         }
         if (lblTitle)
-            lblTitle.text = string.IsNullOrEmpty(unit) ? title : $"{title}";
+        {
+            lblTitle.text = title;
+            lblTitle.color = labelColor;
+        }
     }
 
     static void NiceBounds(ref float lo, ref float hi)
@@ -307,16 +344,17 @@ public class TelemetryGraph : MonoBehaviour
 
     static void DrawLine(Color[] px, int w, int h, float x0, float y0, float x1, float y1, Color c)
     {
-        int steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(new Vector2(x0, y0), new Vector2(x1, y1)) * 1.5f));
+        int steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(new Vector2(x0, y0), new Vector2(x1, y1)) * 2f));
         for (int s = 0; s <= steps; s++)
         {
             float t = s / (float)steps;
             int x = Mathf.Clamp(Mathf.RoundToInt(Mathf.Lerp(x0, x1, t)), 0, w - 1);
             int y = Mathf.Clamp(Mathf.RoundToInt(Mathf.Lerp(y0, y1, t)), 0, h - 1);
             px[y * w + x] = c;
-            if (y + 1 < h) px[(y + 1) * w + x] = Color.Lerp(px[(y + 1) * w + x], c, 0.65f);
-            if (y > 0) px[(y - 1) * w + x] = Color.Lerp(px[(y - 1) * w + x], c, 0.4f);
-            if (x + 1 < w) px[y * w + x + 1] = Color.Lerp(px[y * w + x + 1], c, 0.45f);
+            if (y + 1 < h) px[(y + 1) * w + x] = Color.Lerp(px[(y + 1) * w + x], c, 0.7f);
+            if (y > 0) px[(y - 1) * w + x] = Color.Lerp(px[(y - 1) * w + x], c, 0.5f);
+            if (x + 1 < w) px[y * w + x + 1] = Color.Lerp(px[y * w + x + 1], c, 0.5f);
+            if (x > 0) px[y * w + x - 1] = Color.Lerp(px[y * w + x - 1], c, 0.35f);
         }
     }
 }

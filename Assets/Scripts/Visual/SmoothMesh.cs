@@ -92,9 +92,10 @@ public static class SmoothMesh
     }
 
     /// <summary>Циліндр радіусом 0.5, висотою 2 (як Unity default), segments граней.</summary>
-    public static Mesh Cylinder(int segments = 48)
+    public static Mesh Cylinder(int segments = 64)
     {
-        if (cachedCylinder != null) return cachedCylinder;
+        if (cachedCylinder != null && cachedCylinder.name == $"SmoothCyl_{segments}")
+            return cachedCylinder;
 
         var mesh = new Mesh { name = $"SmoothCyl_{segments}" };
         // side + top + bottom
@@ -210,7 +211,7 @@ public static class SmoothMesh
         go.transform.localPosition = pos;
         go.transform.localScale = new Vector3(diameter, halfHeight, diameter);
         var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = Cylinder(48);
+        mf.sharedMesh = Cylinder(64);
         var mr = go.AddComponent<MeshRenderer>();
         mr.sharedMaterial = mat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;

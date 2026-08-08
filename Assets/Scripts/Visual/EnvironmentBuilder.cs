@@ -38,14 +38,17 @@ public static class EnvironmentBuilder
             metallic: 0.0f,
             smooth: 0.04f);
 
-        // Декартова сітка + кругла обрізка + albedo кратерів
+        // Cratered disk — єдина видима поверхня (без сірого «обідка» зовні)
+        float R = LunarTerrainMesh.TerrainRadius;
         LunarTerrainMesh.Create(surface.transform, regolith,
-            resolution: 240, radius: 2800f);
+            resolution: 300, radius: R);
 
-        // Підкладка-диск далі (теж круглий, сірий)
-        var farMat = VisualMaterials.Lit(new Color(0.48f, 0.48f, 0.48f), 0.0f, 0.04f);
+        // Підкладка трохи менша за crater-диск (world radius ≈ 0.99·R).
+        // MakeCylinder: scale.x = diameter, mesh r=0.5 → worldR = diameter/2.
+        var farMat = VisualMaterials.Lit(new Color(0.36f, 0.36f, 0.37f), 0.0f, 0.02f);
+        float underDiameter = R * 2f * 0.99f; // ≈ 2R, не виступає за край
         var far = SmoothMesh.MakeCylinder("HorizonDisk", surface.transform,
-            new Vector3(0f, -4f, 0f), 7200f, 3.5f, farMat);
+            new Vector3(0f, -2.8f, 0f), underDiameter, 2.2f, farMat);
         var fr = far.GetComponent<MeshRenderer>();
         if (fr != null)
         {
@@ -53,15 +56,15 @@ public static class EnvironmentBuilder
             fr.receiveShadows = true;
         }
 
-        // Валуни поза clear-зоною pad
+        // Валуни по всьому диску (включно з краєм)
         var rng = new System.Random(11);
-        var rockA = new Color(0.42f, 0.42f, 0.42f);
-        var rockB = new Color(0.58f, 0.58f, 0.58f);
-        float clear = LunarTerrainMesh.PadClearRadius + 8f;
-        for (int i = 0; i < 50; i++)
+        var rockA = new Color(0.38f, 0.38f, 0.39f);
+        var rockB = new Color(0.55f, 0.55f, 0.56f);
+        float clear = LunarTerrainMesh.PadClearRadius + 4f;
+        for (int i = 0; i < 70; i++)
         {
             float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
-            float dist = clear + 30f + (float)rng.NextDouble() * 1500f;
+            float dist = clear + 10f + (float)rng.NextDouble() * (R * 0.92f - clear);
             float x = Mathf.Cos(ang) * dist;
             float z = Mathf.Sin(ang) * dist;
             float s = 1.3f + (float)rng.NextDouble() * 4.5f;
@@ -117,7 +120,7 @@ public static class EnvironmentBuilder
         // Сіра подушка реголіту під палубою (на рівній clear-зоні, y≈0)
         var bedMat = VisualMaterials.Lit(new Color(0.58f, 0.58f, 0.58f), 0.0f, 0.08f);
         var bed = SmoothMesh.MakeCylinder("PadBed", pad.transform,
-            new Vector3(0f, -0.06f, 0f), 135f, 0.12f, bedMat);
+            new Vector3(0f, -0.06f, 0f), 108f, 0.12f, bedMat);
         bed.GetComponent<MeshRenderer>().receiveShadows = true;
 
         var baseMat = VisualMaterials.Lit(
@@ -276,22 +279,24 @@ public static class EnvironmentBuilder
             sun.type = LightType.Directional;
         }
         sun.name = "Sun";
-        // Жорстке місячне сонце — рельєф читається тінями, колір нейтральний
-        sun.color = new Color(1f, 0.99f, 0.97f);
-        sun.intensity = 2.4f;
+        // Низьке місячне сонце — глибокі контрастні тіні в кратерах
+        sun.color = new Color(1f, 0.98f, 0.94f);
+        sun.intensity = 3.4f;
         sun.shadows = LightShadows.Soft;
-        sun.shadowStrength = 0.9f;
-        sun.shadowBias = 0.03f;
-        // Нижче сонце → довші тіні в кратерах
-        sun.transform.rotation = Quaternion.Euler(32f, -38f, 0f);
+        sun.shadowStrength = 1f;
+        sun.shadowBias = 0.02f;
+        sun.shadowNormalBias = 0.15f;
+        sun.shadowNearPlane = 0.5f;
+        // ~18° elevation → довгі різкі тіні
+        sun.transform.rotation = Quaternion.Euler(18f, -48f, 0f);
 
-        // Fill від реголіту — сірий, без синього/жовтого
-        EnsureDir("FillLight", new Color(0.55f, 0.55f, 0.55f), 0.32f, Quaternion.Euler(195f, 55f, 0f));
-        EnsureDir("RimLight", new Color(0.5f, 0.5f, 0.52f), 0.14f, Quaternion.Euler(-8f, 155f, 0f));
+        // Майже без fill (вакуум) — тіні не «вимиваються»
+        EnsureDir("FillLight", new Color(0.4f, 0.4f, 0.42f), 0.06f, Quaternion.Euler(195f, 55f, 0f));
+        EnsureDir("RimLight", new Color(0.35f, 0.36f, 0.4f), 0.05f, Quaternion.Euler(-8f, 155f, 0f));
 
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.2f, 0.2f, 0.2f);
-        RenderSettings.reflectionIntensity = 0.1f;
+        RenderSettings.ambientLight = new Color(0.05f, 0.05f, 0.055f);
+        RenderSettings.reflectionIntensity = 0.04f;
     }
 
     static void EnsureDir(string name, Color c, float i, Quaternion r)

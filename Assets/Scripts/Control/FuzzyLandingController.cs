@@ -42,10 +42,20 @@ public class FuzzyLandingController : MonoBehaviour
 
     public float CalculateThrust(float height, float verticalVelocity, float mass)
     {
-        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
         float profile = SoftLandingGuidance.ProfileThrust(height, verticalVelocity, mass);
         if (!isActive) return profile;
 
+        float fuzzyThrust = EvaluateSugenoThrust(height, verticalVelocity, mass);
+        return SoftLandingGuidance.BlendThrust(profile, fuzzyThrust, fuzzyThrustWeight, mass, height, maxDevFrac);
+    }
+
+    /// <summary>
+    /// «Сирий» вихід Sugeno (без blend з soft-landing).
+    /// Hybrid викликає саме його, щоб не робити подвійний BlendThrust.
+    /// </summary>
+    public float EvaluateSugenoThrust(float height, float verticalVelocity, float mass)
+    {
+        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
         float h = Mathf.Clamp01(height / Mathf.Max(1f, heightScale));
         float v = Mathf.Clamp(Mathf.Abs(Mathf.Min(0f, verticalVelocity)) / Mathf.Max(1f, velocityScale), 0f, 1.5f);
 
@@ -66,8 +76,7 @@ public class FuzzyLandingController : MonoBehaviour
         }
 
         float mult = sumW > 1e-6f ? sumY / sumW : 1.15f;
-        float fuzzyThrust = mass * g * Mathf.Clamp(mult, 0.85f, 2.9f);
-        return SoftLandingGuidance.BlendThrust(profile, fuzzyThrust, fuzzyThrustWeight, mass, height, maxDevFrac);
+        return mass * g * Mathf.Clamp(mult, 0.85f, 2.9f);
     }
 
     public Vector3 CalculateGimbal(float pitchErrorDeg, float yawErrorDeg, float pitchRateDeg = 0f, float yawRateDeg = 0f)

@@ -89,13 +89,36 @@ public static class UiTheme
         }
     }
 
-    /// <summary>Завжди світлий текст для темних chrome-елементів (меню, модалки).</summary>
+    /// <summary>Світлий текст на темному фоні.</summary>
     public static Color TextOnDark => new(0.98f, 0.98f, 1f, 1f);
 
-    /// <summary>Темний chrome (топ-меню / модалки) — читабельний з TextOnDark.</summary>
+    /// <summary>
+    /// Chrome top-menu / progress: у світлих темах — світла смуга (не чорна),
+    /// у темних — panelSoft.
+    /// </summary>
     public static Color DarkChrome => IsLightBackground
-        ? new Color(0.16f, 0.18f, 0.22f, 0.97f)
+        ? new Color(0.94f, 0.95f, 0.97f, 0.98f)
         : Current.PanelSoft;
+
+    /// <summary>Текст на chrome-смузі (адаптивний).</summary>
+    public static Color ChromeText => IsLightBackground
+        ? Current.Text
+        : TextOnDark;
+
+    /// <summary>Кнопка на chrome / action: світла тема → м'який tint + білий текст на accent-кнопках.</summary>
+    public static Color ActionBtnBg(Color darkTint)
+    {
+        if (!IsLightBackground) return darkTint;
+        // Освітлити dark tint для light UI
+        return Color.Lerp(darkTint, new Color(0.88f, 0.92f, 0.96f, 1f), 0.72f);
+    }
+
+    public static Color ActionBtnText(Color bg)
+    {
+        float luma = 0.2126f * bg.r + 0.7152f * bg.g + 0.0722f * bg.b;
+        // На достатньо темному — білий; на світлому — ink
+        return luma < 0.55f ? TextOnDark : Current.Text;
+    }
 
     /// <summary>Картка результату / overlay.</summary>
     public static Color ModalCard => IsLightBackground
@@ -195,23 +218,23 @@ public static class UiTheme
             gB: new Color(0.95f, 0.6f, 0.3f),
             gC: new Color(0.6f, 0.9f, 0.5f)),
 
-        // 3 Light — світлі панелі, темний текст, чіткі рамки
+        // 3 Light — paper UI, high contrast ink, soft cards
         new(
-            text: new Color(0.08f, 0.09f, 0.12f, 1f),
-            muted: new Color(0.28f, 0.30f, 0.36f, 1f),
-            accent: new Color(0.08f, 0.28f, 0.58f, 1f),
-            amber: new Color(0.7f, 0.4f, 0.02f, 1f),
-            ok: new Color(0.06f, 0.48f, 0.26f, 1f),
-            alert: new Color(0.72f, 0.12f, 0.14f, 1f),
-            panel: new Color(0.97f, 0.97f, 0.98f, 0.98f),
-            panelSoft: new Color(0.92f, 0.93f, 0.95f, 0.98f),
-            btn: new Color(0.88f, 0.89f, 0.92f, 1f),
-            btnActive: new Color(0.75f, 0.82f, 0.93f, 1f),
-            edge: new Color(0.12f, 0.14f, 0.18f, 1f),
-            btnHover: new Color(0.8f, 0.84f, 0.9f, 1f),
-            gA: new Color(0.1f, 0.28f, 0.62f),
-            gB: new Color(0.72f, 0.42f, 0.06f),
-            gC: new Color(0.08f, 0.5f, 0.28f)),
+            text: new Color(0.06f, 0.07f, 0.1f, 1f),
+            muted: new Color(0.32f, 0.34f, 0.4f, 1f),
+            accent: new Color(0.05f, 0.32f, 0.62f, 1f),
+            amber: new Color(0.78f, 0.42f, 0.02f, 1f),
+            ok: new Color(0.04f, 0.5f, 0.28f, 1f),
+            alert: new Color(0.78f, 0.1f, 0.14f, 1f),
+            panel: new Color(0.99f, 0.99f, 1f, 0.97f),
+            panelSoft: new Color(0.94f, 0.95f, 0.97f, 0.98f),
+            btn: new Color(0.9f, 0.91f, 0.94f, 1f),
+            btnActive: new Color(0.72f, 0.82f, 0.95f, 1f),
+            edge: new Color(0.22f, 0.26f, 0.34f, 0.95f),
+            btnHover: new Color(0.84f, 0.88f, 0.94f, 1f),
+            gA: new Color(0.08f, 0.3f, 0.65f),
+            gB: new Color(0.78f, 0.42f, 0.05f),
+            gC: new Color(0.05f, 0.52f, 0.3f)),
 
         // 4 Green
         new(
@@ -267,22 +290,22 @@ public static class UiTheme
             gB: new Color(1f, 0.75f, 0.35f),
             gC: new Color(0.55f, 0.9f, 0.6f)),
 
-        // 7 Ice — світла холодна, темний текст, чіткі рамки
+        // 7 Ice — cold paper, crisp ink, cyan accent
         new(
-            text: new Color(0.07f, 0.11f, 0.16f, 1f),
-            muted: new Color(0.22f, 0.32f, 0.4f, 1f),
-            accent: new Color(0.06f, 0.36f, 0.55f, 1f),
-            amber: new Color(0.58f, 0.36f, 0.04f, 1f),
-            ok: new Color(0.05f, 0.46f, 0.36f, 1f),
-            alert: new Color(0.68f, 0.1f, 0.14f, 1f),
-            panel: new Color(0.93f, 0.96f, 0.98f, 0.98f),
-            panelSoft: new Color(0.86f, 0.92f, 0.96f, 0.98f),
-            btn: new Color(0.8f, 0.88f, 0.93f, 1f),
-            btnActive: new Color(0.62f, 0.8f, 0.92f, 1f),
-            edge: new Color(0.1f, 0.22f, 0.34f, 1f),
-            btnHover: new Color(0.72f, 0.84f, 0.92f, 1f),
-            gA: new Color(0.1f, 0.4f, 0.65f),
-            gB: new Color(0.6f, 0.4f, 0.1f),
-            gC: new Color(0.1f, 0.5f, 0.4f)),
+            text: new Color(0.05f, 0.1f, 0.15f, 1f),
+            muted: new Color(0.28f, 0.38f, 0.46f, 1f),
+            accent: new Color(0.02f, 0.4f, 0.58f, 1f),
+            amber: new Color(0.62f, 0.38f, 0.04f, 1f),
+            ok: new Color(0.03f, 0.48f, 0.38f, 1f),
+            alert: new Color(0.72f, 0.08f, 0.14f, 1f),
+            panel: new Color(0.96f, 0.98f, 1f, 0.97f),
+            panelSoft: new Color(0.9f, 0.94f, 0.97f, 0.98f),
+            btn: new Color(0.86f, 0.91f, 0.95f, 1f),
+            btnActive: new Color(0.65f, 0.84f, 0.94f, 1f),
+            edge: new Color(0.18f, 0.32f, 0.42f, 0.95f),
+            btnHover: new Color(0.78f, 0.88f, 0.94f, 1f),
+            gA: new Color(0.05f, 0.42f, 0.62f),
+            gB: new Color(0.65f, 0.4f, 0.08f),
+            gC: new Color(0.05f, 0.5f, 0.4f)),
     };
 }
