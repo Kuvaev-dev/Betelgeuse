@@ -3,26 +3,27 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Візуалізація траєкторії посадки.
-/// Семпл у FixedUpdate → decimate → Chaikin corner-cutting → рівна крива без «зубів».
-/// Після touchdown лінія лишається видимою до Clear() (лише новий старт / PrepareMode).
+/// Семпл у FixedUpdate → Catmull-Rom spline + Chaikin → плавна крива без «зубів».
+/// Rebuild кожен кадр під час польоту; після touchdown лінія лишається до Clear().
 /// </summary>
 public class TrajectoryVisualizer : MonoBehaviour
 {
     public RocketPhysics rocketPhysics;
     public LineRenderer lineRenderer;
-    public int maxRawPoints = 2500;
+    public int maxRawPoints = 4000;
     public float baseLineWidth = 5.5f;
     public float lineWidth
     {
         get => baseLineWidth;
         set => baseLineWidth = value;
     }
-    public float minPointDistance = 6f;
-    public float minWidth = 3.5f;
+    public float minPointDistance = 2.2f;
+    public float minWidth = 3.2f;
     public float maxWidth = 48f;
     public float widthScalePerMeter = 0.011f;
     public float groundY = 0.7f;
-    public int smoothIterations = 3;
+    public int smoothIterations = 2;
+    public int splineSamplesPerSeg = 6;
 
     public Color goodColor = new(0.35f, 0.95f, 0.65f, 1f);
     public Color badColor = new(1f, 0.4f, 0.42f, 1f);
@@ -31,10 +32,12 @@ public class TrajectoryVisualizer : MonoBehaviour
     readonly List<Vector3> raw = new();
     readonly List<Vector3> display = new();
     Vector3 lastPoint;
+    Vector3 smoothPos;
     bool hasLast;
     bool finished;
     bool visible = true;
-    float rebuildTimer;
+    bool displayDirty = true;
+    int lastPushedCount = -1;
 
     public int PointCount => raw.Count;
     public IReadOnlyList<Vector3> Points => raw;
@@ -58,8 +61,8 @@ public class TrajectoryVisualizer : MonoBehaviour
     {
         lineRenderer.positionCount = 0;
         lineRenderer.useWorldSpace = true;
-        lineRenderer.numCapVertices = 8;
-        lineRenderer.numCornerVertices = 8;
+        lineRenderer.numCapVertices = 12;
+        lineRenderer.numCornerVertices = 12;
         lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         lineRenderer.receiveShadows = false;
         lineRenderer.allowOcclusionWhenDynamic = false;
@@ -82,7 +85,6 @@ public class TrajectoryVisualizer : MonoBehaviour
 
         lineRenderer.textureMode = LineTextureMode.Stretch;
         lineRenderer.alignment = LineAlignment.View;
-        // Vertex colors drive the look (Sprites/Default)
         lineRenderer.startColor = normalColor;
         lineRenderer.endColor = normalColor;
         ApplyColor(normalColor);
@@ -122,21 +124,32 @@ public class TrajectoryVisualizer : MonoBehaviour
         if (rocketPhysics == null)
             rocketPhysics = FindFirstObjectByType<RocketPhysics>();
 
-        // Періодичний rebuild згладженої кривої під час польоту
-        if (!finished && raw.Count >= 2)
+        // Під час польоту — live tip + повний rebuild кожен кадр (плавне подовження)
+        if (!finished && rocketPhysics != null && rocketPhysics.simulationArmed
+            && !rocketPhysics.state.simulationFinished && !rocketPhysics.state.isLanded)
         {
-            rebuildTimer += Time.unscaledDeltaTime;
-            if (rebuildTimer >= 0.08f)
+            Vector3 tip = rocketPhysics.state.position;
+            if (tip.y < groundY) tip.y = groundY;
+            if (hasLast)
+                smoothPos = Vector3.Lerp(smoothPos, tip, 1f - Mathf.Exp(-18f * Time.unscaledDeltaTime));
+            else
+                smoothPos = tip;
+
+            // Додаємо tip у display без очікування minDist (візуальний «хвіст»)
+            if (raw.Count >= 1)
             {
-                rebuildTimer = 0f;
-                RebuildDisplay();
+                RebuildDisplay(liveTip: smoothPos);
             }
+        }
+        else if (displayDirty && raw.Count >= 2)
+        {
+            RebuildDisplay(liveTip: null);
+            displayDirty = false;
         }
 
         if (visible)
         {
             ApplyDistanceWidth();
-            // Гарантія: лінія не «зникає» після посадки
             if (finished && lineRenderer != null)
             {
                 if (!lineRenderer.enabled && visible)
@@ -163,7 +176,7 @@ public class TrajectoryVisualizer : MonoBehaviour
 
         float w = Mathf.Clamp(baseLineWidth + dist * widthScalePerMeter, minWidth, maxWidth);
         lineRenderer.startWidth = w;
-        lineRenderer.endWidth = w * 0.75f;
+        lineRenderer.endWidth = w * 0.72f;
     }
 
     void AddRaw(Vector3 p, bool force)
@@ -171,28 +184,30 @@ public class TrajectoryVisualizer : MonoBehaviour
         if (p.y < groundY) p.y = groundY;
 
         float minDist = minPointDistance;
-        if (p.y < 200f) minDist = 3.5f;
-        if (p.y < 60f) minDist = 1.8f;
-        if (p.y < 15f) minDist = 0.8f;
+        if (p.y < 200f) minDist = 1.4f;
+        if (p.y < 60f) minDist = 0.7f;
+        if (p.y < 15f) minDist = 0.35f;
 
         if (!force && hasLast && (p - lastPoint).sqrMagnitude < minDist * minDist)
             return;
 
-        // Легке згладжування позиції (EMA) — прибирає «зуби» RK4/шуму
+        // Легке EMA — менше шуму RK4, без «стрибків»
         if (hasLast && !force)
-            p = Vector3.Lerp(lastPoint, p, 0.55f);
+            p = Vector3.Lerp(lastPoint, p, 0.72f);
 
         if (raw.Count >= maxRawPoints)
             raw.RemoveAt(0);
 
         raw.Add(p);
         lastPoint = p;
+        smoothPos = p;
         hasLast = true;
+        displayDirty = true;
     }
 
-    void RebuildDisplay()
+    void RebuildDisplay(Vector3? liveTip)
     {
-        if (raw.Count < 2)
+        if (raw.Count < 2 && liveTip == null)
         {
             display.Clear();
             display.AddRange(raw);
@@ -200,12 +215,26 @@ public class TrajectoryVisualizer : MonoBehaviour
             return;
         }
 
-        // 1) Decimate for smoothness (keep endpoints)
-        var sparse = Decimate(raw, 1.5f);
-        // 2) Chaikin corner-cutting → C1-like curve
+        // 1) Sparse control points
+        var sparse = Decimate(raw, 0.9f);
+
+        // 2) Live tip as final control
+        if (liveTip.HasValue)
+        {
+            Vector3 tip = liveTip.Value;
+            if (sparse.Count == 0 || (sparse[sparse.Count - 1] - tip).sqrMagnitude > 0.04f)
+                sparse.Add(tip);
+            else
+                sparse[sparse.Count - 1] = tip;
+        }
+
+        // 3) Catmull-Rom densify → C1 curve
+        var spline = CatmullRom(sparse, splineSamplesPerSeg);
+
+        // 4) Light Chaikin polish
         display.Clear();
-        display.AddRange(Chaikin(sparse, smoothIterations));
-        // 3) Lift slightly above terrain to avoid z-fight
+        display.AddRange(Chaikin(spline, smoothIterations));
+
         for (int i = 0; i < display.Count; i++)
         {
             var p = display[i];
@@ -219,7 +248,11 @@ public class TrajectoryVisualizer : MonoBehaviour
     {
         if (lineRenderer == null) return;
         int n = display.Count;
-        lineRenderer.positionCount = n;
+        if (n != lastPushedCount)
+        {
+            lineRenderer.positionCount = n;
+            lastPushedCount = n;
+        }
         for (int i = 0; i < n; i++)
             lineRenderer.SetPosition(i, display[i]);
         lineRenderer.enabled = visible;
@@ -243,6 +276,45 @@ public class TrajectoryVisualizer : MonoBehaviour
         return dst;
     }
 
+    static List<Vector3> CatmullRom(List<Vector3> pts, int samplesPerSeg)
+    {
+        if (pts.Count < 2) return new List<Vector3>(pts);
+        if (pts.Count == 2 || samplesPerSeg <= 1)
+            return new List<Vector3>(pts);
+
+        samplesPerSeg = Mathf.Clamp(samplesPerSeg, 2, 16);
+        var dst = new List<Vector3>(pts.Count * samplesPerSeg);
+
+        for (int i = 0; i < pts.Count - 1; i++)
+        {
+            Vector3 p0 = pts[Mathf.Max(i - 1, 0)];
+            Vector3 p1 = pts[i];
+            Vector3 p2 = pts[i + 1];
+            Vector3 p3 = pts[Mathf.Min(i + 2, pts.Count - 1)];
+
+            int steps = (i == pts.Count - 2) ? samplesPerSeg : samplesPerSeg;
+            for (int s = 0; s < steps; s++)
+            {
+                float t = s / (float)samplesPerSeg;
+                dst.Add(CatmullPoint(p0, p1, p2, p3, t));
+            }
+        }
+        dst.Add(pts[pts.Count - 1]);
+        return dst;
+    }
+
+    static Vector3 CatmullPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+    {
+        float t2 = t * t;
+        float t3 = t2 * t;
+        return 0.5f * (
+            (2f * p1) +
+            (-p0 + p2) * t +
+            (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
+            (-p0 + 3f * p1 - 3f * p2 + p3) * t3
+        );
+    }
+
     static List<Vector3> Chaikin(List<Vector3> pts, int iterations)
     {
         if (pts.Count < 3 || iterations <= 0) return new List<Vector3>(pts);
@@ -250,7 +322,7 @@ public class TrajectoryVisualizer : MonoBehaviour
         for (int it = 0; it < iterations; it++)
         {
             var next = new List<Vector3>(cur.Count * 2);
-            next.Add(cur[0]); // keep start
+            next.Add(cur[0]);
             for (int i = 0; i < cur.Count - 1; i++)
             {
                 Vector3 p0 = cur[i];
@@ -258,14 +330,11 @@ public class TrajectoryVisualizer : MonoBehaviour
                 next.Add(Vector3.Lerp(p0, p1, 0.25f));
                 next.Add(Vector3.Lerp(p0, p1, 0.75f));
             }
-            next.Add(cur[cur.Count - 1]); // keep end
-            // Cap growth
-            if (next.Count > 8000)
-            {
-                // thin again
-                cur = Decimate(next, 0.8f);
-            }
-            else cur = next;
+            next.Add(cur[cur.Count - 1]);
+            if (next.Count > 10000)
+                cur = Decimate(next, 0.6f);
+            else
+                cur = next;
         }
         return cur;
     }
@@ -277,15 +346,13 @@ public class TrajectoryVisualizer : MonoBehaviour
         {
             Vector3 touch = rocketPhysics.state.position;
             touch.y = groundY + 0.2f;
-            // Дотягти до pad плавно
             if (hasLast && lastPoint.y > groundY + 1.5f)
             {
-                int steps = Mathf.Clamp(Mathf.CeilToInt((lastPoint.y - groundY) / 8f), 2, 8);
+                int steps = Mathf.Clamp(Mathf.CeilToInt((lastPoint.y - groundY) / 6f), 3, 12);
                 Vector3 from = lastPoint;
                 for (int i = 1; i <= steps; i++)
                 {
                     float t = i / (float)steps;
-                    // smoothstep
                     t = t * t * (3f - 2f * t);
                     Vector3 p = Vector3.Lerp(from, touch, t);
                     p.y = Mathf.Lerp(from.y, touch.y, t);
@@ -297,13 +364,14 @@ public class TrajectoryVisualizer : MonoBehaviour
                 raw.Add(touch);
             }
             lastPoint = touch;
+            smoothPos = touch;
             hasLast = true;
         }
 
-        RebuildDisplay();
+        RebuildDisplay(liveTip: null);
+        displayDirty = false;
         ApplyColor(successful ? goodColor : badColor);
         ApplyDistanceWidth();
-        // Жорстко показати
         if (lineRenderer != null)
         {
             lineRenderer.enabled = visible;
@@ -318,7 +386,8 @@ public class TrajectoryVisualizer : MonoBehaviour
         display.Clear();
         hasLast = false;
         finished = false;
-        rebuildTimer = 0f;
+        displayDirty = true;
+        lastPushedCount = -1;
         if (lineRenderer != null)
         {
             lineRenderer.positionCount = 0;
@@ -363,8 +432,18 @@ public class TrajectoryVisualizer : MonoBehaviour
         lineRenderer.endColor = new Color(c.r, c.g, c.b, 0.92f);
         var g = new Gradient();
         g.SetKeys(
-            new[] { new GradientColorKey(c, 0f), new GradientColorKey(c, 1f) },
-            new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0.9f, 1f) });
+            new[]
+            {
+                new GradientColorKey(c, 0f),
+                new GradientColorKey(Color.Lerp(c, Color.white, 0.15f), 0.55f),
+                new GradientColorKey(c, 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.55f, 0f),
+                new GradientAlphaKey(0.95f, 0.35f),
+                new GradientAlphaKey(0.9f, 1f)
+            });
         lineRenderer.colorGradient = g;
 
         if (lineRenderer.material != null)

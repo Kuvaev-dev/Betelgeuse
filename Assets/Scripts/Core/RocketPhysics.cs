@@ -135,6 +135,7 @@ public class RocketPhysics : MonoBehaviour
         if (state.position.y < 0f)
             state.position.y = 0f;
 
+        ClampToTerrainDisk();
         SyncTransformWithState();
         if (logger != null) logger.Log(state);
 
@@ -581,6 +582,31 @@ public class RocketPhysics : MonoBehaviour
     {
         var cam = FindFirstObjectByType<CameraFollow>();
         cam?.SnapNow();
+    }
+
+    /// <summary>
+    /// Тримає горизонтальну позицію всередині crater-диска (з м'яким відскоком швидкості).
+    /// </summary>
+    void ClampToTerrainDisk()
+    {
+        // Невеликий запас, щоб корпус/ноги не «звисали» з краю
+        float maxR = LunarTerrainMesh.TerrainRadius * 0.92f;
+        float hx = state.position.x;
+        float hz = state.position.z;
+        float r2 = hx * hx + hz * hz;
+        float maxR2 = maxR * maxR;
+        if (r2 <= maxR2) return;
+
+        float r = Mathf.Sqrt(r2);
+        float s = maxR / r;
+        state.position.x = hx * s;
+        state.position.z = hz * s;
+
+        // Гасимо радіальну складову швидкості назовні
+        Vector3 radial = new Vector3(state.position.x, 0f, state.position.z).normalized;
+        float vOut = Vector3.Dot(state.velocity, radial);
+        if (vOut > 0f)
+            state.velocity -= radial * vOut;
     }
 
     public void SyncTransformWithState()

@@ -2,14 +2,14 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Круглий диск Місяця: декартова сітка, обрізана по колу.
-/// Кратери simple/complex по всьому диску (включно з краєм — без «порожнього кільця»).
-/// Albedo: чорне дно, сіра рівнина, стриманий вал, mare patches.
+/// Процедурний диск Місяця (R≈2000 м) для демо посадки.
+/// Декартова heightmap + crater field (simple/complex bowl, ejecta, mare).
+/// C2-профілі кратерів, soft-min накладання, нейтральний сірий albedo.
 /// </summary>
 public static class LunarTerrainMesh
 {
-    /// <summary>Рівна зона під палубою (~pad deck R≈51); кратери одразу за краєм.</summary>
-    public const float PadClearRadius = 52f;
+    /// <summary>Рівна зона під палубою (berm ~R64); кратери одразу за краєм.</summary>
+    public const float PadClearRadius = 68f;
 
     /// <summary>Радіус cratered-диска (HorizonDisk ≤ цього).</summary>
     public const float TerrainRadius = 2000f;
@@ -17,7 +17,8 @@ public static class LunarTerrainMesh
     public static Mesh Build(out Texture2D albedoTex, int resolution = 256, float radius = -1f, int seed = 42)
     {
         if (radius < 1f) radius = TerrainRadius;
-        resolution = Mathf.Clamp(resolution, 64, 384);
+        // Вища сітка → менше «піксельних» кратерів
+        resolution = Mathf.Clamp(resolution, 96, 448);
         var rng = new System.Random(seed);
         var craters = BuildCraterField(rng, radius);
 
@@ -38,7 +39,11 @@ public static class LunarTerrainMesh
             }
         }
 
-        int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 2, 256, 1024));
+        // 3×3 згладжування — природні схили без «сходинок»
+        SmoothHeightField(height, n, 3);
+        SmoothHeightField(shade, n, 2);
+
+        int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 4, 1024, 2048));
         albedoTex = BuildAlbedo(shade, n, texSize, radius, craters, seed);
 
         var vertList = new List<Vector3>(n * n / 2);
@@ -69,7 +74,8 @@ public static class LunarTerrainMesh
             }
         }
 
-        var tris = new List<int>(resolution * resolution * 12);
+        // Одна сторона (вгору) — без double-sided faceting
+        var tris = new List<int>(resolution * resolution * 6);
         for (int iz = 0; iz < resolution; iz++)
         {
             for (int ix = 0; ix < resolution; ix++)
@@ -82,8 +88,6 @@ public static class LunarTerrainMesh
 
                 tris.Add(i00); tris.Add(i01); tris.Add(i10);
                 tris.Add(i10); tris.Add(i01); tris.Add(i11);
-                tris.Add(i00); tris.Add(i10); tris.Add(i01);
-                tris.Add(i10); tris.Add(i11); tris.Add(i01);
             }
         }
 
@@ -92,21 +96,20 @@ public static class LunarTerrainMesh
         for (int i = 0; i < norms.Length; i++) norms[i] = Vector3.zero;
 
         var triArr = tris.ToArray();
-        for (int t = 0; t < triArr.Length; t += 6)
+        for (int t = 0; t < triArr.Length; t += 3)
         {
-            for (int k = 0; k < 6; k += 3)
-            {
-                int i0 = triArr[t + k], i1 = triArr[t + k + 1], i2 = triArr[t + k + 2];
-                Vector3 faceN = Vector3.Cross(verts[i1] - verts[i0], verts[i2] - verts[i0]);
-                if (faceN.y < 0f) continue;
-                norms[i0] += faceN;
-                norms[i1] += faceN;
-                norms[i2] += faceN;
-            }
+            int i0 = triArr[t], i1 = triArr[t + 1], i2 = triArr[t + 2];
+            Vector3 e1 = verts[i1] - verts[i0];
+            Vector3 e2 = verts[i2] - verts[i0];
+            Vector3 faceN = Vector3.Cross(e1, e2);
+            // area-weighted
+            norms[i0] += faceN;
+            norms[i1] += faceN;
+            norms[i2] += faceN;
         }
         for (int i = 0; i < norms.Length; i++)
         {
-            if (norms[i].sqrMagnitude > 1e-10f) norms[i].Normalize();
+            if (norms[i].sqrMagnitude > 1e-12f) norms[i].Normalize();
             else norms[i] = Vector3.up;
         }
 
@@ -170,20 +173,10 @@ public static class LunarTerrainMesh
                 float s = Mathf.Lerp(Mathf.Lerp(s00, s10, tx), Mathf.Lerp(s01, s11, tx), ty);
                 s = Mathf.Clamp01(s);
 
-                // Дно = майже чорне; рівнина сіра; вал трохи світліший (без білих променів)
-                float g;
-                if (s < 0.12f)
-                    g = Mathf.Lerp(0.01f, 0.04f, s / 0.12f);           // дно — чорне
-                else if (s < 0.28f)
-                    g = Mathf.Lerp(0.04f, 0.18f, (s - 0.12f) / 0.16f); // нижня стінка
-                else if (s < 0.50f)
-                    g = Mathf.Lerp(0.18f, 0.42f, (s - 0.28f) / 0.22f); // стінка
-                else if (s < 0.72f)
-                    g = Mathf.Lerp(0.42f, 0.52f, (s - 0.50f) / 0.22f); // рівнина
-                else
-                    g = Mathf.Lerp(0.52f, 0.62f, (s - 0.72f) / 0.28f); // вал (стриманий)
+                // Плавна крива shade→albedo (без ступінчастих band'ів)
+                float g = SmoothAlbedoCurve(s);
 
-                // Mare darkening
+                // Mare darkening (нейтрально-сірі «моря»)
                 float mare = 0f;
                 for (int m = 0; m < mareCount; m++)
                 {
@@ -193,19 +186,28 @@ public static class LunarTerrainMesh
                     {
                         float t = 1f - md / mr;
                         t = t * t * (3f - 2f * t);
-                        mare = Mathf.Max(mare, t * 0.18f);
+                        mare = Mathf.Max(mare, t * 0.16f);
                     }
                 }
                 g *= 1f - mare;
 
-                // Дрібний шум реголіту (без радіальних «променів»)
-                float nse = (Hash(x * 17, y * 23) - 0.5f) * 0.018f;
-                nse += (Hash(x * 41 + 3, y * 37 - 5) - 0.5f) * 0.008f;
+                // Multi-scale regolith grain (continuous noise)
+                float nse = Noise2(wx * 0.06f, wz * 0.06f) * 0.014f;
+                nse += Noise2(wx * 0.18f + 4f, wz * 0.18f - 3f) * 0.008f;
+                nse += Noise2(wx * 0.45f - 2f, wz * 0.45f + 7f) * 0.004f;
+                float padDist = Mathf.Sqrt(wx * wx + wz * wz);
+                if (padDist < PadClearRadius + 55f)
+                {
+                    float pt = Mathf.SmoothStep(0f, 1f, padDist / (PadClearRadius + 55f));
+                    g *= Mathf.Lerp(0.80f, 1f, pt);
+                }
+                // Ледь помітні «промені» ejecta біля великих кратерів (м'яко)
                 g = Mathf.Clamp01(g + nse);
 
-                float rC = g * 0.98f;
-                float gC = g * 0.99f;
-                float bC = Mathf.Clamp01(g * 1.01f);
+                // Нейтральний холоднувато-сірий (місячний реголіт)
+                float rC = Mathf.Clamp01(g * 0.99f);
+                float gC = g;
+                float bC = Mathf.Clamp01(g * 1.02f);
                 cols[y * texSize + x] = new Color(rC, gC, bC, 1f);
             }
         }
@@ -228,16 +230,16 @@ public static class LunarTerrainMesh
         const float clear = PadClearRadius + 2f;
         var list = new List<Crater>(800);
 
-        // Біля pad — одразу після clear-зони
-        for (int i = 0; i < 32; i++)
+        // Біля pad — кільце дрібних кратерів (природний «пояс»)
+        for (int i = 0; i < 40; i++)
         {
-            float ang = i * (Mathf.PI * 2f / 32f) + 0.1f;
-            float R = 7f + (float)rng.NextDouble() * 26f;
-            float dist = clear + R * 1.1f + (float)rng.NextDouble() * 65f;
+            float ang = i * (Mathf.PI * 2f / 40f) + 0.08f * (float)rng.NextDouble();
+            float R = 5f + (float)rng.NextDouble() * 22f;
+            float dist = clear + R * 1.05f + (float)rng.NextDouble() * 55f;
             float x = Mathf.Cos(ang) * dist;
             float z = Mathf.Sin(ang) * dist;
-            if (Fits(x, z, R * 1.3f, clear, terrainRadius))
-                list.Add(Make(x, z, R, R * 0.24f, true, false, rng));
+            if (Fits(x, z, R * 1.25f, clear, terrainRadius))
+                list.Add(Make(x, z, R, R * 0.22f, true, false, rng));
         }
 
         // Великі complex-басейни
@@ -385,23 +387,28 @@ public static class LunarTerrainMesh
 
         if (dist <= PadClearRadius)
         {
-            shade = 0.55f;
-            return 0f;
+            // Ідеально рівна зона під падом + ледь помітний мікровисочинний шум
+            float micro = Noise2(x * 0.35f, z * 0.35f) * 0.012f;
+            // Легке «випалення» ближче до центру (темніший shade)
+            float padT = dist / Mathf.Max(1f, PadClearRadius);
+            shade = Mathf.Lerp(0.42f, 0.56f, padT * padT);
+            return micro;
         }
 
-        // Multi-octave highland undulation (щільніше біля краю)
+        // Multi-octave highland undulation (smooth hills, no grid feel)
         float h = 0f;
-        h += Noise2(x * 0.0028f, z * 0.0028f) * 3.4f;
-        h += Noise2(x * 0.009f + 11f, z * 0.009f - 7f) * 1.25f;
-        h += Noise2(x * 0.028f, z * 0.028f) * 0.42f;
-        h += Noise2(x * 0.09f + 3f, z * 0.09f) * 0.18f;
-        h += Noise2(x * 0.22f - 5f, z * 0.22f + 2f) * 0.07f;
+        h += Noise2(x * 0.0022f, z * 0.0022f) * 4.0f;
+        h += Noise2(x * 0.0065f + 11f, z * 0.0065f - 7f) * 1.8f;
+        h += Noise2(x * 0.018f, z * 0.018f) * 0.7f;
+        h += Noise2(x * 0.055f + 3f, z * 0.055f) * 0.28f;
+        h += Noise2(x * 0.14f - 5f, z * 0.14f + 2f) * 0.1f;
+        h += Noise2(x * 0.35f + 1f, z * 0.35f - 2f) * 0.035f;
         float edgeN = dist / Mathf.Max(1f, terrainRadius);
-        h += edgeN * edgeN * 2.2f;
+        h += edgeN * edgeN * 1.8f;
 
-        // Швидкий перехід pad → рельєф (майже без «порожнього кільця»)
-        float blend = Mathf.Clamp01((dist - PadClearRadius) / 8f);
-        h *= blend * blend;
+        // Плавний перехід pad → рельєф
+        float blend = Mathf.SmoothStep(0f, 1f, (dist - PadClearRadius) / 22f);
+        h *= blend;
 
         float floorH = 0f;
         float rimH = 0f;
@@ -423,97 +430,167 @@ public static class LunarTerrainMesh
             float p = CraterProfile(d, c, out float localShade) * blend;
             anyCrater = true;
 
+            // Soft-min / soft-max — природне накладання кратерів
             if (p < 0f)
-                floorH = Mathf.Min(floorH, p);
+                floorH = SoftMin(floorH, p, 1.2f);
             else
-                rimH = Mathf.Max(rimH, p);
+                rimH = SoftMax(rimH, p, 0.9f);
 
             if (localShade < minShade)
-                minShade = localShade;
+                minShade = Mathf.Lerp(minShade, localShade, 0.85f);
         }
 
         float craterH = floorH + rimH;
         if (!anyCrater) craterH = 0f;
 
+        // М'яка корекція shade від глибини (без жорстких порогів)
         shade = minShade;
-        // Жорстко чорне дно
-        if (craterH < -3f) shade = 0.02f;
-        else if (craterH < -1.2f) shade = Mathf.Min(shade, 0.05f);
-        else if (craterH < -0.35f) shade = Mathf.Min(shade, 0.12f);
-        // Вал — без «білого» (макс ~0.65)
-        else if (rimH > 0.5f) shade = Mathf.Min(Mathf.Max(shade, 0.58f), 0.65f);
+        if (craterH < -0.2f)
+        {
+            float depthT = Mathf.Clamp01((-craterH) / 8f);
+            shade = Mathf.Min(shade, Mathf.Lerp(0.18f, 0.03f, Quintic01(depthT)));
+        }
+        else if (rimH > 0.25f)
+        {
+            float rimT = Mathf.Clamp01(rimH / 4f);
+            shade = Mathf.Clamp(Mathf.Max(shade, Mathf.Lerp(0.54f, 0.60f, rimT)), 0f, 0.62f);
+        }
 
         return h + craterH;
     }
 
     /// <summary>
-    /// Lunar-like bowl: flat/raised floor → steep wall → sharp rim → ejecta blanket.
-    /// Complex: central peak + mild terrace kink on wall.
+    /// Природний lunar bowl: C2-гладкі переходи floor→wall→rim→ejecta.
+    /// Без гострих зламів і «сходинок».
     /// </summary>
     static float CraterProfile(float d, Crater c, out float shade)
     {
         float R = Mathf.Max(1f, c.radius);
         float t = d / R;
-        float floorT = c.floorFrac;
-        shade = 0.56f;
+        float floorT = Mathf.Clamp(c.floorFrac, 0.12f, 0.55f);
+        shade = 0.54f;
 
-        // Central peak (complex) — теж темний, не світлий
-        if (c.peakH > 0.05f && d < c.peakR * 2.8f && t < floorT * 1.2f)
+        // Central peak (complex) — gaussian, dark
+        if (c.peakH > 0.05f && t < floorT * 1.15f)
         {
-            float pt = d / Mathf.Max(0.25f, c.peakR);
-            float peak = c.peakH * Mathf.Exp(-pt * pt * 1.35f);
-            shade = 0.08f;
-            return -c.depth + peak;
+            float pt = d / Mathf.Max(0.35f, c.peakR);
+            float peak = c.peakH * Mathf.Exp(-pt * pt * 1.55f);
+            float floorBase = -c.depth + 0.04f * c.depth * (t / Mathf.Max(0.05f, floorT));
+            shade = Mathf.Lerp(0.06f, 0.12f, Mathf.Clamp01(pt * 0.5f));
+            return floorBase + peak;
         }
 
         if (t <= floorT)
         {
+            // Майже плоске дно + ледь піднятий край дна
             float ft = t / Mathf.Max(0.05f, floorT);
-            float bowl = ft * ft * 0.06f * c.depth;
-            shade = 0.015f; // чорне дно
+            float bowl = Quintic01(ft) * 0.05f * c.depth;
+            shade = Mathf.Lerp(0.03f, 0.08f, ft);
             return -c.depth + bowl;
         }
 
         if (t <= 1f)
         {
-            float u = (t - floorT) / Mathf.Max(0.06f, 1f - floorT);
+            float u = (t - floorT) / Mathf.Max(0.08f, 1f - floorT);
             u = Mathf.Clamp01(u);
+            // Quintic smoothstep — C2, без кутів
+            float wall = Quintic01(u);
 
-            float uPow = Mathf.Pow(u, 1.35f);
-            float uSmooth = u * u * u * (u * (u * 6f - 15f) + 10f);
-            float wall = Mathf.Lerp(uPow, uSmooth, 0.45f);
-
-            if (c.complex && c.terrace > 0.1f)
+            // М'яка тераса (complex) — локальний bump, не злам
+            if (c.complex && c.terrace > 0.15f && c.terrace < 0.9f)
             {
-                float tw = 0.12f;
-                float td = Mathf.Abs(u - c.terrace);
-                if (td < tw)
-                {
-                    float k = 1f - td / tw;
-                    wall += k * k * 0.06f;
-                }
+                float tw = 0.14f;
+                float td = (u - c.terrace) / tw;
+                float k = Mathf.Exp(-td * td * 2.2f);
+                wall = Mathf.Clamp01(wall + k * 0.045f);
             }
 
-            // Стінка: від чорного дна до сірого валу (без білого)
-            shade = Mathf.Lerp(0.02f, 0.62f, wall);
+            // Стінка: темне дно → сірий вал
+            shade = Mathf.Lerp(0.06f, 0.58f, wall);
             float h = Mathf.Lerp(-c.depth, c.rimH, wall);
-            if (u > 0.88f)
+
+            // М'який crest на валу (parabola bump)
+            float crestW = 0.18f;
+            float crestT = (u - (1f - crestW)) / crestW;
+            if (crestT > 0f && crestT < 1f)
             {
-                float crest = (u - 0.88f) / 0.12f;
-                h += c.rimH * 0.12f * crest * (1f - crest) * 4f;
-                shade = Mathf.Min(0.64f, Mathf.Lerp(shade, 0.64f, crest * 0.35f));
+                float bump = crestT * (1f - crestT) * 4f; // 0..1..0
+                h += c.rimH * 0.1f * bump;
+                shade = Mathf.Min(0.62f, shade + 0.04f * bump);
             }
             return h;
         }
 
-        // Ejecta — м’який сірий спад, без яскравих «променів»
-        float te = (t - 1f) / Mathf.Max(0.08f, c.ejecta - 1f);
+        // Ejecta blanket — плавний спад
+        float te = (t - 1f) / Mathf.Max(0.12f, c.ejecta - 1f);
         if (te >= 1f) { shade = 0.54f; return 0f; }
         te = Mathf.Clamp01(te);
-        float fall = 1f - te;
-        fall = fall * fall * (0.55f + 0.45f * fall);
-        shade = Mathf.Lerp(0.60f, 0.54f, Mathf.Sqrt(te));
-        return c.rimH * fall * 0.65f;
+        float fall = 1f - Quintic01(te);
+        shade = Mathf.Lerp(0.58f, 0.54f, te);
+        return c.rimH * fall * 0.55f;
+    }
+
+    static float Quintic01(float t)
+    {
+        t = Mathf.Clamp01(t);
+        // 6t^5 - 15t^4 + 10t^3
+        return t * t * t * (t * (t * 6f - 15f) + 10f);
+    }
+
+    static float SoftMin(float a, float b, float k)
+    {
+        // polynomial soft-min (k > 0)
+        float h = Mathf.Clamp01(0.5f + 0.5f * (b - a) / k);
+        return Mathf.Lerp(b, a, h) - k * h * (1f - h);
+    }
+
+    static float SoftMax(float a, float b, float k)
+    {
+        float h = Mathf.Clamp01(0.5f + 0.5f * (a - b) / k);
+        return Mathf.Lerp(b, a, h) + k * h * (1f - h);
+    }
+
+    static float SmoothAlbedoCurve(float s)
+    {
+        s = Mathf.Clamp01(s);
+        // М'яка сіра палітра: дно темно-сіре → рівнина → ледь світліший вал
+        if (s < 0.12f)
+            return Mathf.Lerp(0.04f, 0.10f, Quintic01(s / 0.12f));
+        if (s < 0.32f)
+            return Mathf.Lerp(0.10f, 0.32f, Quintic01((s - 0.12f) / 0.20f));
+        if (s < 0.52f)
+            return Mathf.Lerp(0.32f, 0.48f, Quintic01((s - 0.32f) / 0.20f));
+        if (s < 0.72f)
+            return Mathf.Lerp(0.48f, 0.54f, Quintic01((s - 0.52f) / 0.20f));
+        return Mathf.Lerp(0.54f, 0.60f, Quintic01((s - 0.72f) / 0.28f));
+    }
+
+    static void SmoothHeightField(float[,] f, int n, int passes)
+    {
+        if (f == null || n < 3 || passes <= 0) return;
+        var tmp = new float[n, n];
+        for (int p = 0; p < passes; p++)
+        {
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float sum = 0f;
+                float w = 0f;
+                for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int xx = x + dx, yy = y + dy;
+                    if (xx < 0 || yy < 0 || xx >= n || yy >= n) continue;
+                    float ww = (dx == 0 && dy == 0) ? 4f : ((dx == 0 || dy == 0) ? 2f : 1f);
+                    sum += f[xx, yy] * ww;
+                    w += ww;
+                }
+                tmp[x, y] = sum / Mathf.Max(1e-6f, w);
+            }
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                f[x, y] = tmp[x, y];
+        }
     }
 
     static float Noise2(float x, float y)
@@ -550,7 +627,7 @@ public static class LunarTerrainMesh
         go.transform.SetParent(parent, false);
         go.transform.localPosition = Vector3.zero;
 
-        var mesh = Build(out Texture2D albedo, resolution, radius, 42);
+        var mesh = Build(out Texture2D albedo, Mathf.Max(resolution, 400), radius, 42);
         var mf = go.AddComponent<MeshFilter>();
         mf.sharedMesh = mesh;
 
@@ -558,7 +635,7 @@ public static class LunarTerrainMesh
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
         if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
         if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
-        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.025f);
+        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.04f);
         if (mat.HasProperty("_BaseMap"))
         {
             mat.SetTexture("_BaseMap", albedo);
@@ -571,8 +648,9 @@ public static class LunarTerrainMesh
         mr.sharedMaterial = mat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
         mr.receiveShadows = true;
-        if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 0f);
-        mat.doubleSidedGI = true;
+        // Back-face cull — чистіші нормалі/тіні на рельєфі
+        if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 2f);
+        mat.doubleSidedGI = false;
 
         return go;
     }

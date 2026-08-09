@@ -82,15 +82,15 @@ public static class UILocale
         ["time_fmt"] = new("Час  {0:F1} с", "Time  {0:F1} s"),
         ["algo_fmt"] = new("Алгоритм:  {0}", "Algorithm:  {0}"),
 
-        // Status
+        // Status (короткі — вміщуються в бейдж ~118 px)
         ["st_ready"] = new("ГОТОВО", "READY"),
-        ["st_wait"] = new("ОЧІКУВАННЯ", "STANDBY"),
+        ["st_wait"] = new("ОЧІК.", "WAIT"),
         ["st_start"] = new("СТАРТ", "START"),
-        ["st_descent"] = new("СПУСК", "DESCENT"),
-        ["st_success"] = new("УСПІХ", "SUCCESS"),
-        ["st_fail"] = new("НЕВДАЧА", "FAILURE"),
-        ["st_stop"] = new("ЗУПИНЕНО", "STOPPED"),
-        ["st_batch"] = new("АВТО-ТЕСТ", "AUTO-TEST"),
+        ["st_descent"] = new("СПУСК", "DOWN"),
+        ["st_success"] = new("УСПІХ", "OK"),
+        ["st_fail"] = new("ЗБІЙ", "FAIL"),
+        ["st_stop"] = new("СТОП", "STOP"),
+        ["st_batch"] = new("ТЕСТ", "TEST"),
 
         // Modes
         ["mode_pid"] = new("Класичний PID", "Classical PID"),
@@ -181,14 +181,14 @@ public static class UILocale
         // How-to
         ["how"] = new("[1-4] алгоритм  ->  [Space] запуск",
             "[1-4] algorithm  ->  [Space] start"),
-        ["hint"] = new("① [4] Гібрид   ② [Space] Запуск   ③ Успіх/Невдача",
-            "① [4] Hybrid   ② [Space] Start   ③ Success/Fail"),
-        ["tip"] = new("1-4 алгоритм · I ідеал · Y тема · G мова · Space старт · Esc стоп · E експорт · H панелі",
-            "1-4 algorithm · I ideal · Y theme · G lang · Space start · Esc stop · E export · H panels"),
-        ["bottom"] = new("Успіх: |Vy|<3.5 · нахил<7° · промах<25м · |Vh|<5  ·  I ідеал · Y тема · Space старт · E експорт",
-            "Success: |Vy|<3.5 · tilt<7° · miss<25m · |Vh|<5  ·  I ideal · Y theme · Space start · E export"),
-        ["graph_hint"] = new("min/max · поточне · 0 = жовта лінія",
-            "min/max · current · 0 = yellow line"),
+        ["hint"] = new("1) [4] Гібрид   2) [Space] Старт   3) Дивись результат",
+            "1) [4] Hybrid   2) [Space] Start   3) See result"),
+        ["tip"] = new("1-4 алгоритм | I ідеал | Y тема | G мова | Space старт | Esc стоп | E експорт | H панелі",
+            "1-4 mode | I ideal | Y theme | G lang | Space start | Esc stop | E export | H panels"),
+        ["bottom"] = new("Критерії: |Vy|<3.5 м/с  нахил<7 град  промах<25 м  |Vh|<5 м/с  |  Клавіші: 1-4 Space Esc I H F C R Y E",
+            "Criteria: |Vy|<3.5 m/s  tilt<7 deg  miss<25 m  |Vh|<5 m/s  |  Keys: 1-4 Space Esc I H F C R Y E"),
+        ["graph_hint"] = new("min/max, поточне; 0 = вісь",
+            "min/max, current; 0 = axis"),
 
         // Sliders
         ["sl_tests"] = new("Запусків на алгоритм", "Runs per algorithm"),

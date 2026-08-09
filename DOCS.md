@@ -172,11 +172,17 @@ h&lt;50 м → α,β→0 (пріоритет fuzzy).
 
 | Компонент | Опис |
 |-----------|------|
-| `LunarTerrainMesh` | Диск R=2000 м, кратери до ~97% радіуса, чорне дно |
-| `RocketVisualBuilder` | Falcon-class, octaweb, grid fins, ноги |
+| `LunarTerrainMesh` | Диск R=2000 м, heightmap ~400, C2-кратери, soft-min, сірий albedo 2K |
+| `EnvironmentBuilder` | Pad (berm/scorch/шви/LED), smooth-валуни, approach-маркери |
+| `RocketVisualBuilder` | Falcon-class ~42 м, smooth meshes, bell-сопла, grid fins, ноги |
 | `RocketEngineFX` | Core + outer plume, smoke, sparks, ground dust |
-| `TrajectoryVisualizer` | Chaikin smooth, лишається після посадки |
+| `TrajectoryVisualizer` | Catmull-Rom + Chaikin, live tip, лишається після посадки |
 | `CameraFollow` | Follow / Manual / Overview |
+| Фізика | Clamp горизонталі ≤ 0.92·R диска |
+
+### UI (top bar справа)
+
+Порядок: **Час · Статус · Тема · Мова · СХОВАТИ** — однакова ширина кнопок (90 px), блок з відступом 24 px від краю екрана. Графіки телеметрії — з правим полем усередині лівої панелі.
 
 ---
 
@@ -213,10 +219,10 @@ SimulationLogs/Landing_Full_<algo>_<ts>/
 
 ### Вердикт
 
-**Тема повністю реалізована** у вигляді захищеного дипломного симулятора GNC.
+**Тема повністю реалізована** у вигляді захищеного дипломного симулятора GNC (фінальна візуальна/UI-поліровка 2026).
 
 - Це **не** industrial avionics (немає Kalman/INS, CFD, повного 6-DOF thruster model).  
-- Це **достатньо** для МКР: коректні алгоритми, відтворювані експерименти, експорт, наочна 3D-демо.  
+- Це **достатньо** для МКР: коректні алгоритми, відтворювані експерименти, експорт, наочна 3D-демо (Місяць, pad, ракета, FX, плавна траєкторія, 8 тем UI).  
 - Рекомендована послідовність захисту: **D → Space → телеметрія → T → E → P**.
 
 ---

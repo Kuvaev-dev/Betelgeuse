@@ -91,12 +91,25 @@ Unity: **Window → General → Test Runner**
 - Спільне: RK4, TVC-PD, lateral, термінал h&lt;25 м → soft-landing
 - UI-вітер/шум впливають на одиночний старт (`ApplyFlightDisturbances`)
 - **Ідеал `[I]`:** h≈1400 / Vᵧ≈−48 / вітер=0 → очікуваний успіх A–D
-- Траєкторія: Chaikin-згладжування, лишається після посадки
-- Місяць: crater-disk без порожнього краю, чорні днища кратерів
+- Траєкторія: Catmull-Rom + Chaikin, live tip, лишається після посадки
+- Місяць: heightmap ~400, C2-кратери, нейтральний сірий albedo, pad-clear
+- Ракета: smooth-меші (96+ сегм.), bell-сопла, grid fins, clamp у диску
+- UI: 8 тем; top-right chips однакової ширини; графики з полем у панелі
 
 ## Вердикт (тема)
 
-Тема **реалізована**: автономна посадка + нечітка логіка (Sugeno) + ML (MLP/ES) + гібрид Neuro-Fuzzy + порівняльний експеримент + експорт. Рівень — дипломна симуляція GNC (не industrial flight software).
+Тема **повністю реалізована і готова до захисту** (2026):
+
+| Блок | Статус |
+|------|--------|
+| A PID / B Fuzzy Sugeno / C Neural ES / D Hybrid | ✅ |
+| Soft-landing критерії + Ideal [I] | ✅ |
+| Monte-Carlo порівняння + ResearchExporter | ✅ |
+| CSV/JSON/MD + SVG графіки | ✅ |
+| 3D Місяць, pad, ракета, FX, траєкторія | ✅ |
+| UI UA/EN · 8 тем | ✅ |
+
+Рівень — дипломна симуляція GNC (не industrial avionics). Демо: **D → Space → T → E → P**.
 
 ## Автор
 
