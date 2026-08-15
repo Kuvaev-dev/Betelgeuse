@@ -77,7 +77,7 @@ public class RocketPhysics : MonoBehaviour
         hybridController.neural = neuralController;
 
         if (neuralController != null) neuralController.LoadBestWeights();
-        cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+        cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
 
         SyncFixedTimestep();
         InitializeSimulation();
@@ -110,7 +110,20 @@ public class RocketPhysics : MonoBehaviour
         SyncTransformWithState();
     }
 
+    /// <summary>True while Monte-Carlo drives ticks manually (skip FixedUpdate double-step).</summary>
+    public bool batchDrivenTicks;
+
     void FixedUpdate()
+    {
+        if (batchDrivenTicks) return;
+        SimulationTick();
+    }
+
+    /// <summary>
+    /// Один крок GNC+RK4. FixedUpdate у грі; Monte-Carlo викликає burst
+    /// (high timeScale інакше впирається в ліміт FixedUpdate/frame → усі timeout 0%).
+    /// </summary>
+    public void SimulationTick()
     {
         if (!simulationArmed) return;
         if (state.isLanded || state.simulationFinished) return;
@@ -131,13 +144,17 @@ public class RocketPhysics : MonoBehaviour
         UpdateControl();
         RungeKutta4Step(dt);
 
-        // Не дозволяємо «провалитись» під pad
         if (state.position.y < 0f)
             state.position.y = 0f;
 
         ClampToTerrainDisk();
         SyncTransformWithState();
         if (logger != null) logger.Log(state);
+
+        // Keep trajectory sampling in sync with physics (esp. batch-driven ticks)
+        if (cachedVisualizer == null)
+            cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
+        cachedVisualizer?.SampleFlight(force: false);
 
         if (state.position.y <= 0.05f)
             FinishLanding(timeout: false);
@@ -408,14 +425,14 @@ public class RocketPhysics : MonoBehaviour
         metrics.PrintResults(algorithm);
 
         if (cachedVisualizer == null)
-            cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+            cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
         // Лінія траєкторії лишається видимою після посадки (Clear лише на новий старт)
         cachedVisualizer?.OnSimulationFinished(metrics.isSuccessfulLanding);
         if (cachedVisualizer != null)
             cachedVisualizer.SetVisible(true);
 
         // Don't train during batch Monte-Carlo (SimulationManager sets timeScale high)
-        bool batch = FindFirstObjectByType<SimulationManager>() is { IsExperimentRunning: true };
+        bool batch = FindAnyObjectByType<SimulationManager>() is { IsExperimentRunning: true };
         if (!batch && (controlMode == ControlMode.Neural || controlMode == ControlMode.Hybrid)
             && neuralController != null)
         {
@@ -460,7 +477,7 @@ public class RocketPhysics : MonoBehaviour
         InitializeSimulation();
         if (logger != null) logger.Initialize();
         if (cachedVisualizer == null)
-            cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+            cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
         cachedVisualizer?.Clear();
         MissionControlUI.Instance?.HideLandingResult();
         SnapCamera();
@@ -535,7 +552,7 @@ public class RocketPhysics : MonoBehaviour
         InitializeSimulation();
         if (logger != null) logger.Initialize();
         if (cachedVisualizer == null)
-            cachedVisualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+            cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
         cachedVisualizer?.Clear();
         MissionControlUI.Instance?.HideLandingResult();
         SnapCamera();
@@ -580,7 +597,7 @@ public class RocketPhysics : MonoBehaviour
 
     static void SnapCamera()
     {
-        var cam = FindFirstObjectByType<CameraFollow>();
+        var cam = FindAnyObjectByType<CameraFollow>();
         cam?.SnapNow();
     }
 

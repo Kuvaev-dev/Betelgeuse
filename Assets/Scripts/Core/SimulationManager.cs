@@ -23,9 +23,11 @@ public class SimulationManager : MonoBehaviour
 
     [Header("Невизначеність (Monte-Carlo)")]
     public bool enableNoise = true;
-    [Range(0f, 25f)] public float windStrength = 10f;
-    [Range(0f, 15f)] public float massVariationPercent = 6f;
-    [Range(0f, 10f)] public float angleVariationDegrees = 7f;
+    // Defaults hard enough that A–D diverge (100% all modes is not realistic)
+    [Range(0f, 25f)] public float windStrength = 14f;
+    [Range(0f, 20f)] public float massVariationPercent = 10f;
+    [Range(0f, 15f)] public float angleVariationDegrees = 11f;
+    [Range(0f, 80f)] public float positionJitterMeters = 35f;
     public bool continuousWind = true;
 
     // Internal flag — never leave true in inspector permanently
@@ -57,10 +59,10 @@ public class SimulationManager : MonoBehaviour
         IsExperimentRunning = false;
 
         if (rocketPhysics == null)
-            rocketPhysics = FindFirstObjectByType<RocketPhysics>();
+            rocketPhysics = FindAnyObjectByType<RocketPhysics>();
         if (dashboard == null)
-            dashboard = FindFirstObjectByType<ExperimentDashboard>();
-        visualizer = FindFirstObjectByType<TrajectoryVisualizer>();
+            dashboard = FindAnyObjectByType<ExperimentDashboard>();
+        visualizer = FindAnyObjectByType<TrajectoryVisualizer>();
 
         if (rocketPhysics != null && rocketPhysics.parameters != null)
             originalFuelMass = rocketPhysics.parameters.fuelMass;
@@ -104,9 +106,19 @@ public class SimulationManager : MonoBehaviour
         modeBeforeExperiment = rocketPhysics.controlMode;
         float prevScale = Time.timeScale;
         float prevFixed = Time.fixedDeltaTime;
+        rocketPhysics.batchDrivenTicks = true;
 
+        // Monte-Carlo must use HARD nominal IC (not leftover Ideal [I] gentleness → fake 100%)
+        RestoreHardInitialConditions();
+        IdealLandingPresets.ApplyDefaultControllerTuning(
+            rocketPhysics,
+            rocketPhysics.fuzzyController,
+            rocketPhysics.neuralController,
+            rocketPhysics.hybridController);
+
+        // Keep realtime clock; speed comes from SimulationTick burst (not timeScale).
         float step = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
-        Time.timeScale = Mathf.Clamp(experimentTimeScale, 1f, 50f);
+        Time.timeScale = 1f;
         Time.fixedDeltaTime = step;
 
         // Hide landing result popups during batch
@@ -158,8 +170,11 @@ public class SimulationManager : MonoBehaviour
 
         cleanup:
         // Restore user's chosen algorithm and idle state
-        rocketPhysics.controlMode = modeBeforeExperiment;
-        rocketPhysics.StopSimulation(keepPosition: false);
+        if (rocketPhysics != null)
+            rocketPhysics.batchDrivenTicks = false;
+        if (rocketPhysics != null)
+            rocketPhysics.controlMode = modeBeforeExperiment;
+        rocketPhysics?.StopSimulation(keepPosition: false);
         Time.timeScale = prevScale > 0.01f ? prevScale : 1f;
         Time.fixedDeltaTime = prevFixed;
         IsExperimentRunning = false;
@@ -194,17 +209,24 @@ public class SimulationManager : MonoBehaviour
             rocketPhysics.ResetSimulation();
             visualizer?.Clear();
 
-            if (enableNoise)
-                ApplyRandomNoiseToState();
+            // Always disturb: wind from slider + (if noise ON) mass/angle/offset
+            ApplyRandomNoiseToState();
 
-            if (delayBetweenTests > 0f)
-                yield return new WaitForSeconds(delayBetweenTests);
-
-            float waited = 0f;
-            while (!rocketPhysics.state.simulationFinished && waited < maxT)
+            // Burst RK4 ticks per frame — reliable speed independent of timeScale budget
+            float dt = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
+            int maxSteps = Mathf.CeilToInt(maxT / Mathf.Max(1e-4f, dt)) + 64;
+            // experimentTimeScale ≈ how many ticks per rendered frame (clamped)
+            int burst = Mathf.Clamp(Mathf.RoundToInt(experimentTimeScale * 4f), 20, 200);
+            int steps = 0;
+            while (!rocketPhysics.state.simulationFinished && steps < maxSteps)
             {
                 if (cancelRequested) yield break;
-                waited += Time.deltaTime;
+                int n = burst;
+                for (int b = 0; b < n && !rocketPhysics.state.simulationFinished && steps < maxSteps; b++)
+                {
+                    rocketPhysics.SimulationTick();
+                    steps++;
+                }
                 yield return null;
             }
 
@@ -212,6 +234,9 @@ public class SimulationManager : MonoBehaviour
                 rocketPhysics.ForceFinish(asTimeout: true);
 
             results.Add(CloneMetrics(rocketPhysics.metrics));
+
+            if (delayBetweenTests > 0f)
+                yield return new WaitForSecondsRealtime(Mathf.Min(delayBetweenTests, 0.05f));
         }
     }
 
@@ -244,24 +269,52 @@ public class SimulationManager : MonoBehaviour
         };
     }
 
+    /// <summary>Default descent IC (harder than Ideal) so modes can fail under noise.</summary>
+    void RestoreHardInitialConditions()
+    {
+        if (rocketPhysics?.parameters == null) return;
+        var p = rocketPhysics.parameters;
+        p.startPosition = new Vector3(0f, 1800f, 0f);
+        p.startVelocity = new Vector3(0f, -72f, 0f);
+        p.startEulerAngles = new Vector3(0f, 0f, 3.5f);
+        p.dryMass = 25600f;
+        p.fuelMass = 14000f;
+        p.maxThrust = 845000f;
+        originalFuelMass = p.fuelMass;
+    }
+
     void ApplyRandomNoiseToState()
     {
         if (rocketPhysics?.state == null) return;
 
+        // Always apply slider wind (even if "noise" toggle only covers mass/angle)
+        float w = Mathf.Max(windStrength, 0f);
         Vector3 windKick = new Vector3(
-            Random.Range(-windStrength, windStrength),
+            Random.Range(-w, w),
             0f,
-            Random.Range(-windStrength * 0.5f, windStrength * 0.5f));
+            Random.Range(-w * 0.55f, w * 0.55f));
+        rocketPhysics.state.velocity += windKick * 0.9f;
+        rocketPhysics.windVelocity = continuousWind && w > 0.05f ? windKick * 0.4f : Vector3.zero;
 
-        rocketPhysics.state.velocity += windKick;
-        rocketPhysics.windVelocity = continuousWind ? windKick * 0.35f : Vector3.zero;
+        if (enableNoise)
+        {
+            float massNoise = 1f + Random.Range(-massVariationPercent, massVariationPercent) / 100f;
+            rocketPhysics.state.currentFuelMass = Mathf.Max(800f, rocketPhysics.state.currentFuelMass * massNoise);
 
-        float massNoise = 1f + Random.Range(-massVariationPercent, massVariationPercent) / 100f;
-        rocketPhysics.state.currentFuelMass = Mathf.Max(0f, rocketPhysics.state.currentFuelMass * massNoise);
+            float ax = Random.Range(-angleVariationDegrees, angleVariationDegrees);
+            float az = Random.Range(-angleVariationDegrees, angleVariationDegrees);
+            rocketPhysics.state.rotation = Quaternion.Normalize(
+                rocketPhysics.state.rotation * Quaternion.Euler(ax, 0f, az));
 
-        float ax = Random.Range(-angleVariationDegrees, angleVariationDegrees);
-        float az = Random.Range(-angleVariationDegrees, angleVariationDegrees);
-        rocketPhysics.state.rotation *= Quaternion.Euler(ax, 0f, az);
+            // Lateral offset — main reason PID fails while Hybrid holds
+            float jit = Mathf.Max(0f, positionJitterMeters);
+            if (jit > 0.1f)
+            {
+                rocketPhysics.state.position.x += Random.Range(-jit, jit);
+                rocketPhysics.state.position.z += Random.Range(-jit, jit);
+            }
+        }
+
         rocketPhysics.SyncTransformWithState();
     }
 

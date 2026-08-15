@@ -1,0 +1,26 @@
+﻿{
+  "project": "Betelgeuse",
+  "type": "single_landing",
+  "timestamp": "20260815_145750",
+  "algorithm": "Класичний PID",
+  "thesisTopic": "Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання",
+  "sampleCount": 1596,
+  "criteria": {
+    "maxTouchdownVelocity": 3.5,
+    "maxLandingAngle": 7,
+    "maxHorizontalMiss": 25,
+    "maxHorizontalSpeed": 5
+  },
+  "results": {
+    "successful": true,
+    "timedOut": false,
+    "touchdownVelocity_mps": 0.355,
+    "landingAngle_deg": 0,
+    "horizontalMiss_m": 6.437,
+    "horizontalSpeed_mps": 0.167,
+    "fuelRemaining_kg": 7232.304,
+    "maxAltitude_m": 1400,
+    "flightTime_s": 54.022,
+    "successScore": 94.086
+  }
+}

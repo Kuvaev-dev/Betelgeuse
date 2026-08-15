@@ -114,7 +114,7 @@ public class TelemetryGraph : MonoBehaviour
         var tmp = go.GetComponent<TextMeshProUGUI>();
         UiTypography.Apply(tmp, Mathf.Max(13f, size + 1f), c);
         tmp.alignment = align;
-        tmp.enableWordWrapping = false;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
         tmp.overflowMode = TextOverflowModes.Overflow;
         return tmp;
     }

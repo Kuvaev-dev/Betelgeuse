@@ -1,31 +1,77 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Автоматична ініціалізація сцени після Load (RuntimeInitializeOnLoad).
-/// Гарантує наявність контролерів GNC, 3D-візуалу, середовища, камери
-/// та TrajectoryVisualizer — навіть якщо сцена «порожня».
+/// Scene init after Load: controllers, visuals, environment — stepped with splash progress.
 /// </summary>
 public static class SceneBootstrap
 {
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void AutoBootstrap()
     {
-        var rocket = Object.FindFirstObjectByType<RocketPhysics>();
-        if (rocket == null) return;
+        var host = new GameObject("BootstrapRunner");
+        Object.DontDestroyOnLoad(host);
+        host.AddComponent<BootstrapRunner>();
+    }
+}
 
+/// <summary>Runs heavy bootstrap across frames so splash can animate.</summary>
+[DefaultExecutionOrder(-100)]
+public class BootstrapRunner : MonoBehaviour
+{
+    void Start() => StartCoroutine(Run());
+
+    IEnumerator Run()
+    {
+        var splash = SplashScreenUI.Instance;
+        void Prog(float t, string uk, string en)
+        {
+            if (splash != null)
+                splash.SetProgress(t, UILocale.IsUK ? uk : en);
+        }
+
+        // Lightweight defaults
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0;
+        BorderlessWindow.ApplyBorderlessChrome();
+        if (SystemInfo.systemMemorySize > 0 && SystemInfo.systemMemorySize < 9000)
+            QualitySettings.SetQualityLevel(Mathf.Min(QualitySettings.GetQualityLevel(), 1), true);
+        if (SystemInfo.graphicsMemorySize > 0 && SystemInfo.graphicsMemorySize < 3000)
+            QualitySettings.shadowDistance = Mathf.Min(QualitySettings.shadowDistance, 400f);
+
+        Prog(0.08f, "Пошук ракети…", "Finding rocket…");
+        yield return null;
+
+        var rocket = Object.FindAnyObjectByType<RocketPhysics>();
+        if (rocket == null)
+        {
+            Prog(1f, "Сцена без RocketPhysics", "No RocketPhysics in scene");
+            splash?.FadeOutAndDestroy(0.4f);
+            Destroy(gameObject);
+            yield break;
+        }
+
+        Prog(0.18f, "Контролери GNC…", "GNC controllers…");
+        yield return null;
         EnsureControllers(rocket);
 
-        // Робочі (не ідеальні) коефіцієнти A–D — різниця алгоритмів помітна
         IdealLandingPresets.ApplyDefaultControllerTuning(
             rocket,
             rocket.GetComponent<FuzzyLandingController>(),
             rocket.GetComponent<NeuralController>(),
             rocket.GetComponent<HybridController>());
 
+        Prog(0.35f, "Модель ракетоносія…", "Building rocket…");
+        yield return null;
         RocketVisualBuilder.Build(rocket);
+
+        Prog(0.55f, "Місяць і посадковий майданчик…", "Moon & landing pad…");
+        yield return null;
         EnvironmentBuilder.Build();
 
-        // Hold until user starts
+        Prog(0.72f, "Стан симуляції…", "Simulation state…");
+        yield return null;
+
         rocket.simulationArmed = false;
         if (rocket.parameters != null)
         {
@@ -43,16 +89,18 @@ public static class SceneBootstrap
             rocket.SyncTransformWithState();
         }
 
-        if (Object.FindFirstObjectByType<SimulationManager>() == null)
+        if (Object.FindAnyObjectByType<SimulationManager>() == null)
         {
             var smGo = new GameObject("SimulationManager");
             var sm = smGo.AddComponent<SimulationManager>();
             sm.rocketPhysics = rocket;
         }
 
+        Prog(0.82f, "Камера…", "Camera…");
+        yield return null;
         SetupCamera(rocket);
 
-        if (Object.FindFirstObjectByType<TrajectoryVisualizer>() == null)
+        if (Object.FindAnyObjectByType<TrajectoryVisualizer>() == null)
         {
             var tv = new GameObject("TrajectoryVisualizer");
             var vis = tv.AddComponent<TrajectoryVisualizer>();
@@ -60,8 +108,19 @@ public static class SceneBootstrap
             vis.baseLineWidth = 6f;
         }
 
-        foreach (var theme in Object.FindObjectsByType<MissionControlTheme>(FindObjectsSortMode.None))
+        foreach (var theme in Object.FindObjectsByType<MissionControlTheme>())
             theme.styleOnAwake = false;
+
+        Prog(0.92f, "Mission Control HUD…", "Mission Control HUD…");
+        yield return null;
+        // MissionControlUI auto-creates via its own RuntimeInitialize — give it a frame
+        yield return null;
+
+        Prog(1f, "Готово", "Ready");
+        yield return null;
+
+        splash?.FadeOutAndDestroy(0.6f);
+        Destroy(gameObject);
     }
 
     static void EnsureControllers(RocketPhysics rocket)
@@ -86,7 +145,7 @@ public static class SceneBootstrap
 
     static void SetupCamera(RocketPhysics rocket)
     {
-        var cam = Camera.main ?? Object.FindFirstObjectByType<Camera>();
+        var cam = Camera.main ?? Object.FindAnyObjectByType<Camera>();
         if (cam == null)
         {
             var go = new GameObject("Main Camera");
@@ -98,18 +157,12 @@ public static class SceneBootstrap
 
         cam.farClipPlane = 16000f;
         cam.fieldOfView = 48f;
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.01f, 0.01f, 0.012f);
-        cam.allowHDR = true;
+        cam.nearClipPlane = 0.3f;
 
         var follow = cam.GetComponent<CameraFollow>();
         if (follow == null) follow = cam.gameObject.AddComponent<CameraFollow>();
         follow.rocket = rocket;
-        follow.target = rocket.transform;
-        follow.bodyLookHeight = 18f;
-        follow.defaultDistance = 105f;
-        follow.defaultYaw = 28f;
-        follow.defaultPitch = 22f;
+        follow.trajectory = Object.FindAnyObjectByType<TrajectoryVisualizer>();
         follow.SnapNow();
     }
 }

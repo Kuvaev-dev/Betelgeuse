@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -558,54 +559,92 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Tangent ogive nose: base r=0.5 at y=-1, tip ≈0 at y=+1.
-    /// tipBlunt 0..0.15 keeps a tiny rounded tip (no needle singularity).
+    /// Tangent ogive nose: base r=0.5 at y=-1, smooth spherical tip at y=+1.
+    /// Single continuous profile (no stacked spheres). tipBlunt = tip radius / base R.
     /// </summary>
-    public static Mesh Ogive(float tipBlunt = 0.04f, int segments = 96, int rings = 24)
+    public static Mesh Ogive(float tipBlunt = 0.06f, int segments = 96, int rings = 36)
     {
-        segments = Mathf.Clamp(segments, 32, 128);
-        rings = Mathf.Clamp(rings, 8, 48);
-        tipBlunt = Mathf.Clamp(tipBlunt, 0.0f, 0.2f);
+        segments = Mathf.Clamp(segments, 48, 128);
+        rings = Mathf.Clamp(rings, 16, 64);
+        tipBlunt = Mathf.Clamp(tipBlunt, 0.02f, 0.14f);
         var mesh = new Mesh { name = $"SmoothOgive_{segments}x{rings}" };
 
-        // Unit ogive in local: height H=2, base R=0.5
+        // Unit: height H=2 (−1..+1), base R=0.5
         const float H = 2f;
         const float R = 0.5f;
-        // Tangent ogive sphere radius
+        float tipR = R * tipBlunt;
+        // Classic tangent-ogive sphere radius for full height, then we cut early for tip sphere
         float rho = (R * R + H * H) / (2f * R);
+
+        // Join ogive → spherical tip where slopes match (approx at tipR radius)
+        // x from base: r(x) = sqrt(rho^2 - (H-x)^2) + R - rho
+        // Tip sphere center sits on axis so it is tangent to ogive at join.
+        float joinR = tipR * 1.15f; // slightly above tip radius on ogive
+        float joinX = 0f;
+        for (int iter = 0; iter < 24; iter++)
+        {
+            // binary-ish search x where ogive r ≈ joinR
+            float lo = 0f, hi = H * 0.98f;
+            for (int k = 0; k < 20; k++)
+            {
+                float mid = (lo + hi) * 0.5f;
+                float under = rho * rho - (H - mid) * (H - mid);
+                float rr = under > 0f ? Mathf.Sqrt(under) + R - rho : 0f;
+                if (rr > joinR) lo = mid; else hi = mid;
+            }
+            joinX = (lo + hi) * 0.5f;
+        }
+        joinX = Mathf.Clamp(joinX, H * 0.55f, H * 0.92f);
+        float underJ = rho * rho - (H - joinX) * (H - joinX);
+        float rJoin = underJ > 0f ? Mathf.Sqrt(underJ) + R - rho : joinR;
+        // Spherical tip center: on axis, radius tipR, passes through (rJoin, joinX) approx
+        // (rJoin)^2 + (joinX - cY_from_base)^2 = tipR^2  → place center so apex is at H
+        float tipCenterFromBase = H - tipR; // apex at H
+        // Pull join to lie on that sphere if needed
+        float maxROnSphere = Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - (joinX - tipCenterFromBase) * (joinX - tipCenterFromBase)));
+        if (maxROnSphere > 1e-4f && rJoin > maxROnSphere)
+            rJoin = maxROnSphere;
 
         float RadiusAt(float t)
         {
-            // t: 0 base → 1 tip
             t = Mathf.Clamp01(t);
-            float x = t * H; // distance from base along axis
-            float under = rho * rho - (H - x) * (H - x);
-            float r = under > 0f ? Mathf.Sqrt(under) + R - rho : 0f;
-            // Blend to blunt tip near end
-            float tipR = R * tipBlunt;
-            if (t > 0.82f)
+            float x = t * H; // from base
+            if (x <= joinX)
             {
-                float u = (t - 0.82f) / 0.18f;
-                // hemisphere-ish blunt
-                float hemi = tipR * Mathf.Sqrt(Mathf.Max(0f, 1f - u * u));
-                r = Mathf.Lerp(r, hemi, u * u);
+                float under = rho * rho - (H - x) * (H - x);
+                float r = under > 0f ? Mathf.Sqrt(under) + R - rho : 0f;
+                // smooth blend into sphere near join
+                float blendStart = joinX * 0.88f;
+                if (x > blendStart)
+                {
+                    float u = (x - blendStart) / Mathf.Max(1e-4f, joinX - blendStart);
+                    u = u * u * (3f - 2f * u);
+                    float dx = x - tipCenterFromBase;
+                    float sr = Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - dx * dx));
+                    r = Mathf.Lerp(r, sr, u);
+                }
+                return Mathf.Max(0.001f, r);
             }
-            return Mathf.Max(0.002f, r);
+            // Spherical tip
+            float d = x - tipCenterFromBase;
+            if (d >= tipR) return 0.001f;
+            return Mathf.Max(0.001f, Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - d * d)));
         }
 
         int stride = segments + 1;
-        // +1 pole vertex optional — use rings including tip ring
-        var verts = new Vector3[stride * (rings + 1)];
+        int ringCount = rings + 1;
+        var verts = new Vector3[stride * ringCount + 1]; // + pole
         var norms = new Vector3[verts.Length];
         var uvs = new Vector2[verts.Length];
+        int pole = stride * ringCount;
 
         for (int r = 0; r <= rings; r++)
         {
-            float t = r / (float)rings; // 0 base → 1 tip
+            float t = r / (float)rings;
             float y = Mathf.Lerp(-1f, 1f, t);
             float rad = RadiusAt(t);
-            float t0 = Mathf.Max(0f, t - 0.015f);
-            float t1 = Mathf.Min(1f, t + 0.015f);
+            float t0 = Mathf.Max(0f, t - 0.01f);
+            float t1 = Mathf.Min(1f, t + 0.01f);
             float drDt = (RadiusAt(t1) - RadiusAt(t0)) / Mathf.Max(1e-4f, t1 - t0);
             float nRad = 2f;
             float nY = -drDt;
@@ -616,18 +655,20 @@ public static class SmoothMesh
                 float c = Mathf.Cos(a), s = Mathf.Sin(a);
                 int idx = r * stride + i;
                 verts[idx] = new Vector3(c * rad, y, s * rad);
-                Vector3 n = t >= 0.995f
-                    ? Vector3.up
-                    : new Vector3(c * nRad, nY, s * nRad);
+                Vector3 n = new Vector3(c * nRad, nY, s * nRad);
                 if (n.sqrMagnitude > 1e-10f) n.Normalize();
-                else n = Vector3.up;
+                else n = new Vector3(c, 0f, s);
                 norms[idx] = n;
                 uvs[idx] = new Vector2(i / (float)segments, t);
             }
         }
 
-        var tris = new int[rings * segments * 6];
-        int o = 0;
+        // True pole (sharp-free tip)
+        verts[pole] = new Vector3(0f, 1f, 0f);
+        norms[pole] = Vector3.up;
+        uvs[pole] = new Vector2(0.5f, 1f);
+
+        var tris = new List<int>(rings * segments * 6 + segments * 3);
         for (int r = 0; r < rings; r++)
         for (int i = 0; i < segments; i++)
         {
@@ -635,14 +676,22 @@ public static class SmoothMesh
             int i1 = i0 + 1;
             int i2 = i0 + stride;
             int i3 = i2 + 1;
-            tris[o++] = i0; tris[o++] = i2; tris[o++] = i1;
-            tris[o++] = i1; tris[o++] = i2; tris[o++] = i3;
+            tris.Add(i0); tris.Add(i2); tris.Add(i1);
+            tris.Add(i1); tris.Add(i2); tris.Add(i3);
+        }
+        // Cap last ring → pole (last ring is already at tip; fan improves tip)
+        int last = rings * stride;
+        for (int i = 0; i < segments; i++)
+        {
+            tris.Add(last + i);
+            tris.Add(pole);
+            tris.Add(last + i + 1);
         }
 
-        mesh.vertices = verts;
-        mesh.normals = norms;
-        mesh.uv = uvs;
-        mesh.triangles = tris;
+        mesh.SetVertices(verts);
+        mesh.SetNormals(norms);
+        mesh.SetUVs(0, uvs);
+        mesh.SetTriangles(tris, 0);
         mesh.RecalculateBounds();
         mesh.RecalculateTangents();
         return mesh;
@@ -671,14 +720,14 @@ public static class SmoothMesh
     /// Ogive GO: diameter = base diameter, halfHeight = half height of ogive.
     /// </summary>
     public static GameObject MakeOgive(string name, Transform parent, Vector3 pos,
-        float baseDiameter, float halfHeight, Material mat, float tipBlunt = 0.045f)
+        float baseDiameter, float halfHeight, Material mat, float tipBlunt = 0.06f)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         go.transform.localPosition = pos;
         go.transform.localScale = new Vector3(baseDiameter, halfHeight, baseDiameter);
         var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = Ogive(tipBlunt, DefaultSeg, 28);
+        mf.sharedMesh = Ogive(tipBlunt, DefaultSeg, 40);
         var mr = go.AddComponent<MeshRenderer>();
         mr.sharedMaterial = mat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;

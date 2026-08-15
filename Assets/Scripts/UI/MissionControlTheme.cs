@@ -25,7 +25,7 @@ public class MissionControlTheme : MonoBehaviour
 
     void Awake()
     {
-        if (styleOnAwake && FindFirstObjectByType<MissionControlUI>() == null)
+        if (styleOnAwake && FindAnyObjectByType<MissionControlUI>() == null)
             Apply();
     }
 
@@ -35,7 +35,7 @@ public class MissionControlTheme : MonoBehaviour
         if (dimMainCameraBackground && Camera.main != null)
             Camera.main.backgroundColor = new Color(0.008f, 0.01f, 0.03f);
 
-        foreach (var img in FindObjectsByType<Image>(FindObjectsSortMode.None))
+        foreach (var img in FindObjectsByType<Image>())
         {
             if (img == null) continue;
             string n = img.gameObject.name.ToLowerInvariant();
@@ -61,7 +61,7 @@ public class MissionControlTheme : MonoBehaviour
             }
         }
 
-        foreach (var tmp in FindObjectsByType<TMP_Text>(FindObjectsSortMode.None))
+        foreach (var tmp in FindObjectsByType<TMP_Text>())
         {
             if (tmp == null) continue;
             string n = tmp.gameObject.name.ToLowerInvariant();
@@ -75,7 +75,7 @@ public class MissionControlTheme : MonoBehaviour
             UiTypography.Apply(tmp, tmp.fontSize > 1f ? tmp.fontSize : 16f, tmp.color, tmp.fontStyle);
         }
 
-        foreach (var btn in FindObjectsByType<Button>(FindObjectsSortMode.None))
+        foreach (var btn in FindObjectsByType<Button>())
             StyleButton(btn.targetGraphic as Image);
     }
 

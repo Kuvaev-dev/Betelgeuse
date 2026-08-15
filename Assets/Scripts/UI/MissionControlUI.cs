@@ -22,7 +22,7 @@ public class MissionControlUI : MonoBehaviour
     CameraFollow cameraFollow;
     DataLogger dataLogger;
 
-    TMP_Text txtAlt, txtVel, txtThr, txtTilt, txtFuel, txtMiss, txtMode, txtStatus, txtTime, txtScore;
+    TMP_Text txtAlt, txtVel, txtThr, txtTilt, txtFuel, txtMiss, txtMode, txtStatus, txtTime, txtScore, txtSpeed;
     TMP_Text txtHVel, txtMass, txtTwr, txtEta, txtAcc, txtRate;
     TMP_Text txtPeakVy, txtPeakTilt, txtMinH, txtDeltaStrip;
     TMP_Text txtCritV, txtCritA, txtCritM, txtCritH;
@@ -30,7 +30,7 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text txtPid, txtFuzzy, txtNeural, txtHybrid, txtWinner, txtInfo;
     TMP_Text txtWindVal, txtTestsVal;
     TMP_Text txtResultTitle, txtResultBody, txtProgress, txtCamMode, txtCamHelp;
-    TMP_Text txtTrajBtn, txtTitle, txtSubtitle, txtHow, txtGraphHint;
+    TMP_Text txtTrajBtn, txtTitle, txtHow, txtGraphHint;
     TMP_Text txtHdrTelem, txtHdrLive, txtHdrCrit, txtHdrInsight, txtHdrGraphs;
     TMP_Text txtStep;
     Button trajToggleBtn;
@@ -43,8 +43,11 @@ public class MissionControlUI : MonoBehaviour
     Image thrBarFill, fuelBarFill, tiltBarFill, statusDot, progressFill, resultPanelBg;
     GameObject resultRoot, progressRoot, canvasRoot, stepBarGo;
     GameObject leftPanelGo, rightPanelGo, topBarGo, topMenuGo;
+    GameObject captionRoot; // separate canvas — no flicker on theme rebuild
     bool panelsHidden;
     TMP_Text txtHideBtn;
+    TMP_Text txtLangBtn;
+    TMP_Text txtThemeBtn;
     TelemetryGraph graphAlt, graphVel, graphThr;
     readonly List<Button> modeButtons = new();
     readonly List<Image> modeButtonImages = new();
@@ -61,6 +64,7 @@ public class MissionControlUI : MonoBehaviour
     bool resultShown;
     bool trajVisible = true;
     bool rebuilding;
+    bool loadingSettings;
     string lastExportPath;
 
     // Палітра з активної UiTheme (динамічна)
@@ -84,17 +88,17 @@ public class MissionControlUI : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void AutoCreate()
     {
-        if (FindFirstObjectByType<MissionControlUI>() != null) return;
-        if (FindFirstObjectByType<RocketPhysics>() == null) return;
+        if (FindAnyObjectByType<MissionControlUI>() != null) return;
+        if (FindAnyObjectByType<RocketPhysics>() == null) return;
         new GameObject("MissionControlUI").AddComponent<MissionControlUI>();
     }
 
     void Awake()
     {
         Instance = this;
-        rocket = FindFirstObjectByType<RocketPhysics>();
-        sim = FindFirstObjectByType<SimulationManager>();
-        cameraFollow = FindFirstObjectByType<CameraFollow>();
+        rocket = FindAnyObjectByType<RocketPhysics>();
+        sim = FindAnyObjectByType<SimulationManager>();
+        cameraFollow = FindAnyObjectByType<CameraFollow>();
         if (rocket != null) dataLogger = rocket.GetComponent<DataLogger>();
     }
 
@@ -107,11 +111,22 @@ public class MissionControlUI : MonoBehaviour
         UiTheme.OnThemeChanged += OnThemeChanged;
         Build();
         WireLegacyDashboard();
+        LoadUserSettingsIntoUi();
+        WireSettingsPersistence();
         built = true;
+    }
+
+    void OnApplicationQuit() => SaveUserSettingsFromUi();
+
+    void OnDisable()
+    {
+        if (!rebuilding)
+            SaveUserSettingsFromUi();
     }
 
     void OnDestroy()
     {
+        SaveUserSettingsFromUi();
         UILocale.OnLanguageChanged -= OnLanguageChanged;
         UiTheme.OnThemeChanged -= OnThemeChanged;
         if (Instance == this) Instance = null;
@@ -126,6 +141,8 @@ public class MissionControlUI : MonoBehaviour
     void OnThemeChanged()
     {
         if (!built || rebuilding) return;
+        // Recolor window caption in-place (no destroy → no flicker on − □ ×)
+        ApplyCaptionTheme();
         RebuildUi();
     }
 
@@ -154,12 +171,14 @@ public class MissionControlUI : MonoBehaviour
         Build();
         WireLegacyDashboard();
 
-        // Restore
+        // Restore session state (not from disk — live values across theme/lang rebuild)
+        loadingSettings = true;
         if (windSlider) windSlider.value = windV;
         if (testsSlider) testsSlider.value = testsV;
         if (timeScaleSlider) timeScaleSlider.value = timeV;
         if (noiseToggle) noiseToggle.isOn = noiseOn;
         if (trainToggle) trainToggle.isOn = trainOn;
+        loadingSettings = false;
         if (snapAlt != null && snapAlt.Length > 0) graphAlt?.RestoreSamples(snapAlt);
         if (snapVel != null && snapVel.Length > 0) graphVel?.RestoreSamples(snapVel);
         if (snapThr != null && snapThr.Length > 0) graphThr?.RestoreSamples(snapThr);
@@ -170,11 +189,145 @@ public class MissionControlUI : MonoBehaviour
             && rocket.metrics.totalFlightTime > 0.05f)
             ShowLandingResult(rocket.metrics);
 
+        WireSettingsPersistence();
         built = true;
         rebuilding = false;
         RefreshCamLabel();
         UpdateTrajButtonLabel();
         if (rocket != null) UpdateFlightStep(rocket.state);
+    }
+
+    void LoadUserSettingsIntoUi()
+    {
+        loadingSettings = true;
+        if (windSlider != null) windSlider.value = UserSettings.Wind;
+        if (testsSlider != null) testsSlider.value = UserSettings.Tests;
+        if (timeScaleSlider != null) timeScaleSlider.value = UserSettings.TimeScale;
+        if (noiseToggle != null) noiseToggle.isOn = UserSettings.Noise;
+        if (trainToggle != null) trainToggle.isOn = UserSettings.Train;
+
+        trajVisible = UserSettings.TrajectoryVisible;
+        panelsHidden = UserSettings.PanelsHidden;
+        ApplyPanelsVisibility();
+
+        var tv = EnsureTrajectoryVisualizer();
+        tv?.SetVisible(trajVisible);
+        UpdateTrajButtonLabel();
+
+        if (rocket != null)
+        {
+            var mode = (RocketPhysics.ControlMode)UserSettings.ControlMode;
+            rocket.controlMode = mode;
+            SelectModeVisualOnly(mode);
+        }
+
+        ApplySettings();
+        // Live clock stays x1; TimeScale pref is for Monte-Carlo burst / slider
+        ApplyLiveTimeScale(1f);
+        loadingSettings = false;
+    }
+
+    void SelectModeVisualOnly(RocketPhysics.ControlMode mode)
+    {
+        // Update mode pill + button colors without PrepareMode/reset
+        if (txtMode != null)
+            txtMode.text = UILocale.ModeNameShort(mode);
+        for (int i = 0; i < modeButtons.Count && i < modeButtonImages.Count; i++)
+        {
+            var m = (RocketPhysics.ControlMode)i;
+            bool active = m == mode;
+            if (modeButtonImages[i] != null)
+            {
+                modeButtonImages[i].color = active ? C_BtnActive : C_Btn;
+            }
+        }
+    }
+
+    void WireSettingsPersistence()
+    {
+        if (windSlider != null)
+        {
+            windSlider.onValueChanged.RemoveListener(OnWindChanged);
+            windSlider.onValueChanged.AddListener(OnWindChanged);
+        }
+        if (testsSlider != null)
+        {
+            testsSlider.onValueChanged.RemoveListener(OnTestsChanged);
+            testsSlider.onValueChanged.AddListener(OnTestsChanged);
+        }
+        if (timeScaleSlider != null)
+        {
+            timeScaleSlider.onValueChanged.RemoveListener(OnTimeScaleChangedPersist);
+            timeScaleSlider.onValueChanged.AddListener(OnTimeScaleChangedPersist);
+        }
+        if (noiseToggle != null)
+        {
+            noiseToggle.onValueChanged.RemoveListener(OnNoiseChanged);
+            noiseToggle.onValueChanged.AddListener(OnNoiseChanged);
+        }
+        if (trainToggle != null)
+        {
+            trainToggle.onValueChanged.RemoveListener(OnTrainChanged);
+            trainToggle.onValueChanged.AddListener(OnTrainChanged);
+        }
+    }
+
+    void OnWindChanged(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.Wind = v;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnTestsChanged(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.Tests = Mathf.RoundToInt(v);
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnTimeScaleChangedPersist(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.TimeScale = v;
+        UserSettings.Save();
+        if (sim != null && sim.IsExperimentRunning)
+            sim.experimentTimeScale = v;
+        else
+            ApplyLiveTimeScale(Mathf.Clamp(v, 0.25f, 8f));
+        RefreshSpeedLabel();
+    }
+
+    void OnNoiseChanged(bool on)
+    {
+        if (loadingSettings) return;
+        UserSettings.Noise = on;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnTrainChanged(bool on)
+    {
+        if (loadingSettings) return;
+        UserSettings.Train = on;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void SaveUserSettingsFromUi()
+    {
+        if (windSlider != null) UserSettings.Wind = windSlider.value;
+        if (testsSlider != null) UserSettings.Tests = Mathf.RoundToInt(testsSlider.value);
+        if (timeScaleSlider != null) UserSettings.TimeScale = timeScaleSlider.value;
+        if (noiseToggle != null) UserSettings.Noise = noiseToggle.isOn;
+        if (trainToggle != null) UserSettings.Train = trainToggle.isOn;
+        UserSettings.TrajectoryVisible = trajVisible;
+        UserSettings.PanelsHidden = panelsHidden;
+        if (rocket != null)
+            UserSettings.ControlMode = (int)rocket.controlMode;
+        UserSettings.Save();
     }
 
     void HideLegacyUI()
@@ -187,7 +340,7 @@ public class MissionControlUI : MonoBehaviour
             "Reset", "Noise", "Wind Slider", "Tests Count", "Background"
         };
 
-        foreach (var t in FindObjectsByType<Transform>(FindObjectsSortMode.None))
+        foreach (var t in FindObjectsByType<Transform>())
         {
             if (t == null) continue;
             var canvas = t.GetComponentInParent<Canvas>();
@@ -204,13 +357,13 @@ public class MissionControlUI : MonoBehaviour
             }
         }
 
-        foreach (var h in FindObjectsByType<TelemetryHUD>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        foreach (var h in FindObjectsByType<TelemetryHUD>(FindObjectsInactive.Include))
             h.enabled = false;
     }
 
     void WireLegacyDashboard()
     {
-        var dash = FindFirstObjectByType<ExperimentDashboard>(FindObjectsInactive.Include);
+        var dash = FindAnyObjectByType<ExperimentDashboard>(FindObjectsInactive.Include);
         if (dash == null) return;
         dash.enabled = true;
         dash.pidStatsText = txtPid;
@@ -235,8 +388,8 @@ public class MissionControlUI : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        // Prefer height match → fewer fractional scales on typical 16:9 (less pixelated TMP)
-        scaler.matchWidthOrHeight = 1f;
+        // 0 = width: integer-friendlier scale on 16:9 desktop (sharper TMP)
+        scaler.matchWidthOrHeight = 0f;
         scaler.referencePixelsPerUnit = 100f;
         canvasGo.AddComponent<GraphicRaycaster>();
         EnsureEventSystem();
@@ -306,147 +459,68 @@ public class MissionControlUI : MonoBehaviour
         r1.anchorMin = new Vector2(0, 0.5f);
         r1.anchorMax = new Vector2(1, 1);
         r1.offsetMin = new Vector2(12, 2);
-        r1.offsetMax = new Vector2(-230, -4); // leave room for right 2×2 cluster
+        // Leave top-right free for caption (− □ ×)
+        const float capW = 46f;
+        const float captionW = capW * 3f;
+        r1.offsetMax = new Vector2(-(captionW + 10f), -4);
 
-        // Brand (left)
+        // Brand | mode | time
         txtTitle = CreateText(row1.transform, UILocale.T("app_title"), 16, C_Accent, FontStyles.Bold);
         var trTitle = txtTitle.rectTransform;
         trTitle.anchorMin = new Vector2(0, 0);
         trTitle.anchorMax = new Vector2(0, 1);
         trTitle.pivot = new Vector2(0, 0.5f);
         trTitle.anchoredPosition = new Vector2(0, 0);
-        trTitle.sizeDelta = new Vector2(132, 0);
+        trTitle.sizeDelta = new Vector2(108, 0);
         txtTitle.alignment = TextAlignmentOptions.MidlineLeft;
         txtTitle.overflowMode = TextOverflowModes.Ellipsis;
         txtTitle.raycastTarget = false;
 
-        // Mode pill — wide enough for short names (PID/Fuzzy/Neural/Hybrid)
         var modeBg = CreatePanel("ModePill", row1.transform, C_PanelSoft);
         modeBg.GetComponent<Image>().raycastTarget = false;
         var mrt = modeBg.GetComponent<RectTransform>();
         mrt.anchorMin = mrt.anchorMax = new Vector2(0, 0.5f);
         mrt.pivot = new Vector2(0, 0.5f);
-        mrt.anchoredPosition = new Vector2(138, 0);
-        mrt.sizeDelta = new Vector2(110, 26);
+        mrt.anchoredPosition = new Vector2(110, 0);
+        mrt.sizeDelta = new Vector2(88, 26);
         txtMode = CreateText(modeBg.transform, "PID", 12, C_Amber, FontStyles.Bold);
-        StretchFull(txtMode.rectTransform, 6, 2, 6, 2);
+        StretchFull(txtMode.rectTransform, 4, 2, 4, 2);
         txtMode.alignment = TextAlignmentOptions.Center;
         txtMode.overflowMode = TextOverflowModes.Overflow;
-        txtMode.enableWordWrapping = false;
+        txtMode.textWrappingMode = TextWrappingModes.NoWrap;
         txtMode.raycastTarget = false;
 
-        // Time chip next to mode
         txtTime = CreateText(row1.transform, string.Format(UILocale.T("time_fmt"), 0f), 12, C_Text, FontStyles.Bold);
         var trTime = txtTime.rectTransform;
         trTime.anchorMin = trTime.anchorMax = new Vector2(0, 0.5f);
         trTime.pivot = new Vector2(0, 0.5f);
-        trTime.anchoredPosition = new Vector2(258, 0);
+        trTime.anchoredPosition = new Vector2(206, 0);
         trTime.sizeDelta = new Vector2(96, 26);
         txtTime.alignment = TextAlignmentOptions.MidlineLeft;
         txtTime.overflowMode = TextOverflowModes.Overflow;
         txtTime.raycastTarget = false;
+        txtSpeed = null;
 
-        txtSubtitle = null;
+        // Caption lives on its own canvas (not destroyed with theme RebuildUi → no flicker)
+        EnsureCaptionBar();
+        ApplyCaptionTheme();
 
-        // ── RIGHT cluster 2×2 — inset so chips never clip off-screen ──
-        //   [ Theme ] [ Lang ]
-        //   [ Status] [ Hide ]
-        const float chipW = 72f;
-        const float chipH = 28f;
-        const float chipGap = 5f;
-        const float rightW = chipW * 2f + chipGap; // 149
-        const float rightPad = 64f; // inset from right edge (Hide fully on-screen)
+        // ── ROW 2 bottom: LEFT flight | RIGHT tools (all same width as Start) ──
+        const float chipW = 78f; // same as Start
+        const float gap = 5f;
+        const float rightInset = 16f;
+        float toolsW = chipW * 4f + gap * 3f; // Status Hide Theme Lang — equal width
 
-        var right = CreatePanel("RightCluster", chrome.transform, new Color(0, 0, 0, 0));
-        right.GetComponent<Image>().raycastTarget = false;
-        var rr = right.GetComponent<RectTransform>();
-        rr.anchorMin = new Vector2(1f, 0f);
-        rr.anchorMax = new Vector2(1f, 1f);
-        rr.pivot = new Vector2(1f, 0.5f);
-        rr.offsetMin = new Vector2(-(rightPad + rightW), 6f);
-        rr.offsetMax = new Vector2(-rightPad, -6f);
-
-        // Top row HLG: Theme | Lang (same metrics as left flight buttons)
-        var topRow = CreatePanel("RightTop", right.transform, new Color(0, 0, 0, 0));
-        topRow.GetComponent<Image>().raycastTarget = false;
-        var trt = topRow.GetComponent<RectTransform>();
-        trt.anchorMin = new Vector2(0f, 0.5f);
-        trt.anchorMax = new Vector2(1f, 1f);
-        trt.offsetMin = new Vector2(0f, 2f);
-        trt.offsetMax = Vector2.zero;
-        var topH = topRow.AddComponent<HorizontalLayoutGroup>();
-        topH.spacing = chipGap;
-        topH.childAlignment = TextAnchor.MiddleRight;
-        topH.childControlWidth = false;
-        topH.childControlHeight = true;
-        topH.childForceExpandWidth = false;
-        topH.childForceExpandHeight = true;
-        topH.padding = new RectOffset(0, 0, 0, 0);
-
-        MenuBtn(topRow.transform, UILocale.IsUK ? UiTheme.ButtonLabelUk : UiTheme.ButtonLabel,
-            () =>
-            {
-                UiTheme.Cycle();
-                NotifyInfo(UILocale.IsUK
-                    ? "Тема: " + UiTheme.ButtonLabelUk
-                    : "Theme: " + UiTheme.ButtonLabel);
-            }, MenuBtnKind.Normal, chipW);
-        MenuBtn(topRow.transform, UILocale.IsUK ? "EN" : "UA",
-            () => UILocale.Toggle(), MenuBtnKind.Normal, chipW);
-
-        // Bottom row HLG: Status | Hide — under Theme/Lang
-        var botRow = CreatePanel("RightBot", right.transform, new Color(0, 0, 0, 0));
-        botRow.GetComponent<Image>().raycastTarget = false;
-        var brt = botRow.GetComponent<RectTransform>();
-        brt.anchorMin = new Vector2(0f, 0f);
-        brt.anchorMax = new Vector2(1f, 0.5f);
-        brt.offsetMin = Vector2.zero;
-        brt.offsetMax = new Vector2(0f, -2f);
-        var botH = botRow.AddComponent<HorizontalLayoutGroup>();
-        botH.spacing = chipGap;
-        botH.childAlignment = TextAnchor.MiddleRight;
-        botH.childControlWidth = false;
-        botH.childControlHeight = true;
-        botH.childForceExpandWidth = false;
-        botH.childForceExpandHeight = true;
-        botH.padding = new RectOffset(0, 0, 0, 0);
-
-        // Status as layout chip (same size)
-        var statusBadge = CreatePanel("StatusBadge", botRow.transform, StatusBadgeBg(C_Muted));
-        var stLe = statusBadge.AddComponent<LayoutElement>();
-        stLe.preferredWidth = chipW;
-        stLe.minWidth = chipW;
-        stLe.preferredHeight = chipH;
-        stLe.flexibleWidth = 0f;
-        statusDot = statusBadge.GetComponent<Image>();
-        txtStatus = CreateText(statusBadge.transform, UILocale.T("st_ready"), 11, C_Text, FontStyles.Bold);
-        StretchFull(txtStatus.rectTransform, 4, 2, 4, 2);
-        txtStatus.alignment = TextAlignmentOptions.Center;
-        txtStatus.overflowMode = TextOverflowModes.Ellipsis;
-        txtStatus.enableWordWrapping = false;
-        txtStatus.raycastTarget = false;
-        SetStatusVisual("st_ready", C_Muted);
-
-        MenuBtn(botRow.transform, UILocale.T("top_hide"), TogglePanels, MenuBtnKind.Normal, chipW, out txtHideBtn);
-        // Re-tint Hide as active style
-        if (txtHideBtn != null)
-        {
-            var hideImg = txtHideBtn.transform.parent.GetComponent<Image>();
-            if (hideImg != null) hideImg.color = C_BtnActive;
-            txtHideBtn.color = UiTheme.ContrastOn(C_BtnActive);
-        }
-
-        // ── ROW 2: flight actions (same height 28, gap 5 as right chips) ──
         var row2 = CreatePanel("Row2", chrome.transform, new Color(0, 0, 0, 0));
         row2.GetComponent<Image>().raycastTarget = false;
         var r2 = row2.GetComponent<RectTransform>();
         r2.anchorMin = new Vector2(0, 0);
         r2.anchorMax = new Vector2(1, 0.5f);
         r2.offsetMin = new Vector2(10, 6);
-        r2.offsetMax = new Vector2(-(rightPad + rightW + 8f), -2);
+        r2.offsetMax = new Vector2(-(toolsW + rightInset + 12f), -2);
 
         var hlg = row2.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = chipGap;
+        hlg.spacing = gap;
         hlg.childAlignment = TextAnchor.MiddleLeft;
         hlg.childControlWidth = false;
         hlg.childControlHeight = true;
@@ -454,12 +528,257 @@ public class MissionControlUI : MonoBehaviour
         hlg.childForceExpandHeight = true;
         hlg.padding = new RectOffset(0, 0, 0, 0);
 
-        MenuBtn(row2.transform, UILocale.T("top_start") + "  Sp", OnStartLanding, MenuBtnKind.Start, chipW);
-        MenuBtn(row2.transform, UILocale.T("top_stop") + "  Esc", OnStop, MenuBtnKind.Stop, chipW);
-        MenuBtn(row2.transform, UILocale.T("top_ideal") + "  I", OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
-        trajToggleBtn = MenuBtn(row2.transform, UILocale.T("top_path_off") + "  L", OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
-        MenuBtn(row2.transform, UILocale.T("top_view") + "  T", OnFullTrajectoryView, MenuBtnKind.Normal, chipW);
-        MenuBtn(row2.transform, UILocale.T("top_export") + "  E", OnExportResults, MenuBtnKind.Normal, chipW);
+        MenuBtn(row2.transform, (UILocale.T("top_start") + "  SP").ToUpperInvariant(), OnStartLanding, MenuBtnKind.Start, chipW);
+        MenuBtn(row2.transform, (UILocale.T("top_stop") + "  ESC").ToUpperInvariant(), OnStop, MenuBtnKind.Stop, chipW);
+        MenuBtn(row2.transform, (UILocale.T("top_ideal") + "  I").ToUpperInvariant(), OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
+        trajToggleBtn = MenuBtn(row2.transform, (UILocale.T("top_path_on") + "  L").ToUpperInvariant(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
+        trajVisible = true;
+        EnsureTrajectoryVisualizer()?.SetVisible(true);
+        MenuBtn(row2.transform, (UILocale.T("top_view") + "  T").ToUpperInvariant(), OnFullTrajectoryView, MenuBtnKind.Normal, chipW);
+        MenuBtn(row2.transform, (UILocale.T("top_export") + "  E").ToUpperInvariant(), OnExportResults, MenuBtnKind.Normal, chipW);
+
+        // Right→left: Lang, Theme, Hide, Status — all C_Btn (dark), same width as Start
+        float xR = -rightInset;
+        PlaceEdgeBtn(chrome.transform, "LangBtn", UILocale.IsUK ? "EN" : "UA",
+            ref xR, chipW, C_Btn, () => UILocale.Toggle(), out txtLangBtn);
+        xR -= gap;
+        string themeLbl = UILocale.IsUK ? UiTheme.ButtonLabelUk : UiTheme.ButtonLabel;
+        if (string.IsNullOrEmpty(themeLbl)) themeLbl = "Theme";
+        if (themeLbl.Length > 7) themeLbl = themeLbl.Substring(0, 6) + ".";
+        PlaceEdgeBtn(chrome.transform, "ThemeBtn", themeLbl, ref xR, chipW, C_Btn, () =>
+        {
+            UiTheme.Cycle();
+            NotifyInfo(UILocale.IsUK
+                ? "Тема: " + UiTheme.ButtonLabelUk
+                : "Theme: " + UiTheme.ButtonLabel);
+        }, out txtThemeBtn);
+        xR -= gap;
+        PlaceEdgeBtn(chrome.transform, "HideBtn", UILocale.T("top_hide"),
+            ref xR, chipW, C_Btn, TogglePanels, out txtHideBtn);
+        xR -= gap;
+        PlaceEdgeBtn(chrome.transform, "StatusBadge", UILocale.T("st_ready"),
+            ref xR, chipW, C_Btn, null, out txtStatus);
+        statusDot = txtStatus != null ? txtStatus.transform.parent.GetComponent<Image>() : null;
+        SetStatusVisual("st_ready", C_Muted);
+    }
+
+    /// <summary>
+    /// Edge tool chip: same visual size as Start (full bottom-row height), pinned from right.
+    /// xR = right edge of chip (negative from chrome right).
+    /// </summary>
+    void PlaceEdgeBtn(Transform chrome, string name, string label, ref float xR, float w,
+        Color bg, UnityEngine.Events.UnityAction onClick, out TMP_Text labelTxt)
+    {
+        var go = CreatePanel(name, chrome, bg);
+        var rt = go.GetComponent<RectTransform>();
+        // Stretch vertically across entire bottom half of chrome (same band as Start row)
+        rt.anchorMin = new Vector2(1f, 0f);
+        rt.anchorMax = new Vector2(1f, 0.5f);
+        rt.pivot = new Vector2(1f, 0.5f);
+        rt.offsetMin = new Vector2(xR - w, 6f);
+        rt.offsetMax = new Vector2(xR, -2f);
+        xR -= w;
+
+        if (onClick != null)
+        {
+            var btn = go.AddComponent<Button>();
+            btn.targetGraphic = go.GetComponent<Image>();
+            var colors = btn.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.1f, 1.1f, 1.12f);
+            colors.pressedColor = new Color(0.85f, 0.85f, 0.88f);
+            colors.fadeDuration = 0.05f;
+            btn.colors = colors;
+            btn.onClick.AddListener(onClick);
+        }
+
+        labelTxt = CreateText(go.transform, label ?? "", 12, UiTheme.ContrastOn(bg), FontStyles.Bold);
+        StretchFull(labelTxt.rectTransform, 4, 2, 4, 2);
+        labelTxt.alignment = TextAlignmentOptions.Center;
+        labelTxt.overflowMode = TextOverflowModes.Overflow;
+        labelTxt.textWrappingMode = TextWrappingModes.NoWrap;
+        labelTxt.raycastTarget = false;
+    }
+
+    // Caption on dedicated overlay canvas (survives RebuildUi)
+    Image capBarImg, capMinImg, capMaxImg, capCloseImg, capEdgeImg;
+    TMP_Text capMinTxt, capMaxTxt, capCloseTxt;
+    Button capMinBtn, capMaxBtn, capCloseBtn;
+
+    void EnsureCaptionBar()
+    {
+        if (captionRoot != null) return;
+
+        captionRoot = new GameObject("CaptionCanvas");
+        captionRoot.transform.SetParent(transform, false);
+        var canvas = captionRoot.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 500; // above main HUD
+        UiTypography.ConfigureCanvas(canvas);
+        var scaler = captionRoot.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0f;
+        captionRoot.AddComponent<GraphicRaycaster>();
+
+        const float capW = 46f;
+        const float captionW = capW * 3f;
+
+        var bar = new GameObject("CaptionBar", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        bar.transform.SetParent(captionRoot.transform, false);
+        capBarImg = bar.GetComponent<Image>();
+        StyleSimpleImage(capBarImg, Color.white);
+        capBarImg.raycastTarget = false;
+        var brt = bar.GetComponent<RectTransform>();
+        brt.anchorMin = new Vector2(1f, 1f);
+        brt.anchorMax = new Vector2(1f, 1f);
+        brt.pivot = new Vector2(1f, 1f);
+        brt.anchoredPosition = Vector2.zero;
+        brt.sizeDelta = new Vector2(captionW, 32f);
+
+        var edge = new GameObject("CapEdge", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        edge.transform.SetParent(bar.transform, false);
+        capEdgeImg = edge.GetComponent<Image>();
+        StyleSimpleImage(capEdgeImg, Color.white);
+        capEdgeImg.raycastTarget = false;
+        var ert = edge.GetComponent<RectTransform>();
+        ert.anchorMin = new Vector2(0f, 0f);
+        ert.anchorMax = new Vector2(1f, 0f);
+        ert.pivot = new Vector2(0.5f, 0f);
+        ert.anchoredPosition = Vector2.zero;
+        ert.sizeDelta = new Vector2(0f, 1f);
+
+        var hlg = bar.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 1f;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = true;
+        hlg.childForceExpandHeight = true;
+
+        MakeCapBtn(bar.transform, "−", capW, out capMinImg, out capMinTxt, out capMinBtn,
+            () => { BorderlessWindow.Minimize(); NotifyInfo(UILocale.IsUK ? "Згорнуто" : "Minimized"); });
+        MakeCapBtn(bar.transform, "□", capW, out capMaxImg, out capMaxTxt, out capMaxBtn,
+            () =>
+            {
+                BorderlessWindow.ToggleFullscreen();
+                bool fs = Screen.fullScreen || Screen.fullScreenMode == FullScreenMode.FullScreenWindow;
+                NotifyInfo(fs
+                    ? (UILocale.IsUK ? "Повний екран" : "Fullscreen")
+                    : (UILocale.IsUK ? "Вікно" : "Windowed"));
+            });
+        MakeCapBtn(bar.transform, "×", capW, out capCloseImg, out capCloseTxt, out capCloseBtn, OnExitApp);
+
+        ApplyCaptionTheme();
+    }
+
+    void MakeCapBtn(Transform parent, string glyph, float w,
+        out Image img, out TMP_Text label, out Button btn, UnityEngine.Events.UnityAction onClick)
+    {
+        var go = new GameObject("Cap_" + glyph,
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(LayoutElement));
+        go.transform.SetParent(parent, false);
+        var le = go.GetComponent<LayoutElement>();
+        le.preferredWidth = w;
+        le.minWidth = w;
+        le.flexibleWidth = 1f;
+        le.preferredHeight = 32f;
+
+        img = go.GetComponent<Image>();
+        StyleSimpleImage(img, Color.white);
+        img.raycastTarget = true;
+
+        btn = go.GetComponent<Button>();
+        btn.targetGraphic = img;
+        btn.transition = Selectable.Transition.ColorTint;
+        btn.onClick.AddListener(onClick);
+
+        label = CreateText(go.transform, glyph, 18, Color.white, FontStyles.Bold);
+        StretchFull(label.rectTransform, 0, 0, 0, 0);
+        label.alignment = TextAlignmentOptions.Center;
+        label.raycastTarget = false;
+    }
+
+    /// <summary>Recolor − □ × from current theme without destroying them (no flicker).</summary>
+    void ApplyCaptionTheme()
+    {
+        if (captionRoot == null) return;
+
+        Color bar = C_Panel; bar.a = 1f;
+        Color idle = C_Btn;
+        Color ink = UiTheme.ContrastOn(idle);
+        Color hover = C_BtnHover.a < 0.01f ? Color.Lerp(idle, C_Accent, 0.35f) : C_BtnHover;
+        Color closeBg = Color.Lerp(C_Alert, C_Btn, 0.12f); closeBg.a = 1f;
+        Color closeInk = UiTheme.ContrastOn(closeBg);
+        Color closeHover = Color.Lerp(closeBg, Color.white, 0.2f);
+
+        if (capBarImg != null) capBarImg.color = bar;
+        if (capEdgeImg != null) { var e = C_Edge; e.a = 0.85f; capEdgeImg.color = e; }
+
+        void Paint(Image img, TMP_Text txt, Button btn, Color bg, Color fg, Color hi)
+        {
+            if (img == null || btn == null) return;
+            img.color = Color.white; // ColorTint multiplies this
+            var c = ColorBlock.defaultColorBlock;
+            c.normalColor = bg;
+            c.highlightedColor = hi;
+            c.pressedColor = Color.Lerp(bg, Color.black, 0.3f);
+            c.selectedColor = bg;
+            c.disabledColor = new Color(bg.r, bg.g, bg.b, 0.35f);
+            c.colorMultiplier = 1f;
+            c.fadeDuration = 0f; // no tween flash
+            btn.colors = c;
+            if (txt != null) txt.color = fg;
+        }
+
+        Paint(capMinImg, capMinTxt, capMinBtn, idle, ink, hover);
+        Paint(capMaxImg, capMaxTxt, capMaxBtn, idle, ink, hover);
+        Paint(capCloseImg, capCloseTxt, capCloseBtn, closeBg, closeInk, closeHover);
+    }
+
+    void OnExitApp()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
+    void NudgeSimSpeed(float factor)
+    {
+        if (sim != null && sim.IsExperimentRunning)
+        {
+            // Monte-Carlo speed = burst multiplier via experimentTimeScale
+            sim.experimentTimeScale = Mathf.Clamp(sim.experimentTimeScale * factor, 1f, 40f);
+            if (timeScaleSlider) timeScaleSlider.SetValueWithoutNotify(sim.experimentTimeScale);
+            RefreshSpeedLabel();
+            return;
+        }
+        float s = Mathf.Clamp(Time.timeScale * factor, 0.25f, 8f);
+        ApplyLiveTimeScale(s);
+    }
+
+    void ApplyLiveTimeScale(float s)
+    {
+        s = Mathf.Clamp(s, 0.25f, 8f);
+        if (sim != null && sim.IsExperimentRunning) return;
+        Time.timeScale = s;
+        // Keep fixed step close to base (don't explode fixedDt on high scale)
+        float baseDt = rocket != null && rocket.parameters != null
+            ? rocket.parameters.fixedTimeStep : 0.005f;
+        Time.fixedDeltaTime = baseDt;
+        RefreshSpeedLabel();
+    }
+
+    void RefreshSpeedLabel()
+    {
+        if (txtSpeed == null) return;
+        float s = (sim != null && sim.IsExperimentRunning)
+            ? sim.experimentTimeScale
+            : Time.timeScale;
+        txtSpeed.text = $"x{s:0.#}";
     }
 
     Button MenuBtn(Transform parent, string label, UnityEngine.Events.UnityAction action, MenuBtnKind kind,
@@ -501,6 +820,7 @@ public class MissionControlUI : MonoBehaviour
         le.minWidth = width;
         le.flexibleWidth = 0f;
         le.preferredHeight = 28f;
+        le.flexibleHeight = 1f; // stretch with row like Start when HLG expands height
 
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = go.GetComponent<Image>();
@@ -511,11 +831,11 @@ public class MissionControlUI : MonoBehaviour
         colors.fadeDuration = 0.05f;
         btn.colors = colors;
 
-        labelTxt = CreateText(go.transform, label, 11, txtCol, FontStyles.Bold);
+        labelTxt = CreateText(go.transform, label, 12, txtCol, FontStyles.Bold);
         StretchFull(labelTxt.rectTransform, 4, 2, 4, 2);
         labelTxt.alignment = TextAlignmentOptions.Center;
         labelTxt.overflowMode = TextOverflowModes.Ellipsis;
-        labelTxt.enableWordWrapping = false;
+        labelTxt.textWrappingMode = TextWrappingModes.NoWrap;
         labelTxt.raycastTarget = false;
         btn.onClick.AddListener(action);
         return btn;
@@ -565,6 +885,13 @@ public class MissionControlUI : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.P)) OnStartCompare();
         if (Input.GetKeyDown(KeyCode.X)) OnCancelCompare();
+
+        // Sim speed: , .  or  - =
+        if (Input.GetKeyDown(KeyCode.Comma) || Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
+            NudgeSimSpeed(1f / 1.5f);
+        if (Input.GetKeyDown(KeyCode.Period) || Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.KeypadPlus))
+            NudgeSimSpeed(1.5f);
+        if (Input.GetKeyDown(KeyCode.F11)) BorderlessWindow.ToggleFullscreen();
     }
 
     void SelectMode(RocketPhysics.ControlMode mode)
@@ -582,6 +909,8 @@ public class MissionControlUI : MonoBehaviour
         RestoreNominalInitialConditions();
         rocket.PrepareMode(mode);
         RefreshCamLabel();
+        UserSettings.ControlMode = (int)mode;
+        UserSettings.Save();
         NotifyInfo(string.Format(UILocale.T("msg_selected"), UILocale.ModeName(mode))
                    + "\n" + UILocale.T("ins_ideal_hint"));
     }
@@ -589,6 +918,8 @@ public class MissionControlUI : MonoBehaviour
     void TogglePanels()
     {
         panelsHidden = !panelsHidden;
+        UserSettings.PanelsHidden = panelsHidden;
+        UserSettings.Save();
         ApplyPanelsVisibility();
         NotifyInfo(panelsHidden
             ? (UILocale.IsUK ? "Панелі сховано (H — показати)" : "Panels hidden (H — show)")
@@ -631,7 +962,7 @@ public class MissionControlUI : MonoBehaviour
         StretchFull(labelTxt.rectTransform, 4, 2, 4, 2);
         labelTxt.alignment = TextAlignmentOptions.Center;
         labelTxt.overflowMode = TextOverflowModes.Ellipsis;
-        labelTxt.enableWordWrapping = false;
+        labelTxt.textWrappingMode = TextWrappingModes.NoWrap;
         labelTxt.raycastTarget = false;
         btn.onClick.AddListener(onClick);
     }
@@ -648,15 +979,11 @@ public class MissionControlUI : MonoBehaviour
         if (txtStatus != null)
         {
             txtStatus.text = UILocale.T(key);
-            // На бейджі — контрастний текст
-            float luma = 0.2126f * accent.r + 0.7152f * accent.g + 0.0722f * accent.b;
-            if (UiTheme.IsLightBackground)
-                txtStatus.color = luma > 0.55f ? new Color(0.08f, 0.1f, 0.14f) : accent;
-            else
-                txtStatus.color = Color.Lerp(accent, Color.white, 0.35f);
+            // Text carries status color; badge stays dark C_Btn like other tools
+            txtStatus.color = Color.Lerp(accent, Color.white, 0.45f);
         }
         if (statusDot != null)
-            statusDot.color = StatusBadgeBg(accent);
+            statusDot.color = C_Btn;
     }
 
     void BuildLeftPanel(Transform parent)
@@ -710,7 +1037,7 @@ public class MissionControlUI : MonoBehaviour
         insightBg.GetComponent<Image>().raycastTarget = false;
         PinTL(insightBg.GetComponent<RectTransform>(), pad, y, inner, 56);
         txtInsight = CreateText(insightBg.transform, UILocale.T("ins_wait"), 13, C_Text);
-        txtInsight.enableWordWrapping = true;
+        txtInsight.textWrappingMode = TextWrappingModes.Normal;
         txtInsight.alignment = TextAlignmentOptions.TopLeft;
         txtInsight.overflowMode = TextOverflowModes.Ellipsis;
         StretchFull(txtInsight.rectTransform, 8, 6, 8, 6);
@@ -753,7 +1080,7 @@ public class MissionControlUI : MonoBehaviour
         txtPeakTilt = Metric(root, UILocale.T("m_peak_tilt"), UILocale.T("u_deg"), ref y, pad, inner);
         txtMinH = Metric(root, UILocale.T("m_min_h"), UILocale.T("u_m"), ref y, pad, inner);
         txtDeltaStrip = CreateText(root, "d —", 11, C_Muted);
-        txtDeltaStrip.enableWordWrapping = true;
+        txtDeltaStrip.textWrappingMode = TextWrappingModes.Normal;
         txtDeltaStrip.overflowMode = TextOverflowModes.Ellipsis;
         PinTL(txtDeltaStrip.rectTransform, pad, y, inner, 32);
         y -= 36f;
@@ -796,7 +1123,7 @@ public class MissionControlUI : MonoBehaviour
 
         var t = CreateText(bg.transform, title + "\n--", 11, C_Muted, FontStyles.Bold);
         t.alignment = TextAlignmentOptions.Center;
-        t.enableWordWrapping = true;
+        t.textWrappingMode = TextWrappingModes.Normal;
         t.overflowMode = TextOverflowModes.Ellipsis;
         t.lineSpacing = -6f;
         StretchFull(t.rectTransform, 4, 3, 4, 3);
@@ -851,7 +1178,7 @@ public class MissionControlUI : MonoBehaviour
         PinTL(howBg.GetComponent<RectTransform>(), pad, y, inner, 40);
         txtHow = CreateText(howBg.transform, UILocale.T("how"), 12, C_Accent, FontStyles.Bold);
         txtHow.alignment = TextAlignmentOptions.Center;
-        txtHow.enableWordWrapping = true;
+        txtHow.textWrappingMode = TextWrappingModes.Normal;
         txtHow.overflowMode = TextOverflowModes.Overflow;
         StretchFull(txtHow.rectTransform, 10, 6, 10, 6);
         y -= 46f;
@@ -913,15 +1240,15 @@ public class MissionControlUI : MonoBehaviour
         // ── 4. Test setup ──
         Header(root, UILocale.T("h_step3"), ref y, pad, inner);
         txtTestsVal = SliderLine(root, UILocale.T("sl_tests"), UILocale.T("sl_tests_u"),
-            5, 40, 15, ref y, out testsSlider, pad, inner);
+            5, 40, UserSettings.Tests, ref y, out testsSlider, pad, inner);
         txtWindVal = SliderLine(root, UILocale.T("sl_wind"), UILocale.T("sl_wind_u"),
-            0, 25, 10, ref y, out windSlider, pad, inner);
+            0, 25, UserSettings.Wind, ref y, out windSlider, pad, inner);
         SliderLine(root, UILocale.T("sl_time"), UILocale.T("sl_time_u"),
-            1, 40, 20, ref y, out timeScaleSlider, pad, inner);
-        // toggles side by side
+            1, 40, UserSettings.TimeScale, ref y, out timeScaleSlider, pad, inner);
+        // toggles side by side (defaults applied in LoadUserSettingsIntoUi)
         float togY = y;
-        noiseToggle = ToggleAt(root, pad, togY, halfW, 26f, UILocale.T("tg_noise"), true);
-        trainToggle = ToggleAt(root, pad + halfW + gap, togY, halfW, 26f, UILocale.T("tg_train"), true);
+        noiseToggle = ToggleAt(root, pad, togY, halfW, 26f, UILocale.T("tg_noise"), UserSettings.Noise);
+        trainToggle = ToggleAt(root, pad + halfW + gap, togY, halfW, 26f, UILocale.T("tg_train"), UserSettings.Train);
         y -= 32f;
 
         // ── 5. Comparison results 2x2 ──
@@ -953,7 +1280,7 @@ public class MissionControlUI : MonoBehaviour
         PinTL(infoBg.GetComponent<RectTransform>(), pad, y, inner, 64);
         txtInfo = CreateText(infoBg.transform, UILocale.T("tip"), 11, C_Muted);
         StretchFull(txtInfo.rectTransform, 8, 6, 8, 6);
-        txtInfo.enableWordWrapping = true;
+        txtInfo.textWrappingMode = TextWrappingModes.Normal;
         txtInfo.overflowMode = TextOverflowModes.Ellipsis;
         txtInfo.alignment = TextAlignmentOptions.TopLeft;
         y -= 70f;
@@ -978,7 +1305,11 @@ public class MissionControlUI : MonoBehaviour
         ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
         RefreshCamLabel();
         ApplySettings();
+        rocket.batchDrivenTicks = false; // ensure FixedUpdate + trajectory run
         rocket.ResetSimulation();
+        var tv = EnsureTrajectoryVisualizer();
+        tv?.Clear();
+        tv?.SetVisible(trajVisible);
 
         // UI-вітер/шум → реальна одиночна посадка (не лише Monte-Carlo)
         float wind = windSlider != null ? windSlider.value : 0f;
@@ -1038,20 +1369,33 @@ public class MissionControlUI : MonoBehaviour
 
     void OnToggleTrajectoryLine()
     {
-        var tv = FindFirstObjectByType<TrajectoryVisualizer>();
+        var tv = EnsureTrajectoryVisualizer();
         if (tv == null) return;
         trajVisible = !tv.IsVisible;
         tv.SetVisible(trajVisible);
+        UserSettings.TrajectoryVisible = trajVisible;
+        UserSettings.Save();
         UpdateTrajButtonLabel();
         NotifyInfo(trajVisible ? UILocale.T("msg_traj_on") : UILocale.T("msg_traj_off"));
     }
 
     void UpdateTrajButtonLabel()
     {
-        var tv = FindFirstObjectByType<TrajectoryVisualizer>();
+        var tv = FindAnyObjectByType<TrajectoryVisualizer>();
         if (tv != null) trajVisible = tv.IsVisible;
         if (txtTrajBtn != null)
-            txtTrajBtn.text = (trajVisible ? UILocale.T("top_path_on") : UILocale.T("top_path_off")) + "  L";
+            txtTrajBtn.text = ((trajVisible ? UILocale.T("top_path_on") : UILocale.T("top_path_off")) + "  L").ToUpperInvariant();
+    }
+
+    static TrajectoryVisualizer EnsureTrajectoryVisualizer()
+    {
+        var tv = FindAnyObjectByType<TrajectoryVisualizer>();
+        if (tv != null) return tv;
+        var go = new GameObject("TrajectoryVisualizer");
+        tv = go.AddComponent<TrajectoryVisualizer>();
+        tv.rocketPhysics = FindAnyObjectByType<RocketPhysics>();
+        tv.baseLineWidth = 6f;
+        return tv;
     }
 
     void ResetFlightPeaks()
@@ -1218,7 +1562,7 @@ public class MissionControlUI : MonoBehaviour
 
     CameraFollow ResolveCamera()
     {
-        if (cameraFollow == null) cameraFollow = FindFirstObjectByType<CameraFollow>();
+        if (cameraFollow == null) cameraFollow = FindAnyObjectByType<CameraFollow>();
         return cameraFollow;
     }
 
@@ -1367,7 +1711,7 @@ public class MissionControlUI : MonoBehaviour
 
         // Тіло одразу під заголовком, низ щільно до кнопок
         txtResultBody = CreateText(card.transform, "", 15, C_Text);
-        txtResultBody.enableWordWrapping = true;
+        txtResultBody.textWrappingMode = TextWrappingModes.Normal;
         txtResultBody.overflowMode = TextOverflowModes.Overflow;
         txtResultBody.alignment = TextAlignmentOptions.TopLeft;
         txtResultBody.lineSpacing = 2f;
@@ -1635,18 +1979,38 @@ public class MissionControlUI : MonoBehaviour
         WriteStatBadge(txtNeural, neural);
         if (hybrid >= 0f) WriteStatBadge(txtHybrid, hybrid);
 
-        string winner = UILocale.T("mode_pid");
-        float max = pid;
-        if (fuzzy >= max) { max = fuzzy; winner = UILocale.T("mode_fuzzy"); }
-        if (neural >= max) { max = neural; winner = UILocale.T("mode_neural"); }
-        if (hybrid > max) { max = hybrid; winner = UILocale.T("mode_hybrid"); }
+        string winner = "—";
+        float max = -1f;
+        void Consider(string name, float rate)
+        {
+            if (rate < 0f) return;
+            if (rate > max + 1e-4f) { max = rate; winner = name; }
+        }
+        Consider(UILocale.T("mode_pid"), pid);
+        Consider(UILocale.T("mode_fuzzy"), fuzzy);
+        Consider(UILocale.T("mode_neural"), neural);
+        Consider(UILocale.T("mode_hybrid"), hybrid);
+        if (max < 0f) max = 0f;
+
         if (txtWinner)
         {
-            txtWinner.text = string.Format(UILocale.T("winner_fmt"), winner, max);
-            txtWinner.color = C_Ok;
+            if (max <= 0.05f)
+            {
+                txtWinner.text = UILocale.T("winner_none");
+                txtWinner.color = C_Muted;
+            }
+            else
+            {
+                txtWinner.text = string.Format(UILocale.T("winner_fmt"), winner, max);
+                txtWinner.color = C_Ok;
+            }
         }
         if (txtInfo)
-            txtInfo.text = string.Format(UILocale.T("msg_compare_done"), winner, max);
+        {
+            txtInfo.text = max <= 0.05f
+                ? UILocale.T("msg_compare_zero")
+                : string.Format(UILocale.T("msg_compare_done"), winner, max);
+        }
     }
 
     static void WriteStatBadge(TMP_Text t, float pct)
@@ -1720,8 +2084,7 @@ public class MissionControlUI : MonoBehaviour
     /// </summary>
     static void EnsureEventSystem()
     {
-        var all = Object.FindObjectsByType<UnityEngine.EventSystems.EventSystem>(
-            FindObjectsInactive.Include, FindObjectsSortMode.None);
+        var all = Object.FindObjectsByType<UnityEngine.EventSystems.EventSystem>(FindObjectsInactive.Include);
         UnityEngine.EventSystems.EventSystem es;
         if (all == null || all.Length == 0)
         {
@@ -1763,7 +2126,6 @@ public class MissionControlUI : MonoBehaviour
             // Standalone надійно клікає при Input Manager / Both
             var standalone = es.gameObject.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
             standalone.enabled = true;
-            standalone.forceModuleActive = true;
             hasWorkingModule = true;
         }
         else
@@ -1801,7 +2163,6 @@ public class MissionControlUI : MonoBehaviour
             {
                 var standalone = es.gameObject.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
                 standalone.enabled = true;
-                standalone.forceModuleActive = true;
                 hasWorkingModule = true;
             }
         }
@@ -1901,7 +2262,7 @@ public class MissionControlUI : MonoBehaviour
         var k = CreateText(parent, key, primary ? 12f : 11f, C_Muted);
         PinTL(k.rectTransform, pad, y, labelW, rowH);
         k.overflowMode = TextOverflowModes.Ellipsis;
-        k.enableWordWrapping = false;
+        k.textWrappingMode = TextWrappingModes.NoWrap;
         metricLabels.Add(k);
 
         var u = CreateText(parent, unit, 11, C_Muted);
@@ -2107,7 +2468,7 @@ public class MissionControlUI : MonoBehaviour
         StretchFull(txtStep.rectTransform, 12, 4, 12, 4);
         txtStep.alignment = TextAlignmentOptions.Center;
         txtStep.overflowMode = TextOverflowModes.Ellipsis;
-        txtStep.enableWordWrapping = false;
+        txtStep.textWrappingMode = TextWrappingModes.NoWrap;
         txtStep.raycastTarget = false;
     }
 
@@ -2152,6 +2513,8 @@ public class MissionControlUI : MonoBehaviour
     Button ModeButtonAt(Transform parent, float x, float y, float w, float h,
         string title, string subtitle, RocketPhysics.ControlMode mode)
     {
+        title = (title ?? "").ToUpperInvariant();
+        subtitle = (subtitle ?? "").ToUpperInvariant();
         var go = CreatePanel("Mode_" + mode, parent, C_Btn);
         PinTL(go.GetComponent<RectTransform>(), x, y, w, h);
         var btn = go.AddComponent<Button>();
@@ -2174,7 +2537,7 @@ public class MissionControlUI : MonoBehaviour
         tr.offsetMax = new Vector2(-6, -3);
         txt.alignment = TextAlignmentOptions.BottomLeft;
         txt.overflowMode = TextOverflowModes.Ellipsis;
-        txt.enableWordWrapping = false;
+        txt.textWrappingMode = TextWrappingModes.NoWrap;
         txt.raycastTarget = false;
 
         if (!string.IsNullOrEmpty(subtitle))
@@ -2236,7 +2599,7 @@ public class MissionControlUI : MonoBehaviour
         StretchFull(txt.rectTransform, 4, 2, 4, 2);
         txt.alignment = TextAlignmentOptions.Center;
         txt.overflowMode = TextOverflowModes.Ellipsis;
-        txt.enableWordWrapping = false;
+        txt.textWrappingMode = TextWrappingModes.NoWrap;
         txt.raycastTarget = false;
         btn.onClick.AddListener(action);
     }
@@ -2244,74 +2607,118 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text SliderLine(Transform parent, string label, string unit, float min, float max, float val,
         ref float y, out Slider slider, float pad = 12f, float width = 314f)
     {
-        // Label + value (units)
-        var k = CreateText(parent, label, 11, C_Muted);
-        PinTL(k.rectTransform, pad, y, width * 0.68f, 16);
-        k.overflowMode = TextOverflowModes.Ellipsis;
-        k.enableWordWrapping = false;
+        // Fixed geometry — identical for every slider (label+value+track in one block)
+        const float blockH = 44f;
+        const float labelH = 16f;
+        const float trackH = 4f;
+        const float knob = 12f;
+        const float trackPadX = 6f;
+
+        Color trackCol = Color.Lerp(C_Edge, C_PanelSoft, UiTheme.IsLightBackground ? 0.25f : 0.4f);
+        trackCol.a = 1f;
+        Color fillCol = C_Accent; fillCol.a = 1f;
+        Color handleCol = C_Amber; handleCol.a = 1f;
+        Color labelCol = C_Text; labelCol.a = 0.92f;
 
         string unitS = string.IsNullOrEmpty(unit) ? "" : (" " + unit);
-        var v = CreateText(parent, val.ToString("F0") + unitS, 12, C_Accent, FontStyles.Bold);
+
+        // ── Block container ──
+        var block = CreatePanel("SliderBlock", parent, C_PanelSoft);
+        block.GetComponent<Image>().raycastTarget = false;
+        PinTL(block.GetComponent<RectTransform>(), pad, y, width, blockH);
+
+        // Label (left) — inside block so it never "vanishes" under siblings
+        var k = CreateText(block.transform, label ?? "", 12, labelCol);
+        k.raycastTarget = false;
+        k.overflowMode = TextOverflowModes.Ellipsis;
+        k.textWrappingMode = TextWrappingModes.NoWrap;
+        var krt = k.rectTransform;
+        krt.anchorMin = new Vector2(0f, 1f);
+        krt.anchorMax = new Vector2(1f, 1f);
+        krt.pivot = new Vector2(0f, 1f);
+        krt.anchoredPosition = new Vector2(8f, -4f);
+        krt.sizeDelta = new Vector2(-100f, labelH); // leave room for value
+
+        // Value (right)
+        var v = CreateText(block.transform, Mathf.RoundToInt(val) + unitS, 12, C_Accent, FontStyles.Bold);
+        v.raycastTarget = false;
         v.alignment = TextAlignmentOptions.Right;
-        PinTL(v.rectTransform, pad + width * 0.58f, y, width * 0.42f, 16);
         v.overflowMode = TextOverflowModes.Overflow;
-        y -= 17f;
+        v.textWrappingMode = TextWrappingModes.NoWrap;
+        var vrt = v.rectTransform;
+        vrt.anchorMin = new Vector2(1f, 1f);
+        vrt.anchorMax = new Vector2(1f, 1f);
+        vrt.pivot = new Vector2(1f, 1f);
+        vrt.anchoredPosition = new Vector2(-8f, -4f);
+        vrt.sizeDelta = new Vector2(88f, labelH);
 
-        // ONE track line only (no progress fill) — identical thickness for every slider
-        const float boxH = 20f;
-        const float lineH = 3f;
-        const float knob = 14f;
+        // ── Slider hit area (lower half of block) ──
+        var slideGo = new GameObject("Slider", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        slideGo.transform.SetParent(block.transform, false);
+        var srt = slideGo.GetComponent<RectTransform>();
+        srt.anchorMin = new Vector2(0f, 0f);
+        srt.anchorMax = new Vector2(1f, 0f);
+        srt.pivot = new Vector2(0.5f, 0f);
+        srt.anchoredPosition = new Vector2(0f, 2f);
+        srt.sizeDelta = new Vector2(0f, 24f);
+        var slideImg = slideGo.GetComponent<Image>();
+        StyleSimpleImage(slideImg, new Color(0f, 0f, 0f, 0.001f));
+        slideImg.raycastTarget = true;
 
-        Color trackCol = UiTheme.IsLightBackground
-            ? new Color(0.62f, 0.66f, 0.72f, 1f)
-            : new Color(0.28f, 0.30f, 0.34f, 1f);
-        Color handleCol = C_Amber; handleCol.a = 1f;
-
-        var root = new GameObject("SliderRoot", typeof(RectTransform));
-        root.transform.SetParent(parent, false);
-        PinTL(root.GetComponent<RectTransform>(), pad, y, width, boxH);
-
-        var hitGo = new GameObject("Hit", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        hitGo.transform.SetParent(root.transform, false);
-        var hitImg = hitGo.GetComponent<Image>();
-        StyleSimpleImage(hitImg, new Color(1f, 1f, 1f, 0.001f));
-        hitImg.raycastTarget = true;
-        StretchFull(hitGo.GetComponent<RectTransform>(), 0, 0, 0, 0);
-
-        slider = hitGo.AddComponent<Slider>();
+        slider = slideGo.AddComponent<Slider>();
         slider.minValue = min;
         slider.maxValue = max;
         slider.wholeNumbers = true;
         slider.direction = Slider.Direction.LeftToRight;
         slider.transition = Selectable.Transition.None;
         slider.navigation = new Navigation { mode = Navigation.Mode.None };
-        slider.fillRect = null;
+        slideGo.AddComponent<SliderScrollLock>();
 
-        // Track: stretch X, FIXED pixel height via sizeDelta.y (never modified after create)
-        var trackGo = new GameObject("Track", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        trackGo.transform.SetParent(root.transform, false);
-        var trackImg = trackGo.GetComponent<Image>();
-        StyleSimpleImage(trackImg, trackCol);
-        trackImg.raycastTarget = false;
-        var tr = trackGo.GetComponent<RectTransform>();
-        tr.anchorMin = new Vector2(0f, 0.5f);
-        tr.anchorMax = new Vector2(1f, 0.5f);
-        tr.pivot = new Vector2(0.5f, 0.5f);
-        tr.anchoredPosition = Vector2.zero;
-        tr.sizeDelta = new Vector2(0f, lineH);
-        tr.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, lineH);
+        // Background track (fixed height via center anchors + sizeDelta.y)
+        var bgGo = new GameObject("Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        bgGo.transform.SetParent(slideGo.transform, false);
+        StyleSimpleImage(bgGo.GetComponent<Image>(), trackCol);
+        bgGo.GetComponent<Image>().raycastTarget = false;
+        var bgr = bgGo.GetComponent<RectTransform>();
+        bgr.anchorMin = new Vector2(0f, 0.5f);
+        bgr.anchorMax = new Vector2(1f, 0.5f);
+        bgr.pivot = new Vector2(0.5f, 0.5f);
+        bgr.anchoredPosition = Vector2.zero;
+        bgr.sizeDelta = new Vector2(-trackPadX * 2f, trackH);
 
-        var hAreaGo = new GameObject("Handle Slide Area", typeof(RectTransform));
-        hAreaGo.transform.SetParent(root.transform, false);
-        var ha = hAreaGo.GetComponent<RectTransform>();
-        ha.anchorMin = new Vector2(0f, 0.5f);
-        ha.anchorMax = new Vector2(1f, 0.5f);
-        ha.pivot = new Vector2(0.5f, 0.5f);
-        ha.anchoredPosition = Vector2.zero;
-        ha.sizeDelta = new Vector2(-knob, knob);
+        // Fill Area — standard Unity layout (height locked)
+        var fillArea = new GameObject("Fill Area", typeof(RectTransform));
+        fillArea.transform.SetParent(slideGo.transform, false);
+        var far = fillArea.GetComponent<RectTransform>();
+        far.anchorMin = new Vector2(0f, 0.5f);
+        far.anchorMax = new Vector2(1f, 0.5f);
+        far.pivot = new Vector2(0.5f, 0.5f);
+        far.anchoredPosition = Vector2.zero;
+        far.sizeDelta = new Vector2(-trackPadX * 2f - knob, trackH);
+
+        var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        fillGo.transform.SetParent(fillArea.transform, false);
+        StyleSimpleImage(fillGo.GetComponent<Image>(), fillCol);
+        fillGo.GetComponent<Image>().raycastTarget = false;
+        var fr = fillGo.GetComponent<RectTransform>();
+        // Unity Slider drives anchorMax.x; keep y anchors full of fill area
+        fr.anchorMin = new Vector2(0f, 0f);
+        fr.anchorMax = new Vector2(0f, 1f);
+        fr.offsetMin = Vector2.zero;
+        fr.offsetMax = Vector2.zero;
+        fr.pivot = new Vector2(0f, 0.5f);
+
+        // Handle Slide Area
+        var hArea = new GameObject("Handle Slide Area", typeof(RectTransform));
+        hArea.transform.SetParent(slideGo.transform, false);
+        var har = hArea.GetComponent<RectTransform>();
+        har.anchorMin = new Vector2(0f, 0f);
+        har.anchorMax = new Vector2(1f, 1f);
+        har.offsetMin = new Vector2(trackPadX + knob * 0.5f, 0f);
+        har.offsetMax = new Vector2(-(trackPadX + knob * 0.5f), 0f);
 
         var handleGo = new GameObject("Handle", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        handleGo.transform.SetParent(hAreaGo.transform, false);
+        handleGo.transform.SetParent(hArea.transform, false);
         var hImg = handleGo.GetComponent<Image>();
         StyleSimpleImage(hImg, handleCol);
         hImg.raycastTarget = true;
@@ -2321,16 +2728,31 @@ public class MissionControlUI : MonoBehaviour
         hr.pivot = new Vector2(0.5f, 0.5f);
         hr.sizeDelta = new Vector2(knob, knob);
 
+        slider.fillRect = fr;
         slider.handleRect = hr;
         slider.targetGraphic = hImg;
+
+        // Re-lock handle size after Slider mutates anchors on first Set
+        void LockHandle()
+        {
+            if (hr == null) return;
+            // Unity sets handle anchors to (n,0)-(n,1); keep equal size via sizeDelta
+            hr.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, knob);
+            hr.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, knob);
+        }
+
         slider.onValueChanged.AddListener(x =>
         {
-            if (v != null) v.text = Mathf.RoundToInt(x).ToString() + unitS;
+            if (v != null) v.text = Mathf.RoundToInt(x) + unitS;
+            LockHandle();
         });
-        slider.value = val;
-        if (v != null) v.text = Mathf.RoundToInt(val).ToString() + unitS;
+        slider.SetValueWithoutNotify(val);
+        slider.onValueChanged.Invoke(val); // refresh value text + lock
+        // Force correct fill/handle layout once
+        Canvas.ForceUpdateCanvases();
+        LockHandle();
 
-        y -= 24f;
+        y -= blockH + 6f;
         return v;
     }
 
@@ -2358,7 +2780,7 @@ public class MissionControlUI : MonoBehaviour
         trt.offsetMax = new Vector2(-4, -2);
         txt.alignment = TextAlignmentOptions.Left;
         txt.overflowMode = TextOverflowModes.Ellipsis;
-        txt.enableWordWrapping = false;
+        txt.textWrappingMode = TextWrappingModes.NoWrap;
         txt.raycastTarget = false;
 
         var toggle = row.AddComponent<Toggle>();
@@ -2449,5 +2871,43 @@ public class MissionControlUI : MonoBehaviour
         rt.anchorMax = Vector2.one;
         rt.offsetMin = new Vector2(l, b);
         rt.offsetMax = new Vector2(-r, -t);
+    }
+}
+
+/// <summary>
+/// While dragging a Slider inside a ScrollRect, disable the scroll so the handle moves.
+/// </summary>
+public class SliderScrollLock : MonoBehaviour,
+    UnityEngine.EventSystems.IPointerDownHandler,
+    UnityEngine.EventSystems.IPointerUpHandler,
+    UnityEngine.EventSystems.IBeginDragHandler,
+    UnityEngine.EventSystems.IEndDragHandler,
+    UnityEngine.EventSystems.IDragHandler
+{
+    ScrollRect scroll;
+    bool locked;
+
+    void Awake() => scroll = GetComponentInParent<ScrollRect>();
+
+    public void OnPointerDown(UnityEngine.EventSystems.PointerEventData eventData) => Lock();
+    public void OnBeginDrag(UnityEngine.EventSystems.PointerEventData eventData) => Lock();
+    public void OnDrag(UnityEngine.EventSystems.PointerEventData eventData) { }
+    public void OnPointerUp(UnityEngine.EventSystems.PointerEventData eventData) => Unlock();
+    public void OnEndDrag(UnityEngine.EventSystems.PointerEventData eventData) => Unlock();
+    void OnDisable() => Unlock();
+
+    void Lock()
+    {
+        if (scroll == null || locked) return;
+        scroll.StopMovement();
+        scroll.enabled = false;
+        locked = true;
+    }
+
+    void Unlock()
+    {
+        if (!locked) return;
+        if (scroll != null) scroll.enabled = true;
+        locked = false;
     }
 }

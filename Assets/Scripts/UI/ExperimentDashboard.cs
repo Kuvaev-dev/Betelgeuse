@@ -41,12 +41,12 @@ public class ExperimentDashboard : MonoBehaviour
         ensureTheme = false;
 
         if (simulationManager == null)
-            simulationManager = FindFirstObjectByType<SimulationManager>();
+            simulationManager = FindAnyObjectByType<SimulationManager>();
         if (rocketPhysics == null)
-            rocketPhysics = FindFirstObjectByType<RocketPhysics>();
+            rocketPhysics = FindAnyObjectByType<RocketPhysics>();
 
         // If modern UI is active, never wire legacy scene buttons (they caused "random" mode switches)
-        if (FindFirstObjectByType<MissionControlUI>() != null)
+        if (FindAnyObjectByType<MissionControlUI>() != null)
         {
             if (btnRunPID) btnRunPID.interactable = false;
             if (btnRunFuzzy) btnRunFuzzy.interactable = false;
@@ -96,7 +96,7 @@ public class ExperimentDashboard : MonoBehaviour
         rocketPhysics.controlMode = mode;
         Debug.Log($"▶ Single run: {mode}");
         rocketPhysics.ResetSimulation();
-        FindFirstObjectByType<TrajectoryVisualizer>()?.Clear();
+        FindAnyObjectByType<TrajectoryVisualizer>()?.Clear();
     }
 
     void RunFullExperiment()
@@ -114,7 +114,7 @@ public class ExperimentDashboard : MonoBehaviour
     void ResetSimulation()
     {
         rocketPhysics?.ResetSimulation();
-        FindFirstObjectByType<TrajectoryVisualizer>()?.Clear();
+        FindAnyObjectByType<TrajectoryVisualizer>()?.Clear();
     }
 
     /// <summary>Зворотна сумісність (3 алгоритми).</summary>
@@ -144,16 +144,31 @@ public class ExperimentDashboard : MonoBehaviour
             hybridStatsText.color = MissionControlTheme.Text;
         }
 
-        string winner = "PID";
-        float max = pidSuccess;
-        if (fuzzySuccess >= max) { max = fuzzySuccess; winner = "Fuzzy Sugeno"; }
-        if (neuralSuccess >= max) { max = neuralSuccess; winner = "Neural ES"; }
-        if (hybridSuccess > max) { max = hybridSuccess; winner = "Hybrid Neuro-Fuzzy"; }
+        string winner = "—";
+        float max = -1f;
+        void Consider(string name, float rate)
+        {
+            if (rate < 0f) return;
+            if (rate > max + 1e-4f) { max = rate; winner = name; }
+        }
+        Consider("PID", pidSuccess);
+        Consider("Fuzzy Sugeno", fuzzySuccess);
+        Consider("Neural ES", neuralSuccess);
+        Consider("Hybrid Neuro-Fuzzy", hybridSuccess);
+        if (max < 0f) max = 0f;
 
         if (winnerText)
         {
-            winnerText.text = $"BEST    {winner}  ({max:F1}%)";
-            winnerText.color = MissionControlTheme.Ok;
+            if (max <= 0.05f)
+            {
+                winnerText.text = "BEST    — (all 0%)";
+                winnerText.color = MissionControlTheme.Muted;
+            }
+            else
+            {
+                winnerText.text = $"BEST    {winner}  ({max:F1}%)";
+                winnerText.color = MissionControlTheme.Ok;
+            }
         }
 
         if (MissionControlUI.Instance != null)

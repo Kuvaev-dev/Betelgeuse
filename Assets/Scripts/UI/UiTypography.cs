@@ -4,8 +4,8 @@ using UnityEngine.TextCore.LowLevel;
 using System.Collections.Generic;
 
 /// <summary>
-/// Чіткий HUD-текст (кирилиця + латиниця).
-/// Base = LiberationSans SDF (латиниця/цифри), fallback = динамічний Segoe UI (кирилиця).
+/// Чіткий HUD-текст. Один динамічний SDF (Segoe UI) для латиниці + кирилиці —
+/// без dual-material fallback, який розмиває дрібний UI.
 /// </summary>
 public static class UiTypography
 {
@@ -20,7 +20,7 @@ public static class UiTypography
             if (!triedBuild)
             {
                 triedBuild = true;
-                cachedFont = BuildFontChain();
+                cachedFont = BuildFont();
             }
             if (cachedFont == null && TMP_Settings.defaultFontAsset != null)
                 cachedFont = TMP_Settings.defaultFontAsset;
@@ -42,44 +42,39 @@ public static class UiTypography
     public static Color BtnActive => UiTheme.Current.BtnActive;
     public static Color Edge => UiTheme.Current.Edge;
 
-    static TMP_FontAsset BuildFontChain()
+    const int Sampling = 48; // TMP UI sweet-spot (large sampling blurs small HUD sizes)
+    const int Padding = 5;
+
+    static TMP_FontAsset BuildFont()
     {
         try
         {
-            // 1) Готовий якісний SDF (латиниця/цифри) з пакету TMP
-            TMP_FontAsset primary = null;
-            var tmpDefault = TMP_Settings.defaultFontAsset;
-            if (tmpDefault != null)
-                primary = Object.Instantiate(tmpDefault);
-            if (primary == null)
-                primary = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
-
-            // 2) Динамічний OS-шрифт з кирилицею (висока якість атласу)
-            TMP_FontAsset cyr = BuildCyrillicDynamic();
-
-            if (primary != null && cyr != null)
+            var fa = BuildDynamicSdf();
+            if (fa != null)
             {
-                primary.name = "Betelgeuse_UI_Primary";
-                if (primary.fallbackFontAssetTable == null)
-                    primary.fallbackFontAssetTable = new List<TMP_FontAsset>();
-                // прибрати старі fallback і додати наш
-                primary.fallbackFontAssetTable.Clear();
-                primary.fallbackFontAssetTable.Add(cyr);
-                TuneMaterial(primary.material, 5);
-                TuneMaterial(cyr.material, 9);
-                Prefill(cyr);
-                Debug.Log("[UiTypography] Primary+Cyrillic fallback ready");
-                return primary;
+                Prefill(fa);
+                TuneMaterial(fa.material);
+                // LiberationSans as last-resort for rare glyphs only
+                var lib = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+                if (lib != null)
+                {
+                    if (fa.fallbackFontAssetTable == null)
+                        fa.fallbackFontAssetTable = new List<TMP_FontAsset>();
+                    fa.fallbackFontAssetTable.Clear();
+                    fa.fallbackFontAssetTable.Add(lib);
+                }
+                Debug.Log("[UiTypography] Dynamic SDF ready (sampling=" + Sampling + ")");
+                return fa;
             }
 
-            if (cyr != null)
+            var fallback = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+            if (fallback != null)
             {
-                Prefill(cyr);
-                TuneMaterial(cyr.material, 9);
-                return cyr;
+                var copy = Object.Instantiate(fallback);
+                TuneMaterial(copy.material);
+                return copy;
             }
-
-            return primary;
+            return TMP_Settings.defaultFontAsset;
         }
         catch (System.Exception e)
         {
@@ -88,12 +83,8 @@ public static class UiTypography
         }
     }
 
-    static TMP_FontAsset BuildCyrillicDynamic()
+    static TMP_FontAsset BuildDynamicSdf()
     {
-        // Higher sampling + padding → smooth SDF edges (low sampling looks pixelated)
-        const int sampling = 90;
-        const int padding = 9;
-
         UnityEngine.Font source = Resources.Load<UnityEngine.Font>("Fonts/SegoeUI");
         if (source == null)
         {
@@ -103,7 +94,7 @@ public static class UiTypography
                     "Segoe UI", "Segoe UI Variable Text",
                     "Arial", "Tahoma", "Calibri", "Microsoft Sans Serif"
                 },
-                sampling);
+                Sampling);
         }
         if (source == null) return null;
 
@@ -112,11 +103,11 @@ public static class UiTypography
         {
             fa = TMP_FontAsset.CreateFontAsset(
                 source,
-                sampling,
-                padding,
+                Sampling,
+                Padding,
                 GlyphRenderMode.SDFAA,
-                4096,
-                4096,
+                2048,
+                2048,
                 AtlasPopulationMode.Dynamic,
                 true);
         }
@@ -126,7 +117,7 @@ public static class UiTypography
         }
         if (fa == null) return null;
 
-        fa.name = "Betelgeuse_UI_Cyrillic";
+        fa.name = "Betelgeuse_UI_SDF";
         fa.isMultiAtlasTexturesEnabled = true;
 
         if (fa.atlasTextures != null)
@@ -139,41 +130,45 @@ public static class UiTypography
             }
         }
 
-        TuneMaterial(fa.material, padding);
+        TuneMaterial(fa.material);
         return fa;
     }
 
-    static void TuneMaterial(Material mat, int atlasPadding = 9)
+    static void TuneMaterial(Material mat)
     {
         if (mat == null) return;
 
-        // GradientScale must match atlas padding for clean SDF (padding+1)
-        float grad = atlasPadding + 1f;
+        // Must equal atlas padding + 1 for crisp SDF edges
         if (mat.HasProperty(ShaderUtilities.ID_GradientScale))
-            mat.SetFloat(ShaderUtilities.ID_GradientScale, grad);
+            mat.SetFloat(ShaderUtilities.ID_GradientScale, Padding + 1f);
 
         if (mat.HasProperty(ShaderUtilities.ID_FaceDilate))
-            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.0f);
+            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightNormal))
-            mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0.0f);
+            mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightBold))
-            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.25f);
-        // High sharpness = jagged/pixel edges; keep near zero
+            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.3f);
+        // Slight positive sharpness helps Overlay canvas readability
         if (mat.HasProperty(ShaderUtilities.ID_Sharpness))
-            mat.SetFloat(ShaderUtilities.ID_Sharpness, 0.0f);
+            mat.SetFloat(ShaderUtilities.ID_Sharpness, 0.35f);
 
         mat.DisableKeyword("UNDERLAY_ON");
         mat.DisableKeyword("UNDERLAY_INNER");
         mat.DisableKeyword("OUTLINE_ON");
         if (mat.HasProperty(ShaderUtilities.ID_UnderlayColor))
             mat.SetColor(ShaderUtilities.ID_UnderlayColor, Color.clear);
+        if (mat.HasProperty(ShaderUtilities.ID_UnderlaySoftness))
+            mat.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0f);
+        if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetX))
+            mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0f);
+        if (mat.HasProperty(ShaderUtilities.ID_UnderlayOffsetY))
+            mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, 0f);
         if (mat.HasProperty(ShaderUtilities.ID_OutlineColor))
             mat.SetColor(ShaderUtilities.ID_OutlineColor, Color.clear);
         if (mat.HasProperty(ShaderUtilities.ID_OutlineWidth))
             mat.SetFloat(ShaderUtilities.ID_OutlineWidth, 0f);
         if (mat.HasProperty(ShaderUtilities.ID_OutlineSoftness))
             mat.SetFloat(ShaderUtilities.ID_OutlineSoftness, 0f);
-
         if (mat.HasProperty(ShaderUtilities.ID_FaceColor))
             mat.SetColor(ShaderUtilities.ID_FaceColor, Color.white);
     }
@@ -185,11 +180,11 @@ public static class UiTypography
             " АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯ" +
             "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя" +
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" +
-            "0123456789.,;:!?%/+-*=()[]{}<>|@#_'\"°·•→←↑↓—–…«»№" +
-            " м/с кг кН % с т /100 Δ≈" +
+            "0123456789.,;:!?%/+-*=()[]{}<>|@#_'\" " +
+            "м/с кг кН % с т /100 " +
             "ГОТОВООЧІК.СТАРТСПУСКУСПІХЗБІЙСТОПТЕСТСХОВАТИПОКАЗАТИ" +
             "READYWAITSTARTDOWNOKFAILSTOPTESTHIDEUISHOWUI" +
-            "КритеріїКлавішінахилпромахм/с";
+            "КритеріїКлавішінахилпромахПідказкаАлгоритм";
         fa.TryAddCharacters(sample, out _);
     }
 
@@ -200,26 +195,39 @@ public static class UiTypography
         if (f != null)
         {
             tmp.font = f;
-            // Shared material — не плодити копії (зберігає SDF keywords/quality)
             if (f.material != null)
                 tmp.fontSharedMaterial = f.material;
         }
 
-        // Integer font size only — fractional sizes look pixelated under CanvasScaler
-        float s = Mathf.Max(11f, Mathf.Round(size));
-        tmp.fontSize = Mathf.Clamp(s, 11f, 36f);
+        // Integer sizes only
+        float s = Mathf.Max(12f, Mathf.Round(size));
+        tmp.fontSize = Mathf.Clamp(s, 12f, 32f);
 
         color.a = 1f;
         if (!UiTheme.IsLightBackground && Luma(color) < 0.42f && Luma(color) > 0.04f)
             color = Color.Lerp(color, Color.white, 0.45f);
 
         tmp.color = color;
-        tmp.fontStyle = style;
+        // Synthetic Bold softens SDF — prefer Normal + slightly larger size for "bold" look
+        if (style == FontStyles.Bold)
+        {
+            tmp.fontStyle = FontStyles.Normal;
+            tmp.fontSize = Mathf.Min(32f, tmp.fontSize + 1f);
+            if (tmp.fontSharedMaterial != null &&
+                tmp.fontSharedMaterial.HasProperty(ShaderUtilities.ID_FaceDilate))
+            {
+                // keep shared mat clean; weight via size only
+            }
+        }
+        else
+        {
+            tmp.fontStyle = FontStyles.Normal;
+        }
+
         tmp.characterSpacing = 0f;
         tmp.wordSpacing = 0f;
         tmp.lineSpacing = 0f;
         tmp.paragraphSpacing = 0f;
-        tmp.enableKerning = true;
         tmp.extraPadding = true;
         tmp.richText = false;
         tmp.raycastTarget = false;
@@ -228,7 +236,7 @@ public static class UiTypography
         tmp.outlineColor = new Color32(0, 0, 0, 0);
         tmp.enableVertexGradient = false;
         tmp.overflowMode = TextOverflowModes.Overflow;
-        tmp.enableWordWrapping = false;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
         tmp.enableAutoSizing = false;
         tmp.geometrySortingOrder = VertexSortingOrder.Normal;
     }

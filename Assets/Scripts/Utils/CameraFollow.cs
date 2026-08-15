@@ -367,7 +367,7 @@ public class CameraFollow : MonoBehaviour
             Enc(rocket.state.position);
             if (rocket.parameters != null) Enc(rocket.parameters.startPosition);
         }
-        if (trajectory == null) trajectory = FindFirstObjectByType<TrajectoryVisualizer>();
+        if (trajectory == null) trajectory = FindAnyObjectByType<TrajectoryVisualizer>();
         if (trajectory != null)
             foreach (var p in trajectory.Points) Enc(p);
 
@@ -450,9 +450,9 @@ public class CameraFollow : MonoBehaviour
 
     void Resolve()
     {
-        if (rocket == null) rocket = FindFirstObjectByType<RocketPhysics>();
+        if (rocket == null) rocket = FindAnyObjectByType<RocketPhysics>();
         if (rocket != null) target = rocket.transform;
-        if (trajectory == null) trajectory = FindFirstObjectByType<TrajectoryVisualizer>();
+        if (trajectory == null) trajectory = FindAnyObjectByType<TrajectoryVisualizer>();
         if (cam == null) cam = GetComponent<Camera>();
     }
 

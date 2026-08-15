@@ -16,7 +16,7 @@ public class SpaceAmbience : MonoBehaviour
 
     public static SpaceAmbience Ensure()
     {
-        var existing = FindFirstObjectByType<SpaceAmbience>();
+        var existing = FindAnyObjectByType<SpaceAmbience>();
         if (existing != null) return existing;
         var go = new GameObject("SpaceAmbience");
         return go.AddComponent<SpaceAmbience>();
