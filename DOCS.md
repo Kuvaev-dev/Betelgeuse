@@ -5,7 +5,7 @@
 
 **Платформа:** Unity 6000.x (URP) · C#  
 **Тип:** симулятор GNC (Guidance, Navigation & Control) першого ступеня ракетоносія  
-**Статус:** фінальна версія для захисту (2026)
+**Версія / статус:** **v1.0.0** — diploma release (2026-08-15) · див. [`RELEASE.md`](RELEASE.md)
 
 ---
 
@@ -40,23 +40,27 @@
 ## 3. Інтерфейс
 
 ```
-┌── BETELGEUSE · статус · час · алгоритм · Hide · Lang · Theme ──────┐
-│ Top-menu: Старт · Ідеал · Стоп · Порівняти · Траєкторія · Огляд · Експорт │
-├──────────────┬────────────────────────┬──────────────────────────┤
-│ ЛІВО:        │  ЦЕНТР 3D              │ ПРАВО:                   │
-│ телеметрія   │  Місяць, pad, ракета   │ 1. Алгоритм A/B/C/D      │
-│ критерії     │  згладжена траєкторія  │ 2. Порівняти / скасувати │
-│ live-графіки │  orbit / zoom          │ 3. Вітер / шум / N       │
-│              │                        │ 4. % успіху              │
-└──────────────┴────────────────────────┴──────────────────────────┘
+┌── BETELGEUSE · mode · t     [Start|Stop|Ideal|Path|View|Export]  Theme Lang ┐
+│                                                      Status Hide (під ними) │
+├──────────────┬────────────────────────┬────────────────────────────────────┤
+│ ЛІВО:        │  ЦЕНТР 3D              │ ПРАВО:                             │
+│ GATE 2×2     │  Місяць + LZ pad       │ Швидкий старт                      │
+│ Підказка     │  ракета ~43 м          │ Алгоритм 2×2 (1–4)                 │
+│ Головне/dyn  │  траєкторія            │ Порівняти [P] / Скасувати [X]      │
+│ Графіки      │  orbit / zoom          │ Камера · Умови (вітер/шум/N/x)     │
+│              │                        │ Success % + winner                 │
+├──────────────┴────────────────────────┴────────────────────────────────────┤
+│              Крок: Hybrid | термінал / гальмування / …                      │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Теми UI (`Y`)
 
 Dark · Cyan · Amber · **Light** · Green · Violet · Red · **Ice**
 
-Світлі теми: світлий chrome top-menu, контрастний ink-текст, theme-aware графіки й слайдери.  
-Шрифт: динамічний Segoe UI SDF (кирилиця), underlay/outline для чіткості.
+- Панелі / edge / accent / слайдери / рамки графіків — **theme-aware**.  
+- Rebuild при зміні теми **зберігає** samples strip-charts, значення слайдерів і toggles.  
+- Шрифт HUD: LiberationSans + dynamic Cyrillic fallback; без dilate/soft underlay.
 
 ### Критерії soft-landing
 
@@ -172,17 +176,23 @@ h&lt;50 м → α,β→0 (пріоритет fuzzy).
 
 | Компонент | Опис |
 |-----------|------|
-| `LunarTerrainMesh` | Диск R=2000 м, heightmap ~400, C2-кратери, soft-min, сірий albedo 2K |
-| `EnvironmentBuilder` | Pad (berm/scorch/шви/LED), smooth-валуни, approach-маркери |
-| `RocketVisualBuilder` | Falcon-class ~42 м, smooth meshes, bell-сопла, grid fins, ноги |
+| `LunarTerrainMesh` | Диск R=2000 м, heightmap ~448, C2-кратери, world-UV albedo+normal 2K |
+| `EnvironmentBuilder` | Premium LZ (steel deck, bullseye, leg pads, curb LED, beacons) |
+| `RocketVisualBuilder` | Falcon-class ~43 м, cyl-UV skins, CFRP interstage, tangent ogive fairing, bells |
 | `RocketEngineFX` | Core + outer plume, smoke, sparks, ground dust |
 | `TrajectoryVisualizer` | Catmull-Rom + Chaikin, live tip, лишається після посадки |
 | `CameraFollow` | Follow / Manual / Overview |
 | Фізика | Clamp горизонталі ≤ 0.92·R диска |
 
-### UI (top bar справа)
+### UI layout (актуально)
 
-Порядок: **Час · Статус · Тема · Мова · СХОВАТИ** — однакова ширина кнопок (90 px), блок з відступом 24 px від краю екрана. Графіки телеметрії — з правим полем усередині лівої панелі.
+| Зона | Вміст |
+|------|--------|
+| **Top chrome** | Brand + mode pill + time; flight actions; справа 2×2: Theme/Lang зверху, Status/Hide знизу |
+| **Ліва панель** | GATE → Підказка → Головне → Динаміка → Рушій → Піки → Графіки |
+| **Права панель** | Quick-start → Алгоритм → Порівняння → Камера → Умови тесту (3 слайдери 5 px + toggles) → % |
+| **Низ** | Смуга кроку фази посадки (`PID \| Крок: …`) |
+| **Слайдери** | Однакова товщина треку 5 px; fill без stretch-height; handle 11×11 |
 
 ---
 
@@ -217,13 +227,21 @@ SimulationLogs/Landing_Full_<algo>_<ts>/
 | Демо UI | ✅ | MissionControl · UA/EN · 8 тем |
 | Візуалізація | ✅ | Місяць, pad, ракета, FX, траєкторія |
 
-### Вердикт
+### Вердикт — v1.0.0 (2026-08-15)
 
-**Тема повністю реалізована** у вигляді захищеного дипломного симулятора GNC (фінальна візуальна/UI-поліровка 2026).
+**Тема повністю реалізована** — **реліз v1.0.0** для захисту МКР.
 
-- Це **не** industrial avionics (немає Kalman/INS, CFD, повного 6-DOF thruster model).  
-- Це **достатньо** для МКР: коректні алгоритми, відтворювані експерименти, експорт, наочна 3D-демо (Місяць, pad, ракета, FX, плавна траєкторія, 8 тем UI).  
-- Рекомендована послідовність захисту: **D → Space → телеметрія → T → E → P**.
+| Шар | Стан |
+|-----|------|
+| Алгоритми A–D + Ideal + Monte-Carlo | ✅ коректні знаки TVC/lateral, hybrid residual cap |
+| Фізика RK4 + критерії + metrics/export | ✅ |
+| 3D: lunar disk, LZ pad, Falcon-class, FX | ✅ premium procedural |
+| HUD: UA/EN, 8 тем, GATE, step strip | ✅ theme-safe rebuild |
+| Тести Edit/Play | ✅ за архітектурою |
+
+**Межі (чесно для захисту):** не industrial avionics (немає Kalman/INS, CFD, повного thruster CFD). Достатньо для МКР: інтерпретований Sugeno + NN residual, відтворювані експерименти, пакет експорту, наочна 3D-демо.
+
+**Рекомендована демо-послідовність:** `4` Hybrid → `I` Ideal (опційно) → `Space` → ліва телеметрія/GATE → `T` траєкторія → `E` експорт → `P` порівняння.
 
 ---
 

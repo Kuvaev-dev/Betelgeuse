@@ -49,6 +49,7 @@ public static class SmoothMesh
         mesh.uv = uvs;
         mesh.triangles = tris;
         mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
         cachedDisc = mesh;
         return mesh;
     }
@@ -172,6 +173,7 @@ public static class SmoothMesh
         mesh.uv = uvs;
         mesh.triangles = tris.ToArray();
         mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
         cachedCylinder = mesh;
         return mesh;
     }
@@ -399,41 +401,74 @@ public static class SmoothMesh
         return go;
     }
 
-    /// <summary>Дзвін сопла (усічений конус) — tipR/baseR у частках 0.5 scale.</summary>
-    public static Mesh Bell(int segments = 64)
+    /// <summary>
+    /// Дзвін сопла з криволінійним профілем (кілька кілець) — без «прямого конуса».
+    /// height 2 (−1..1), exit r=0.5, throat r≈0.20.
+    /// </summary>
+    public static Mesh Bell(int segments = 64, int rings = 14)
     {
         segments = Mathf.Clamp(segments, 24, 128);
-        // height 2 (-1..1), bottom radius 0.5, top radius 0.22
-        var mesh = new Mesh { name = $"SmoothBell_{segments}" };
-        float rBot = 0.5f;
-        float rTop = 0.22f;
-        int sideV = (segments + 1) * 2;
-        var verts = new Vector3[sideV];
-        var norms = new Vector3[sideV];
-        var uvs = new Vector2[sideV];
+        rings = Mathf.Clamp(rings, 6, 32);
+        var mesh = new Mesh { name = $"SmoothBell_{segments}x{rings}" };
 
-        Vector3 slope = new Vector3(rBot - rTop, 2f, 0f).normalized;
-        // outward normal tilted
-        for (int i = 0; i <= segments; i++)
+        int stride = segments + 1;
+        int vCount = stride * (rings + 1);
+        var verts = new Vector3[vCount];
+        var norms = new Vector3[vCount];
+        var uvs = new Vector2[vCount];
+
+        // Smooth bell radius: t=0 exit (bottom) → t=1 throat (top)
+        float RadiusAt(float t)
         {
-            float a = i * Mathf.PI * 2f / segments;
-            float c = Mathf.Cos(a), s = Mathf.Sin(a);
-            verts[i * 2] = new Vector3(c * rBot, -1f, s * rBot);
-            verts[i * 2 + 1] = new Vector3(c * rTop, 1f, s * rTop);
-            Vector3 n = new Vector3(c * slope.y, (rBot - rTop) * 0.5f, s * slope.y).normalized;
-            norms[i * 2] = norms[i * 2 + 1] = n;
-            float u = i / (float)segments;
-            uvs[i * 2] = new Vector2(u, 0f);
-            uvs[i * 2 + 1] = new Vector2(u, 1f);
+            t = Mathf.Clamp01(t);
+            float exitR = 0.50f;
+            float throatR = 0.195f;
+            // Flare wider near exit; gentle neck toward throat
+            float flare = Mathf.Pow(1f - t, 1.55f);
+            return Mathf.Lerp(throatR, exitR, flare);
         }
 
-        var tris = new int[segments * 6];
-        for (int i = 0; i < segments; i++)
+        for (int r = 0; r <= rings; r++)
         {
-            int b = i * 2, t = b + 1, b2 = (i + 1) * 2, t2 = b2 + 1;
-            int o = i * 6;
-            tris[o] = b; tris[o + 1] = t; tris[o + 2] = t2;
-            tris[o + 3] = b; tris[o + 4] = t2; tris[o + 5] = b2;
+            float t = r / (float)rings;          // 0 bottom .. 1 top
+            float y = Mathf.Lerp(-1f, 1f, t);
+            float rad = RadiusAt(t);
+            // d(radius)/d(t): negative (shrinks upward)
+            float t0 = Mathf.Max(0f, t - 0.02f);
+            float t1 = Mathf.Min(1f, t + 0.02f);
+            float drDt = (RadiusAt(t1) - RadiusAt(t0)) / Mathf.Max(1e-4f, t1 - t0);
+            // Profile tangent in (radial, y): (drDt, 2) since y spans 2 over t∈[0,1]
+            // Outward normal ⊥ tangent: (2, -drDt) in (radial, y)
+            float nRad = 2f;
+            float nY = -drDt;
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = i * Mathf.PI * 2f / segments;
+                float c = Mathf.Cos(a), s = Mathf.Sin(a);
+                int idx = r * stride + i;
+                verts[idx] = new Vector3(c * rad, y, s * rad);
+                Vector3 n = new Vector3(c * nRad, nY, s * nRad);
+                if (n.sqrMagnitude > 1e-10f) n.Normalize();
+                else n = new Vector3(c, 0f, s);
+                norms[idx] = n;
+                uvs[idx] = new Vector2(i / (float)segments, t);
+            }
+        }
+
+        var tris = new int[rings * segments * 6];
+        int o = 0;
+        for (int r = 0; r < rings; r++)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                int i0 = r * stride + i;
+                int i1 = i0 + 1;
+                int i2 = i0 + stride;
+                int i3 = i2 + 1;
+                tris[o++] = i0; tris[o++] = i2; tris[o++] = i1;
+                tris[o++] = i1; tris[o++] = i2; tris[o++] = i3;
+            }
         }
 
         mesh.vertices = verts;
@@ -441,6 +476,7 @@ public static class SmoothMesh
         mesh.uv = uvs;
         mesh.triangles = tris;
         mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
         return mesh;
     }
 
@@ -451,7 +487,198 @@ public static class SmoothMesh
         go.transform.localPosition = pos;
         go.transform.localScale = new Vector3(diameter, halfHeight, diameter);
         var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = Bell(DefaultSeg);
+        mf.sharedMesh = Bell(DefaultSeg, 16);
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+        mr.receiveShadows = true;
+        return go;
+    }
+
+    /// <summary>
+    /// Усічений конус (frustum): height 2 (−1..1), bottom r=0.5, top r = 0.5 * topRatio.
+    /// </summary>
+    public static Mesh Frustum(float topRatio = 0.7f, int segments = 96, int rings = 10)
+    {
+        segments = Mathf.Clamp(segments, 24, 128);
+        rings = Mathf.Clamp(rings, 2, 32);
+        topRatio = Mathf.Clamp(topRatio, 0.05f, 1f);
+        var mesh = new Mesh { name = $"SmoothFrustum_{segments}_{topRatio:F2}" };
+
+        int stride = segments + 1;
+        var verts = new Vector3[stride * (rings + 1)];
+        var norms = new Vector3[verts.Length];
+        var uvs = new Vector2[verts.Length];
+
+        float rBot = 0.5f;
+        float rTop = 0.5f * topRatio;
+        float dr = rTop - rBot; // over t 0→1
+        float nRad = 2f;
+        float nY = -dr; // outward normal component
+
+        for (int r = 0; r <= rings; r++)
+        {
+            float t = r / (float)rings;
+            float y = Mathf.Lerp(-1f, 1f, t);
+            float rad = Mathf.Lerp(rBot, rTop, t);
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = i * Mathf.PI * 2f / segments;
+                float c = Mathf.Cos(a), s = Mathf.Sin(a);
+                int idx = r * stride + i;
+                verts[idx] = new Vector3(c * rad, y, s * rad);
+                Vector3 n = new Vector3(c * nRad, nY, s * nRad);
+                if (n.sqrMagnitude > 1e-10f) n.Normalize();
+                else n = new Vector3(c, 0f, s);
+                norms[idx] = n;
+                uvs[idx] = new Vector2(i / (float)segments, t);
+            }
+        }
+
+        var tris = new int[rings * segments * 6];
+        int o = 0;
+        for (int r = 0; r < rings; r++)
+        for (int i = 0; i < segments; i++)
+        {
+            int i0 = r * stride + i;
+            int i1 = i0 + 1;
+            int i2 = i0 + stride;
+            int i3 = i2 + 1;
+            tris[o++] = i0; tris[o++] = i2; tris[o++] = i1;
+            tris[o++] = i1; tris[o++] = i2; tris[o++] = i3;
+        }
+
+        mesh.vertices = verts;
+        mesh.normals = norms;
+        mesh.uv = uvs;
+        mesh.triangles = tris;
+        mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
+        return mesh;
+    }
+
+    /// <summary>
+    /// Tangent ogive nose: base r=0.5 at y=-1, tip ≈0 at y=+1.
+    /// tipBlunt 0..0.15 keeps a tiny rounded tip (no needle singularity).
+    /// </summary>
+    public static Mesh Ogive(float tipBlunt = 0.04f, int segments = 96, int rings = 24)
+    {
+        segments = Mathf.Clamp(segments, 32, 128);
+        rings = Mathf.Clamp(rings, 8, 48);
+        tipBlunt = Mathf.Clamp(tipBlunt, 0.0f, 0.2f);
+        var mesh = new Mesh { name = $"SmoothOgive_{segments}x{rings}" };
+
+        // Unit ogive in local: height H=2, base R=0.5
+        const float H = 2f;
+        const float R = 0.5f;
+        // Tangent ogive sphere radius
+        float rho = (R * R + H * H) / (2f * R);
+
+        float RadiusAt(float t)
+        {
+            // t: 0 base → 1 tip
+            t = Mathf.Clamp01(t);
+            float x = t * H; // distance from base along axis
+            float under = rho * rho - (H - x) * (H - x);
+            float r = under > 0f ? Mathf.Sqrt(under) + R - rho : 0f;
+            // Blend to blunt tip near end
+            float tipR = R * tipBlunt;
+            if (t > 0.82f)
+            {
+                float u = (t - 0.82f) / 0.18f;
+                // hemisphere-ish blunt
+                float hemi = tipR * Mathf.Sqrt(Mathf.Max(0f, 1f - u * u));
+                r = Mathf.Lerp(r, hemi, u * u);
+            }
+            return Mathf.Max(0.002f, r);
+        }
+
+        int stride = segments + 1;
+        // +1 pole vertex optional — use rings including tip ring
+        var verts = new Vector3[stride * (rings + 1)];
+        var norms = new Vector3[verts.Length];
+        var uvs = new Vector2[verts.Length];
+
+        for (int r = 0; r <= rings; r++)
+        {
+            float t = r / (float)rings; // 0 base → 1 tip
+            float y = Mathf.Lerp(-1f, 1f, t);
+            float rad = RadiusAt(t);
+            float t0 = Mathf.Max(0f, t - 0.015f);
+            float t1 = Mathf.Min(1f, t + 0.015f);
+            float drDt = (RadiusAt(t1) - RadiusAt(t0)) / Mathf.Max(1e-4f, t1 - t0);
+            float nRad = 2f;
+            float nY = -drDt;
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = i * Mathf.PI * 2f / segments;
+                float c = Mathf.Cos(a), s = Mathf.Sin(a);
+                int idx = r * stride + i;
+                verts[idx] = new Vector3(c * rad, y, s * rad);
+                Vector3 n = t >= 0.995f
+                    ? Vector3.up
+                    : new Vector3(c * nRad, nY, s * nRad);
+                if (n.sqrMagnitude > 1e-10f) n.Normalize();
+                else n = Vector3.up;
+                norms[idx] = n;
+                uvs[idx] = new Vector2(i / (float)segments, t);
+            }
+        }
+
+        var tris = new int[rings * segments * 6];
+        int o = 0;
+        for (int r = 0; r < rings; r++)
+        for (int i = 0; i < segments; i++)
+        {
+            int i0 = r * stride + i;
+            int i1 = i0 + 1;
+            int i2 = i0 + stride;
+            int i3 = i2 + 1;
+            tris[o++] = i0; tris[o++] = i2; tris[o++] = i1;
+            tris[o++] = i1; tris[o++] = i2; tris[o++] = i3;
+        }
+
+        mesh.vertices = verts;
+        mesh.normals = norms;
+        mesh.uv = uvs;
+        mesh.triangles = tris;
+        mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
+        return mesh;
+    }
+
+    /// <summary>
+    /// Frustum GO: diameter = base diameter, topRatio = top/base, halfHeight = half height.
+    /// </summary>
+    public static GameObject MakeFrustum(string name, Transform parent, Vector3 pos,
+        float baseDiameter, float halfHeight, float topRatio, Material mat)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = pos;
+        go.transform.localScale = new Vector3(baseDiameter, halfHeight, baseDiameter);
+        var mf = go.AddComponent<MeshFilter>();
+        mf.sharedMesh = Frustum(topRatio, DefaultSeg, 12);
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+        mr.receiveShadows = true;
+        return go;
+    }
+
+    /// <summary>
+    /// Ogive GO: diameter = base diameter, halfHeight = half height of ogive.
+    /// </summary>
+    public static GameObject MakeOgive(string name, Transform parent, Vector3 pos,
+        float baseDiameter, float halfHeight, Material mat, float tipBlunt = 0.045f)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = pos;
+        go.transform.localScale = new Vector3(baseDiameter, halfHeight, baseDiameter);
+        var mf = go.AddComponent<MeshFilter>();
+        mf.sharedMesh = Ogive(tipBlunt, DefaultSeg, 28);
         var mr = go.AddComponent<MeshRenderer>();
         mr.sharedMaterial = mat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;

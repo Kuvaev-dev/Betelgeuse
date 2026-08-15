@@ -65,8 +65,8 @@ public static class UiTypography
                 // прибрати старі fallback і додати наш
                 primary.fallbackFontAssetTable.Clear();
                 primary.fallbackFontAssetTable.Add(cyr);
-                TuneMaterial(primary.material);
-                TuneMaterial(cyr.material);
+                TuneMaterial(primary.material, 5);
+                TuneMaterial(cyr.material, 9);
                 Prefill(cyr);
                 Debug.Log("[UiTypography] Primary+Cyrillic fallback ready");
                 return primary;
@@ -75,7 +75,7 @@ public static class UiTypography
             if (cyr != null)
             {
                 Prefill(cyr);
-                TuneMaterial(cyr.material);
+                TuneMaterial(cyr.material, 9);
                 return cyr;
             }
 
@@ -90,9 +90,9 @@ public static class UiTypography
 
     static TMP_FontAsset BuildCyrillicDynamic()
     {
-        // sampling 72 + padding 8 — стандарт TMP для чіткого UI (не oversized 256)
-        const int sampling = 72;
-        const int padding = 8;
+        // Higher sampling + padding → smooth SDF edges (low sampling looks pixelated)
+        const int sampling = 90;
+        const int padding = 9;
 
         UnityEngine.Font source = Resources.Load<UnityEngine.Font>("Fonts/SegoeUI");
         if (source == null)
@@ -115,8 +115,8 @@ public static class UiTypography
                 sampling,
                 padding,
                 GlyphRenderMode.SDFAA,
-                2048,
-                2048,
+                4096,
+                4096,
                 AtlasPopulationMode.Dynamic,
                 true);
         }
@@ -135,38 +135,33 @@ public static class UiTypography
             {
                 if (tex == null) continue;
                 tex.filterMode = FilterMode.Bilinear;
-                tex.anisoLevel = 1;
+                tex.anisoLevel = 0;
             }
         }
 
-        TuneMaterial(fa.material);
+        TuneMaterial(fa.material, padding);
         return fa;
     }
 
-    static void TuneMaterial(Material mat)
+    static void TuneMaterial(Material mat, int atlasPadding = 9)
     {
         if (mat == null) return;
 
-        // GradientScale ≈ atlasPadding + 1 (критично для різких країв SDF)
-        float grad = 9f;
+        // GradientScale must match atlas padding for clean SDF (padding+1)
+        float grad = atlasPadding + 1f;
         if (mat.HasProperty(ShaderUtilities.ID_GradientScale))
-        {
-            float g = mat.GetFloat(ShaderUtilities.ID_GradientScale);
-            if (g > 1f) grad = g;
-            else mat.SetFloat(ShaderUtilities.ID_GradientScale, grad);
-        }
+            mat.SetFloat(ShaderUtilities.ID_GradientScale, grad);
 
-        // Легкий dilate для читабельності, без «мильності»
         if (mat.HasProperty(ShaderUtilities.ID_FaceDilate))
             mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.0f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightNormal))
             mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0.0f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightBold))
-            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.4f);
+            mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.25f);
+        // High sharpness = jagged/pixel edges; keep near zero
         if (mat.HasProperty(ShaderUtilities.ID_Sharpness))
-            mat.SetFloat(ShaderUtilities.ID_Sharpness, 0.75f);
+            mat.SetFloat(ShaderUtilities.ID_Sharpness, 0.0f);
 
-        // Без underlay / outline — вони розмивають дрібний UI
         mat.DisableKeyword("UNDERLAY_ON");
         mat.DisableKeyword("UNDERLAY_INNER");
         mat.DisableKeyword("OUTLINE_ON");
@@ -210,9 +205,9 @@ public static class UiTypography
                 tmp.fontSharedMaterial = f.material;
         }
 
-        float s = Mathf.Max(12f, Mathf.Round(size));
-        if (style == FontStyles.Bold) s += 1f;
-        tmp.fontSize = Mathf.Clamp(s, 12f, 40f);
+        // Integer font size only — fractional sizes look pixelated under CanvasScaler
+        float s = Mathf.Max(11f, Mathf.Round(size));
+        tmp.fontSize = Mathf.Clamp(s, 11f, 36f);
 
         color.a = 1f;
         if (!UiTheme.IsLightBackground && Luma(color) < 0.42f && Luma(color) > 0.04f)
@@ -220,7 +215,7 @@ public static class UiTypography
 
         tmp.color = color;
         tmp.fontStyle = style;
-        tmp.characterSpacing = -0.5f;
+        tmp.characterSpacing = 0f;
         tmp.wordSpacing = 0f;
         tmp.lineSpacing = 0f;
         tmp.paragraphSpacing = 0f;

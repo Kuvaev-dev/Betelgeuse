@@ -1,10 +1,12 @@
 # Betelgeuse — Intelligent Autonomous Rocket Landing
 
+**v1.0.0** · Diploma release (2026-08-15)
+
 **Тема:** Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання.
 
 Unity (URP) + C# симулятор GNC посадки першого ступеня з порівнянням класичного та інтелектуальних алгоритмів керування.
 
-> **Повна документація:** [`DOCS.md`](DOCS.md)
+> **Документація:** [`DOCS.md`](DOCS.md) · **Реліз:** [`RELEASE.md`](RELEASE.md)
 
 ## Швидкий старт
 
@@ -57,13 +59,15 @@ Unity (URP) + C# симулятор GNC посадки першого ступе
 ## Структура
 
 ```
-Control/   PID, Fuzzy (Sugeno), Neural (ES), Hybrid, SoftLandingGuidance
+Control/   PID, Fuzzy (Sugeno), Neural (ES), Hybrid, SoftLandingGuidance, Ideal
 Core/      RocketPhysics (RK4), SimulationManager, ResearchExporter, metrics, logger
-Visual/    Rocket + Engine FX + LunarTerrain + Space environment
-UI/        MissionControlUI, TelemetryGraph, TrajectoryVisualizer, UiTheme
+Visual/    LunarTerrainMesh, EnvironmentBuilder (LZ pad), RocketVisualBuilder, EngineFX
+UI/        MissionControlUI (top chrome · GATE · step strip), TelemetryGraph, Trajectory, UiTheme
 Utils/     CameraFollow, SceneBootstrap
 Tests/     EditMode + PlayMode
 ```
+
+Повна специфікація UI/візуалу/вердикт — у [`DOCS.md`](DOCS.md) §3, §8, §11.
 
 ## Результати / експорт
 

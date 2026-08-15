@@ -51,12 +51,17 @@ public class TelemetryGraph : MonoBehaviour
     public void ApplyThemeColors()
     {
         bool light = UiTheme.IsLightBackground;
+        var edge = UiTheme.Current.Edge;
         if (light)
         {
             bgColor = new Color(0.985f, 0.988f, 0.992f, 1f);
             gridColor = new Color(0.7f, 0.74f, 0.8f, 0.22f);
             axisColor = new Color(0.5f, 0.55f, 0.62f, 0.4f);
-            borderColor = new Color(0.72f, 0.76f, 0.82f, 0.35f);
+            // Theme edge tint, soft on light panels
+            borderColor = new Color(
+                Mathf.Lerp(edge.r, 0.75f, 0.55f),
+                Mathf.Lerp(edge.g, 0.78f, 0.55f),
+                Mathf.Lerp(edge.b, 0.82f, 0.55f), 0.85f);
             labelColor = new Color(0.18f, 0.22f, 0.28f, 1f);
             thresholdColor = new Color(0.82f, 0.28f, 0.28f, 0.45f);
         }
@@ -65,7 +70,8 @@ public class TelemetryGraph : MonoBehaviour
             bgColor = new Color(0.07f, 0.08f, 0.1f, 1f);
             gridColor = new Color(1f, 1f, 1f, 0.1f);
             axisColor = new Color(0.75f, 0.78f, 0.85f, 0.45f);
-            borderColor = new Color(0.4f, 0.55f, 0.72f, 0.35f);
+            // Theme accent edge on dark
+            borderColor = new Color(edge.r, edge.g, edge.b, 0.65f);
             labelColor = new Color(0.78f, 0.82f, 0.9f, 1f);
             thresholdColor = new Color(0.95f, 0.45f, 0.45f, 0.5f);
         }
@@ -146,6 +152,24 @@ public class TelemetryGraph : MonoBehaviour
         if (lblCur) lblCur.text = "—";
         if (lblMin) lblMin.text = "";
         if (lblMax) lblMax.text = "";
+    }
+
+    public float[] GetSamples()
+    {
+        return samples.Count == 0 ? System.Array.Empty<float>() : samples.ToArray();
+    }
+
+    public void RestoreSamples(float[] data)
+    {
+        samples.Clear();
+        if (data != null && data.Length > 0)
+        {
+            samples.AddRange(data);
+            while (samples.Count > maxSamples) samples.RemoveAt(0);
+        }
+        dirty = true;
+        if (lblCur != null && samples.Count > 0)
+            lblCur.text = samples[samples.Count - 1].ToString(valueFormat);
     }
 
     public void Configure(string graphTitle, string graphUnit, Color color, float? threshold = null)
