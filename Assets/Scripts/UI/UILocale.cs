@@ -89,7 +89,8 @@ public static class UILocale
         ["app_sub"] = new("Посадка ракетоносія", "Booster landing"),
         ["time_fmt"] = new("t {0:F1}s", "t {0:F1}s"),
         ["algo_fmt"] = new("{0}", "{0}"),
-        ["top_path_on"] = new("ШЛЯХ ON", "PATH ON"),
+        ["top_path"] = new("ШЛЯХ", "PATH"),
+        ["top_path_on"] = new("ШЛЯХ", "PATH"),
         ["top_path_off"] = new("ШЛЯХ", "PATH"),
         ["top_start"] = new("СТАРТ", "START"),
         ["top_stop"] = new("СТОП", "STOP"),
@@ -103,14 +104,14 @@ public static class UILocale
         ["top_show"] = new("ПОКАЗАТИ", "SHOW"),
 
         // Status (короткі — вміщуються в бейдж ~118 px)
-        ["st_ready"] = new("ГОТОВО", "READY"),
-        ["st_wait"] = new("ОЧІК.", "WAIT"),
-        ["st_start"] = new("СТАРТ", "START"),
-        ["st_descent"] = new("СПУСК", "DOWN"),
-        ["st_success"] = new("УСПІХ", "OK"),
-        ["st_fail"] = new("ЗБІЙ", "FAIL"),
-        ["st_stop"] = new("СТОП", "STOP"),
-        ["st_batch"] = new("ТЕСТ", "TEST"),
+        ["st_ready"] = new("ГОТОВО ДО ПОСАДКИ", "READY TO LAND"),
+        ["st_wait"] = new("ОЧІКУВАННЯ", "WAITING"),
+        ["st_start"] = new("СТАРТ ПОСАДКИ", "LANDING START"),
+        ["st_descent"] = new("СПУСК", "DESCENT"),
+        ["st_success"] = new("ПОСАДКА УСПІШНА", "LANDING SUCCESSFUL"),
+        ["st_fail"] = new("ПОСАДКА НЕВДАЛА", "LANDING FAILED"),
+        ["st_stop"] = new("ЗУПИНЕНО", "STOPPED"),
+        ["st_batch"] = new("АВТО-ТЕСТ", "AUTO-TEST"),
 
         // Modes
         ["mode_pid"] = new("Класичний PID", "Classical PID"),
@@ -214,12 +215,12 @@ public static class UILocale
             "LMB/RMB — orbit (look under OK) · WASD · scroll — smooth zoom\nF follow · T full path · C manual · R reset"),
 
         // How-to
-        ["how"] = new("1-4: режим   Space: старт   Esc: стоп",
-            "1-4: mode   Space: start   Esc: stop"),
+        ["how"] = new("1-4: режим   Space: старт   Esc: стоп   H: панелі   G: мова   Y: тема",
+            "1-4: mode   Space: start   Esc: stop   H: panels   G: lang   Y: theme"),
         ["hint"] = new("Підказка: оберіть Hybrid [4], потім Start [Space]",
             "Hint: pick Hybrid [4], then Start [Space]"),
-        ["tip"] = new("1-4 mode | I ideal | Space start | Esc stop | P compare | E export | H hide",
-            "1-4 mode | I ideal | Space start | Esc stop | P compare | E export | H hide"),
+        ["tip"] = new("1-4 mode | I ideal | Space start | Esc stop | P compare | E export | H hide | G lang | Y theme",
+            "1-4 mode | I ideal | Space start | Esc stop | P compare | E export | H hide | G lang | Y theme"),
         ["cam_keys"] = new("F follow | T огляд | C ручне | R скинути | L шлях",
             "F follow | T overview | C manual | R reset | L path"),
         // Sliders — what changes + unit in value column
@@ -251,8 +252,8 @@ public static class UILocale
         ["stat_none"] = new("-- %", "-- %"),
         ["res_ok"] = new("ПОСАДКА УСПІШНА", "LANDING SUCCESSFUL"),
         ["res_fail"] = new("ПОСАДКА НЕВДАЛА", "LANDING FAILED"),
-        ["res_footer"] = new("\n\nТраєкторія · Експорт звіту · ЗАПУСТИТИ — ще раз",
-            "\n\nTrajectory · Export report · START — again"),
+        ["res_footer"] = new("\nТраєкторія · Експорт звіту · START — ще раз",
+            "\nTrajectory · Export report · START — again"),
 
         // Insights
         ["ins_wait"] = new("Оберіть алгоритм (D — гібрид) і натисніть «ЗАПУСТИТИ ПОСАДКУ».",
@@ -297,7 +298,8 @@ public static class UILocale
         ["msg_folder"] = new("{0}", "{0}"),
         ["msg_cam_follow"] = new("Камера слідкує за ракетою. LMB — оберт.", "Camera follows rocket. LMB — orbit."),
         ["msg_cam_manual"] = new("Ручне: LMB/WASD — оберт · scroll — зум.", "Manual: LMB/WASD — orbit · scroll — zoom."),
-        ["msg_cam_traj"] = new("Повна траєкторія. LMB — оберт · scroll — зум.", "Full trajectory. LMB — orbit · scroll — zoom."),
+        ["msg_cam_traj"] = new("Огляд траєкторії. T або F — вийти · LMB — оберт · scroll — зум.",
+            "Trajectory overview. T or F — exit · LMB — orbit · scroll — zoom."),
         ["msg_cam_reset"] = new("Ракурс скинуто.", "View reset."),
         ["msg_selected"] = new("Обрано: {0}\nНатисніть ЗАПУСТИТИ ПОСАДКУ.", "Selected: {0}\nPress START LANDING."),
         ["msg_compare"] = new("Авто-тест: PID->Fuzzy->NN->Hybrid. Прогрес зверху.", "Auto-test: PID->Fuzzy->NN->Hybrid. Progress on top."),

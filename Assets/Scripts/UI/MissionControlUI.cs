@@ -33,7 +33,9 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text txtTrajBtn, txtTitle, txtHow, txtGraphHint;
     TMP_Text txtHdrTelem, txtHdrLive, txtHdrCrit, txtHdrInsight, txtHdrGraphs;
     TMP_Text txtStep;
-    Button trajToggleBtn;
+    Button trajToggleBtn, viewToggleBtn;
+    Image trajToggleImg, hideBtnImg, viewToggleImg;
+    TMP_Text txtViewBtn;
 
     // Metric label texts (for language refresh)
     readonly List<TMP_Text> metricLabels = new();
@@ -505,11 +507,13 @@ public class MissionControlUI : MonoBehaviour
         EnsureCaptionBar();
         ApplyCaptionTheme();
 
-        // ── ROW 2 bottom: LEFT flight | RIGHT tools (all same width as Start) ──
-        const float chipW = 78f; // same as Start
+        // ── ROW 2 bottom: LEFT flight | RIGHT tools (Hide Theme Lang) ──
+        const float chipW = 78f; // Hide / Lang (same as Start)
+        const float themeW = 118f; // full theme name + " Y" without truncating
         const float gap = 5f;
         const float rightInset = 16f;
-        float toolsW = chipW * 4f + gap * 3f; // Status Hide Theme Lang — equal width
+        // Only theme is wider — flight row loses ~40px total, not a full chip
+        float toolsW = chipW * 2f + themeW + gap * 2f;
 
         var row2 = CreatePanel("Row2", chrome.transform, new Color(0, 0, 0, 0));
         row2.GetComponent<Image>().raycastTarget = false;
@@ -531,35 +535,57 @@ public class MissionControlUI : MonoBehaviour
         MenuBtn(row2.transform, (UILocale.T("top_start") + "  SP").ToUpperInvariant(), OnStartLanding, MenuBtnKind.Start, chipW);
         MenuBtn(row2.transform, (UILocale.T("top_stop") + "  ESC").ToUpperInvariant(), OnStop, MenuBtnKind.Stop, chipW);
         MenuBtn(row2.transform, (UILocale.T("top_ideal") + "  I").ToUpperInvariant(), OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
-        trajToggleBtn = MenuBtn(row2.transform, (UILocale.T("top_path_on") + "  L").ToUpperInvariant(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
+        trajToggleBtn = MenuBtn(row2.transform, PathButtonLabel(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
+        trajToggleImg = trajToggleBtn != null ? trajToggleBtn.targetGraphic as Image : null;
         trajVisible = true;
         EnsureTrajectoryVisualizer()?.SetVisible(true);
-        MenuBtn(row2.transform, (UILocale.T("top_view") + "  T").ToUpperInvariant(), OnFullTrajectoryView, MenuBtnKind.Normal, chipW);
+        UpdateTrajButtonVisual();
+        viewToggleBtn = MenuBtn(row2.transform, ViewButtonLabel(), OnFullTrajectoryView, MenuBtnKind.Normal, chipW, out txtViewBtn);
+        viewToggleImg = viewToggleBtn != null ? viewToggleBtn.targetGraphic as Image : null;
+        UpdateViewButtonVisual();
         MenuBtn(row2.transform, (UILocale.T("top_export") + "  E").ToUpperInvariant(), OnExportResults, MenuBtnKind.Normal, chipW);
 
-        // Right→left: Lang, Theme, Hide, Status — all C_Btn (dark), same width as Start
+        // Right→left: Lang [G], Theme [Y] (wider), Hide [H]
         float xR = -rightInset;
-        PlaceEdgeBtn(chrome.transform, "LangBtn", UILocale.IsUK ? "EN" : "UA",
+        PlaceEdgeBtn(chrome.transform, "LangBtn", EdgeLangLabel(),
             ref xR, chipW, C_Btn, () => UILocale.Toggle(), out txtLangBtn);
         xR -= gap;
-        string themeLbl = UILocale.IsUK ? UiTheme.ButtonLabelUk : UiTheme.ButtonLabel;
-        if (string.IsNullOrEmpty(themeLbl)) themeLbl = "Theme";
-        if (themeLbl.Length > 7) themeLbl = themeLbl.Substring(0, 6) + ".";
-        PlaceEdgeBtn(chrome.transform, "ThemeBtn", themeLbl, ref xR, chipW, C_Btn, () =>
+        PlaceEdgeBtn(chrome.transform, "ThemeBtn", EdgeThemeLabel(),
+            ref xR, themeW, C_Btn, () =>
         {
             UiTheme.Cycle();
+            if (txtThemeBtn != null) txtThemeBtn.text = EdgeThemeLabel();
             NotifyInfo(UILocale.IsUK
                 ? "Тема: " + UiTheme.ButtonLabelUk
                 : "Theme: " + UiTheme.ButtonLabel);
         }, out txtThemeBtn);
+        if (txtThemeBtn != null)
+        {
+            txtThemeBtn.fontSize = 11f;
+            txtThemeBtn.overflowMode = TextOverflowModes.Overflow;
+            txtThemeBtn.textWrappingMode = TextWrappingModes.NoWrap;
+        }
         xR -= gap;
-        PlaceEdgeBtn(chrome.transform, "HideBtn", UILocale.T("top_hide"),
+        PlaceEdgeBtn(chrome.transform, "HideBtn", HideButtonLabel(),
             ref xR, chipW, C_Btn, TogglePanels, out txtHideBtn);
-        xR -= gap;
-        PlaceEdgeBtn(chrome.transform, "StatusBadge", UILocale.T("st_ready"),
-            ref xR, chipW, C_Btn, null, out txtStatus);
-        statusDot = txtStatus != null ? txtStatus.transform.parent.GetComponent<Image>() : null;
-        SetStatusVisual("st_ready", C_Muted);
+        hideBtnImg = txtHideBtn != null ? txtHideBtn.transform.parent.GetComponent<Image>() : null;
+        UpdateHideButtonVisual();
+    }
+
+    static string PathButtonLabel() =>
+        (UILocale.T("top_path") + "  L").ToUpperInvariant();
+
+    static string HideButtonLabel() =>
+        (UILocale.T("top_hide") + "  H").ToUpperInvariant();
+
+    static string EdgeLangLabel() =>
+        (UILocale.IsUK ? "EN" : "UA") + "  G";
+
+    static string EdgeThemeLabel()
+    {
+        string themeLbl = UILocale.IsUK ? UiTheme.ButtonLabelUk : UiTheme.ButtonLabel;
+        if (string.IsNullOrEmpty(themeLbl)) themeLbl = UILocale.IsUK ? "ТЕМА" : "THEME";
+        return themeLbl + "  Y";
     }
 
     /// <summary>
@@ -934,7 +960,27 @@ public class MissionControlUI : MonoBehaviour
         if (stepBarGo) stepBarGo.SetActive(show);
         // top chrome always visible for settings / flight actions
         if (txtHideBtn != null)
-            txtHideBtn.text = panelsHidden ? UILocale.T("top_show") : UILocale.T("top_hide");
+            txtHideBtn.text = HideButtonLabel();
+        if (txtLangBtn != null)
+            txtLangBtn.text = EdgeLangLabel();
+        if (txtThemeBtn != null)
+            txtThemeBtn.text = EdgeThemeLabel();
+        UpdateHideButtonVisual();
+    }
+
+    void UpdateHideButtonVisual()
+    {
+        // Highlight when panels are hidden (toggle is "on")
+        Color bg = panelsHidden ? C_BtnActive : C_Btn;
+        if (UiTheme.IsLightBackground && !panelsHidden)
+            bg = new Color(0.88f, 0.9f, 0.93f, 1f);
+        if (hideBtnImg != null)
+            hideBtnImg.color = bg;
+        if (txtHideBtn != null)
+        {
+            txtHideBtn.text = HideButtonLabel();
+            txtHideBtn.color = UiTheme.ContrastOn(bg);
+        }
     }
 
     /// <summary>Chip, прив'язаний до правого краю parent. xR — права грань (≤0). yOfs — вертикальний зсув від центру.</summary>
@@ -978,12 +1024,19 @@ public class MissionControlUI : MonoBehaviour
     {
         if (txtStatus != null)
         {
+            // Same language as landing-gate badges: bold label + accent on soft tinted chip
             txtStatus.text = UILocale.T(key);
-            // Text carries status color; badge stays dark C_Btn like other tools
-            txtStatus.color = Color.Lerp(accent, Color.white, 0.45f);
+            txtStatus.color = accent;
+            txtStatus.fontStyle = FontStyles.Bold;
         }
         if (statusDot != null)
-            statusDot.color = C_Btn;
+        {
+            // Soft fill like criterion badges: tinted PanelSoft, solid alpha for chrome
+            float t = UiTheme.IsLightBackground ? 0.55f : 0.42f;
+            Color c = Color.Lerp(C_PanelSoft, accent, t);
+            c.a = 1f;
+            statusDot.color = c;
+        }
     }
 
     void BuildLeftPanel(Transform parent)
@@ -1112,7 +1165,21 @@ public class MissionControlUI : MonoBehaviour
         float row1 = y;
         txtCritM = MakeCriterionBadge(root, pad, row1, cellW, cellH, UILocale.T("crit_miss"));
         txtCritH = MakeCriterionBadge(root, pad + cellW + gap, row1, cellW, cellH, UILocale.T("crit_vh"));
-        y -= cellH + 6f;
+        y -= cellH + gap;
+
+        // Status strip under miss/vh row — same badge family as criteria
+        float statusH = 32f;
+        var statusBg = CreatePanel("StatusBadge", root, C_PanelSoft);
+        statusDot = statusBg.GetComponent<Image>();
+        statusDot.raycastTarget = false;
+        PinTL(statusBg.GetComponent<RectTransform>(), pad, y, inner, statusH);
+        txtStatus = CreateText(statusBg.transform, UILocale.T("st_ready"), 12, C_Muted, FontStyles.Bold);
+        txtStatus.alignment = TextAlignmentOptions.Center;
+        txtStatus.overflowMode = TextOverflowModes.Ellipsis;
+        txtStatus.characterSpacing = 0.8f;
+        StretchFull(txtStatus.rectTransform, 8, 4, 8, 4);
+        SetStatusVisual("st_ready", C_Muted);
+        y -= statusH + 6f;
     }
 
     TMP_Text MakeCriterionBadge(Transform parent, float x, float y, float w, float h, string title)
@@ -1379,12 +1446,27 @@ public class MissionControlUI : MonoBehaviour
         NotifyInfo(trajVisible ? UILocale.T("msg_traj_on") : UILocale.T("msg_traj_off"));
     }
 
-    void UpdateTrajButtonLabel()
+    void UpdateTrajButtonLabel() => UpdateTrajButtonVisual();
+
+    void UpdateTrajButtonVisual()
     {
         var tv = FindAnyObjectByType<TrajectoryVisualizer>();
         if (tv != null) trajVisible = tv.IsVisible;
+
+        // Fixed label; active state = accent highlight (no "ON" text)
+        Color bg = trajVisible ? C_BtnActive : C_Btn;
+        if (UiTheme.IsLightBackground && !trajVisible)
+            bg = new Color(0.88f, 0.9f, 0.93f, 1f);
+
+        if (trajToggleImg == null && trajToggleBtn != null)
+            trajToggleImg = trajToggleBtn.targetGraphic as Image;
+        if (trajToggleImg != null)
+            trajToggleImg.color = bg;
         if (txtTrajBtn != null)
-            txtTrajBtn.text = ((trajVisible ? UILocale.T("top_path_on") : UILocale.T("top_path_off")) + "  L").ToUpperInvariant();
+        {
+            txtTrajBtn.text = PathButtonLabel();
+            txtTrajBtn.color = UiTheme.ContrastOn(bg);
+        }
     }
 
     static TrajectoryVisualizer EnsureTrajectoryVisualizer()
@@ -1430,24 +1512,42 @@ public class MissionControlUI : MonoBehaviour
     void OnToggleTrajectoryView() => OnFullTrajectoryView();
 
     /// <summary>
-    /// Переводить камеру в позицію, з якої видно повну траєкторію
-    /// (стартова висота → поточна точка → landing pad).
+    /// Toggle full-trajectory overview. Press again (or F) to return to follow.
     /// </summary>
     void OnFullTrajectoryView()
     {
         var cam = ResolveCamera();
         if (cam == null) return;
+
+        bool inOverview = cam.mode == CameraFollow.ViewMode.Overview || overviewCam;
+        if (inOverview)
+        {
+            overviewCam = false;
+            cam.SetMode(CameraFollow.ViewMode.Follow);
+            RefreshCamLabel();
+            UpdateViewButtonVisual();
+            NotifyInfo(UILocale.T("msg_cam_follow"));
+            return;
+        }
+
         overviewCam = true;
         cam.SnapToFullTrajectoryView();
         RefreshCamLabel();
+        UpdateViewButtonVisual();
         NotifyInfo(UILocale.T("msg_cam_traj"));
     }
 
     void OnCamFollow()
     {
         overviewCam = false;
-        ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
+        var cam = ResolveCamera();
+        if (cam != null)
+        {
+            cam.userOrbitLock = false;
+            cam.SetMode(CameraFollow.ViewMode.Follow);
+        }
         RefreshCamLabel();
+        UpdateViewButtonVisual();
         NotifyInfo(UILocale.T("msg_cam_follow"));
     }
 
@@ -1458,6 +1558,7 @@ public class MissionControlUI : MonoBehaviour
         if (cam == null) return;
         cam.SetMode(CameraFollow.ViewMode.Manual);
         RefreshCamLabel();
+        UpdateViewButtonVisual();
         NotifyInfo(UILocale.T("msg_cam_manual"));
     }
 
@@ -1465,20 +1566,36 @@ public class MissionControlUI : MonoBehaviour
     {
         var cam = ResolveCamera();
         if (cam == null) return;
-        if (cam.mode == CameraFollow.ViewMode.Overview)
-        {
-            cam.SnapToFullTrajectoryView();
-            overviewCam = true;
-            NotifyInfo(UILocale.T("msg_cam_reset"));
-        }
-        else
-        {
-            cam.ResetManualOrbit();
-            cam.SetMode(CameraFollow.ViewMode.Follow);
-            overviewCam = false;
-            NotifyInfo(UILocale.T("msg_cam_reset"));
-        }
+        // Always leave overview and restore default follow orbit
+        overviewCam = false;
+        cam.userOrbitLock = false;
+        cam.ResetManualOrbit();
+        cam.SetMode(CameraFollow.ViewMode.Follow);
         RefreshCamLabel();
+        UpdateViewButtonVisual();
+        NotifyInfo(UILocale.T("msg_cam_reset"));
+    }
+
+    static string ViewButtonLabel() =>
+        (UILocale.T("top_view") + "  T").ToUpperInvariant();
+
+    void UpdateViewButtonVisual()
+    {
+        var cam = ResolveCamera();
+        bool on = overviewCam || (cam != null && cam.mode == CameraFollow.ViewMode.Overview);
+        Color bg = on ? C_BtnActive : C_Btn;
+        if (UiTheme.IsLightBackground && !on)
+            bg = new Color(0.88f, 0.9f, 0.93f, 1f);
+
+        if (viewToggleImg == null && viewToggleBtn != null)
+            viewToggleImg = viewToggleBtn.targetGraphic as Image;
+        if (viewToggleImg != null)
+            viewToggleImg.color = bg;
+        if (txtViewBtn != null)
+        {
+            txtViewBtn.text = ViewButtonLabel();
+            txtViewBtn.color = UiTheme.ContrastOn(bg);
+        }
     }
 
     void OnExportResults()
@@ -1569,11 +1686,18 @@ public class MissionControlUI : MonoBehaviour
     void RefreshCamLabel()
     {
         var cam = ResolveCamera();
-        if (txtCamMode == null) return;
-        if (cam == null) { txtCamMode.text = UILocale.T("cam_prefix") + "—"; return; }
-        overviewCam = cam.mode == CameraFollow.ViewMode.Overview;
-        txtCamMode.text = UILocale.T("cam_prefix") + UILocale.CamLabel(cam.mode);
-        txtCamMode.color = cam.mode == CameraFollow.ViewMode.Manual ? C_Amber : C_Cyan;
+        if (cam != null)
+            overviewCam = cam.mode == CameraFollow.ViewMode.Overview;
+        if (txtCamMode != null)
+        {
+            if (cam == null) txtCamMode.text = UILocale.T("cam_prefix") + "—";
+            else
+            {
+                txtCamMode.text = UILocale.T("cam_prefix") + UILocale.CamLabel(cam.mode);
+                txtCamMode.color = cam.mode == CameraFollow.ViewMode.Manual ? C_Amber : C_Cyan;
+            }
+        }
+        UpdateViewButtonVisual();
     }
 
     void OnStartCompare()
@@ -1635,12 +1759,10 @@ public class MissionControlUI : MonoBehaviour
         }
         if (txtResultBody)
         {
-            // Без повторюваного заголовка (він уже в txtResultTitle)
             txtResultBody.text = m.BuildUserSummary(maxV, maxA, maxM, maxH, includeTitle: false)
                                  + "\n" + UILocale.T("res_footer");
             txtResultBody.color = C_Text;
         }
-        // Не дублювати повний текст у лівій панелі «Висновок»
         if (txtInsight != null)
         {
             txtInsight.text = ok
@@ -1659,14 +1781,16 @@ public class MissionControlUI : MonoBehaviour
         }
         if (resultPanelBg)
         {
+            // Soft success/fail wash on panel chrome (not a flat slab)
             if (UiTheme.IsLightBackground)
                 resultPanelBg.color = ok
-                    ? new Color(0.92f, 0.97f, 0.94f, 0.99f)
-                    : new Color(0.98f, 0.92f, 0.92f, 0.99f);
+                    ? Color.Lerp(C_Panel, new Color(0.78f, 0.92f, 0.84f, 1f), 0.55f)
+                    : Color.Lerp(C_Panel, new Color(0.96f, 0.82f, 0.82f, 1f), 0.55f);
             else
                 resultPanelBg.color = ok
-                    ? new Color(0.12f, 0.14f, 0.13f, 0.96f)
-                    : new Color(0.16f, 0.11f, 0.11f, 0.96f);
+                    ? Color.Lerp(C_Panel, new Color(0.10f, 0.18f, 0.14f, 1f), 0.65f)
+                    : Color.Lerp(C_Panel, new Color(0.20f, 0.10f, 0.10f, 1f), 0.65f);
+            var a = resultPanelBg.color; a.a = 0.97f; resultPanelBg.color = a;
         }
 
         SetStatusVisual(ok ? "st_success" : "st_fail", ok ? C_Ok : C_Alert);
@@ -1690,45 +1814,63 @@ public class MissionControlUI : MonoBehaviour
         resultRoot.GetComponent<Image>().raycastTarget = true;
         resultRoot.transform.SetAsLastSibling();
 
-        // Компактна картка: мінімум порожнього місця між текстом і кнопками
-        var card = CreatePanel("ResultCard", resultRoot.transform, UiTheme.ModalCard);
+        // Original dialog layout, refined chrome
+        var card = CreatePanel("ResultCard", resultRoot.transform, C_Panel);
         resultPanelBg = card.GetComponent<Image>();
         var crt = card.GetComponent<RectTransform>();
         crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
         crt.pivot = new Vector2(0.5f, 0.5f);
-        crt.sizeDelta = new Vector2(520, 300);
-        Outline(card, 2.5f);
+        crt.sizeDelta = new Vector2(540f, 320f);
+        Outline(card, 1.5f);
 
-        // Заголовок
-        txtResultTitle = CreateText(card.transform, "РЕЗУЛЬТАТ", 22, C_Ok, FontStyles.Bold);
+        // Thin accent strip under top edge
+        var accent = CreatePanel("ResAccent", card.transform, new Color(C_Cyan.r, C_Cyan.g, C_Cyan.b, 0.55f));
+        var art = accent.GetComponent<RectTransform>();
+        art.anchorMin = new Vector2(0f, 1f);
+        art.anchorMax = new Vector2(1f, 1f);
+        art.pivot = new Vector2(0.5f, 1f);
+        art.anchoredPosition = Vector2.zero;
+        art.sizeDelta = new Vector2(0f, 3f);
+        accent.GetComponent<Image>().raycastTarget = false;
+
+        txtResultTitle = CreateText(card.transform, "РЕЗУЛЬТАТ", 20, C_Ok, FontStyles.Bold);
         var trtTitle = txtResultTitle.rectTransform;
         trtTitle.anchorMin = new Vector2(0, 1);
         trtTitle.anchorMax = new Vector2(1, 1);
         trtTitle.pivot = new Vector2(0.5f, 1);
-        trtTitle.anchoredPosition = new Vector2(0, -14);
-        trtTitle.sizeDelta = new Vector2(-32, 30);
+        trtTitle.anchoredPosition = new Vector2(0, -18);
+        trtTitle.sizeDelta = new Vector2(-40, 28);
         txtResultTitle.alignment = TextAlignmentOptions.Center;
+        txtResultTitle.characterSpacing = 1.5f;
 
-        // Тіло одразу під заголовком, низ щільно до кнопок
-        txtResultBody = CreateText(card.transform, "", 15, C_Text);
+        // Soft divider under title
+        var div = CreatePanel("ResDiv", card.transform, new Color(1f, 1f, 1f, 0.08f));
+        var drt = div.GetComponent<RectTransform>();
+        drt.anchorMin = new Vector2(0.12f, 1f);
+        drt.anchorMax = new Vector2(0.88f, 1f);
+        drt.pivot = new Vector2(0.5f, 1f);
+        drt.anchoredPosition = new Vector2(0f, -50f);
+        drt.sizeDelta = new Vector2(0f, 1f);
+        div.GetComponent<Image>().raycastTarget = false;
+
+        txtResultBody = CreateText(card.transform, "", 14, C_Text);
         txtResultBody.textWrappingMode = TextWrappingModes.Normal;
         txtResultBody.overflowMode = TextOverflowModes.Overflow;
         txtResultBody.alignment = TextAlignmentOptions.TopLeft;
-        txtResultBody.lineSpacing = 2f;
+        txtResultBody.lineSpacing = 4f;
         var brt = txtResultBody.rectTransform;
         brt.anchorMin = new Vector2(0, 0);
         brt.anchorMax = new Vector2(1, 1);
-        brt.offsetMin = new Vector2(24, 88);   // кнопки ~80 px
-        brt.offsetMax = new Vector2(-24, -48); // заголовок ~44 px
+        brt.offsetMin = new Vector2(28, 92);
+        brt.offsetMax = new Vector2(-28, -58);
 
-        // Кнопки внизу, компактно
-        float btnY = 44f;
+        float btnY = 48f;
         var trGo = CreatePanel("ShowTraj", card.transform, C_Btn);
         var trt = trGo.GetComponent<RectTransform>();
         trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0);
         trt.pivot = new Vector2(0.5f, 0);
-        trt.anchoredPosition = new Vector2(-105, btnY);
-        trt.sizeDelta = new Vector2(190, 34);
+        trt.anchoredPosition = new Vector2(-110, btnY);
+        trt.sizeDelta = new Vector2(200, 34);
         var tbtn = trGo.AddComponent<Button>();
         tbtn.targetGraphic = trGo.GetComponent<Image>();
         var ttxt = CreateText(trGo.transform, UILocale.T("btn_show_traj"), 13,
@@ -1741,8 +1883,8 @@ public class MissionControlUI : MonoBehaviour
         var ert = exGo.GetComponent<RectTransform>();
         ert.anchorMin = ert.anchorMax = new Vector2(0.5f, 0);
         ert.pivot = new Vector2(0.5f, 0);
-        ert.anchoredPosition = new Vector2(105, btnY);
-        ert.sizeDelta = new Vector2(190, 34);
+        ert.anchoredPosition = new Vector2(110, btnY);
+        ert.sizeDelta = new Vector2(200, 34);
         var ebtn = exGo.AddComponent<Button>();
         ebtn.targetGraphic = exGo.GetComponent<Image>();
         var etxt = CreateText(exGo.transform, UILocale.T("btn_export_short"), 13,
@@ -1755,8 +1897,8 @@ public class MissionControlUI : MonoBehaviour
         var clrt = closeGo.GetComponent<RectTransform>();
         clrt.anchorMin = clrt.anchorMax = new Vector2(0.5f, 0);
         clrt.pivot = new Vector2(0.5f, 0);
-        clrt.anchoredPosition = new Vector2(0, 8);
-        clrt.sizeDelta = new Vector2(200, 32);
+        clrt.anchoredPosition = new Vector2(0, 10);
+        clrt.sizeDelta = new Vector2(210, 32);
         var cbtn = closeGo.AddComponent<Button>();
         cbtn.targetGraphic = closeGo.GetComponent<Image>();
         var ctxt = CreateText(closeGo.transform, UILocale.T("btn_ok"), 14,
@@ -2412,42 +2554,46 @@ public class MissionControlUI : MonoBehaviour
     TelemetryGraph MakeGraph(Transform parent, string title, string unit, Color line, ref float y,
         float? threshold, string fmt)
     {
-        const float gX = 12f;
-        const float gW = 314f;
         const float fX = 10f;
         const float fW = 318f;
+        const float gH = 100f;
 
-        var go = new GameObject("Graph_" + title, typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
-        go.transform.SetParent(parent, false);
-        PinTL(go.GetComponent<RectTransform>(), gX, y, gW, 88);
-        var raw = go.GetComponent<RawImage>();
-        raw.color = Color.white;
-        raw.raycastTarget = false;
+        // Root holds frame + plot + labels (labels last = on top)
+        var root = CreatePanel("GraphRoot_" + title, parent, new Color(0, 0, 0, 0));
+        root.GetComponent<Image>().raycastTarget = false;
+        var rootRt = root.GetComponent<RectTransform>();
+        PinTL(rootRt, fX, y, fW, gH + 4f);
 
-        // Frame follows theme panel + edge colors
         Color frameFill = Color.Lerp(C_PanelSoft, C_Panel, 0.35f);
         frameFill.a = 1f;
         Color frameEdge = C_Edge;
-        frameEdge.a = UiTheme.IsLightBackground ? 0.55f : 0.7f;
+        frameEdge.a = UiTheme.IsLightBackground ? 0.5f : 0.65f;
 
-        var frame = CreatePanel("GFrame", parent, frameFill);
+        var frame = CreatePanel("GFrame", root.transform, frameFill);
         frame.GetComponent<Image>().raycastTarget = false;
-        var frt = frame.GetComponent<RectTransform>();
-        PinTL(frt, fX, y + 2, fW, 92);
-        frame.transform.SetSiblingIndex(go.transform.GetSiblingIndex());
-
+        StretchFull(frame.GetComponent<RectTransform>(), 0, 0, 0, 0);
         var edge = frame.AddComponent<UnityEngine.UI.Outline>();
         edge.effectColor = frameEdge;
-        edge.effectDistance = new Vector2(1.1f, -1.1f);
+        edge.effectDistance = new Vector2(1f, -1f);
         edge.useGraphicAlpha = true;
 
-        var g = go.AddComponent<TelemetryGraph>();
+        var plotGo = new GameObject("Plot", typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
+        plotGo.transform.SetParent(root.transform, false);
+        var plotRt = plotGo.GetComponent<RectTransform>();
+        StretchFull(plotRt, 2, 2, 2, 2);
+        var raw = plotGo.GetComponent<RawImage>();
+        raw.color = Color.white;
+        raw.raycastTarget = false;
+
+        var g = plotGo.AddComponent<TelemetryGraph>();
         g.autoScale = true;
         g.showFill = true;
         g.showZeroLine = true;
         g.valueFormat = fmt ?? "F1";
+        g.BindLabelRoot(rootRt); // labels as siblings of plot, on top
         g.Configure(title, unit, line, threshold);
-        y -= 98f;
+
+        y -= gH + 12f;
         return g;
     }
 

@@ -73,7 +73,7 @@ public static class UiTheme
         Id.Amber => "БУРШТИН",
         Id.Light => "СВІТЛА",
         Id.Green => "ЗЕЛЕНА",
-        Id.Violet => "ФІОЛЕТ",
+        Id.Violet => "ФІОЛЕТОВА",
         Id.Red => "ЧЕРВОНА",
         Id.Ice => "ЛІД",
         _ => "ТЕМНА"

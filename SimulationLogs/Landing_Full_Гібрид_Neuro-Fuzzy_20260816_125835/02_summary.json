@@ -1,0 +1,26 @@
+﻿{
+  "project": "Betelgeuse",
+  "type": "single_landing",
+  "timestamp": "20260816_125835",
+  "algorithm": "Гібрид Neuro-Fuzzy",
+  "thesisTopic": "Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання",
+  "sampleCount": 1500,
+  "criteria": {
+    "maxTouchdownVelocity": 3.5,
+    "maxLandingAngle": 7,
+    "maxHorizontalMiss": 25,
+    "maxHorizontalSpeed": 5
+  },
+  "results": {
+    "successful": true,
+    "timedOut": false,
+    "touchdownVelocity_mps": 0.657,
+    "landingAngle_deg": 0,
+    "horizontalMiss_m": 16.028,
+    "horizontalSpeed_mps": 0.781,
+    "fuelRemaining_kg": 6414.257,
+    "maxAltitude_m": 1400,
+    "flightTime_s": 61.809,
+    "successScore": 86.414
+  }
+}

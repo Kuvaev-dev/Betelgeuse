@@ -67,7 +67,8 @@ public class CameraFollow : MonoBehaviour
     bool focusInited;
     bool orbitDragging;
     Vector3 lastMouse;
-    bool userOrbitLock; // після ручного orbit — не авто-повертати кут, поки R/F
+    /// <summary>After manual orbit, don't auto-return angle until cleared (F/R).</summary>
+    public bool userOrbitLock;
     Camera cam;
 
     // Compat fields used elsewhere / inspector
@@ -158,28 +159,8 @@ public class CameraFollow : MonoBehaviour
     {
         bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
-        if (Input.GetKeyDown(KeyCode.R))
-        {
-            userOrbitLock = false;
-            if (mode == ViewMode.Overview) SnapToFullTrajectoryView();
-            else
-            {
-                ResetOrbitDefaults();
-                SetMode(ViewMode.Follow);
-            }
-        }
-        if (Input.GetKeyDown(KeyCode.F))
-        {
-            userOrbitLock = false;
-            SetMode(ViewMode.Follow);
-        }
-        if (Input.GetKeyDown(KeyCode.T))
-            SetMode(mode == ViewMode.Overview ? ViewMode.Follow : ViewMode.Overview);
-        if (Input.GetKeyDown(KeyCode.C) && !overUI)
-        {
-            userOrbitLock = true;
-            SetMode(ViewMode.Manual);
-        }
+        // Mode keys (F/T/C/R) are owned by MissionControlUI to avoid double-handling
+        // that could trap the camera in Overview.
 
         // Zoom: працює завжди в центрі екрана; біля minDist — від'їзд працює
         float scroll = Input.mouseScrollDelta.y;
