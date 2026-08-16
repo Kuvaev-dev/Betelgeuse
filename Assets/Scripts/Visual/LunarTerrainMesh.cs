@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
@@ -14,9 +15,39 @@ public static class LunarTerrainMesh
     /// <summary>Радіус cratered-диска (HorizonDisk ≤ цього).</summary>
     public const float TerrainRadius = 2000f;
 
+    public sealed class BuildOutput
+    {
+        public Mesh mesh;
+        public Texture2D albedo;
+        public Texture2D normal;
+    }
+
     public static Mesh Build(out Texture2D albedoTex, out Texture2D normalTex,
         int resolution = 256, float radius = -1f, int seed = 42)
     {
+        var box = new BuildOutput();
+        Drain(BuildRoutine(box, resolution, radius, seed));
+        albedoTex = box.albedo;
+        normalTex = box.normal;
+        return box.mesh;
+    }
+
+    /// <summary>Run nested IEnumerators to completion (sync). Unity coroutines do this automatically.</summary>
+    public static void Drain(IEnumerator e)
+    {
+        if (e == null) return;
+        while (e.MoveNext())
+        {
+            if (e.Current is IEnumerator nested)
+                Drain(nested);
+        }
+    }
+
+    /// <summary>Same as Build, but yields every few rows so splash spinner can keep spinning.</summary>
+    public static IEnumerator BuildRoutine(BuildOutput box,
+        int resolution = 256, float radius = -1f, int seed = 42)
+    {
+        if (box == null) yield break;
         if (radius < 1f) radius = TerrainRadius;
         resolution = Mathf.Clamp(resolution, 96, 448);
         var rng = new System.Random(seed);
@@ -35,13 +66,17 @@ public static class LunarTerrainMesh
                 float z = -half + iz * step;
                 height[ix, iz] = SampleHeight(x, z, craters, radius);
             }
+            if ((iz & 15) == 0) yield return null;
         }
 
-        // Легке згладжування — зберігає чаші, прибирає сіткові сходинки
         SmoothHeightField(height, n, 2);
+        yield return null;
 
         int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 5, 1536, 2048));
-        BuildSurfaceMaps(craters, radius, texSize, seed, out albedoTex, out normalTex);
+        Texture2D albedoTex = null;
+        Texture2D normalTex = null;
+        yield return BuildSurfaceMapsRoutine(craters, radius, texSize, seed,
+            t => albedoTex = t, t => normalTex = t);
 
         var vertList = new List<Vector3>(n * n / 2);
         var uvList = new List<Vector2>(n * n / 2);
@@ -62,17 +97,16 @@ public static class LunarTerrainMesh
 
                 float dist = Mathf.Sqrt(x * x + z * z);
                 float h = height[ix, iz];
-                // М'який спад лише на 1.2% краю
                 float edge = Mathf.Clamp01((radius - dist) / (radius * 0.012f));
                 if (edge < 1f) h = Mathf.Lerp(h - 3.2f, h, Quintic01(edge));
 
                 map[ix, iz] = vertList.Count;
                 vertList.Add(new Vector3(x, h, z));
-                // World-space UV: ідеально збігається з BuildSurfaceMaps
                 uvList.Add(new Vector2(
                     (x * invR + 1f) * 0.5f,
                     (z * invR + 1f) * 0.5f));
             }
+            if ((iz & 15) == 0) yield return null;
         }
 
         var tris = new List<int>(resolution * resolution * 6);
@@ -89,6 +123,7 @@ public static class LunarTerrainMesh
                 tris.Add(i00); tris.Add(i01); tris.Add(i10);
                 tris.Add(i10); tris.Add(i01); tris.Add(i11);
             }
+            if ((iz & 31) == 0) yield return null;
         }
 
         var verts = vertList.ToArray();
@@ -105,12 +140,14 @@ public static class LunarTerrainMesh
             norms[i0] += faceN;
             norms[i1] += faceN;
             norms[i2] += faceN;
+            if ((t & 4095) == 0 && t > 0) yield return null;
         }
         for (int i = 0; i < norms.Length; i++)
         {
             if (norms[i].sqrMagnitude > 1e-12f) norms[i].Normalize();
             else norms[i] = Vector3.up;
         }
+        yield return null;
 
         var mesh = new Mesh
         {
@@ -122,25 +159,26 @@ public static class LunarTerrainMesh
         mesh.uv = uvList.ToArray();
         mesh.triangles = triArr;
         mesh.RecalculateBounds();
-        // Tangents for normal map (URP Lit)
         mesh.RecalculateTangents();
+        yield return null;
 
+        box.mesh = mesh;
+        box.albedo = albedoTex;
+        box.normal = normalTex;
         Debug.Log($"[LunarTerrain] verts={verts.Length} tris={triArr.Length / 3} craters={craters.Length} tex={texSize}");
-        return mesh;
     }
 
     /// <summary>
     /// Albedo + normal у тій самій world-space проєкції, що й mesh UV.
-    /// Кратери растеризуються в повному tex-розрішенні (без upscale shade-grid).
+    /// Yields every few rows so the splash spinner can keep rotating.
     /// </summary>
-    static void BuildSurfaceMaps(Crater[] craters, float terrainRadius, int texSize, int seed,
-        out Texture2D albedoTex, out Texture2D normalTex)
+    static IEnumerator BuildSurfaceMapsRoutine(Crater[] craters, float terrainRadius, int texSize, int seed,
+        System.Action<Texture2D> setAlbedo, System.Action<Texture2D> setNormal)
     {
         var hBuf = new float[texSize * texSize];
-        var aBuf = new float[texSize * texSize]; // grayscale albedo factor 0..1
+        var aBuf = new float[texSize * texSize];
         var rng = new System.Random(seed + 91);
 
-        // Mare patches
         int mareCount = 5 + rng.Next(0, 3);
         var mareCx = new float[mareCount];
         var mareCz = new float[mareCount];
@@ -158,7 +196,6 @@ public static class LunarTerrainMesh
         float metersPerTexel = (half * 2f) / texSize;
         float invHalf = 1f / half;
 
-        // ── Base height + compositional albedo (full res) ──
         for (int y = 0; y < texSize; y++)
         {
             float wz = -half + (y + 0.5f) * metersPerTexel;
@@ -169,7 +206,7 @@ public static class LunarTerrainMesh
                 float dist = Mathf.Sqrt(wx * wx + wz * wz);
 
                 float h = 0f;
-                float g = 0.50f; // highland regolith
+                float g = 0.50f;
 
                 if (dist <= PadClearRadius)
                 {
@@ -191,7 +228,6 @@ public static class LunarTerrainMesh
                     float blend = Mathf.SmoothStep(0f, 1f, (dist - PadClearRadius) / 22f);
                     h *= blend;
 
-                    // Multi-scale regolith grain (continuous, no grid)
                     float grain = 0f;
                     grain += Noise2(wx * 0.045f, wz * 0.045f) * 0.018f;
                     grain += Noise2(wx * 0.14f + 4f, wz * 0.14f - 3f) * 0.010f;
@@ -199,7 +235,6 @@ public static class LunarTerrainMesh
                     grain += Noise2(wx * 1.1f + 9f, wz * 1.1f - 5f) * 0.0025f;
                     g = 0.50f + grain;
 
-                    // Mare darkening (compositional basalt)
                     float mare = 0f;
                     for (int m = 0; m < mareCount; m++)
                     {
@@ -211,7 +246,6 @@ public static class LunarTerrainMesh
                         {
                             float t = 1f - md / mr;
                             t = t * t * (3f - 2f * t);
-                            // soft noise edge so mare boundary isn't a circle stamp
                             float edgeNoise = 0.5f + 0.5f * Noise2(
                                 wx * 0.008f + m * 3.1f, wz * 0.008f - m * 2.7f);
                             t *= Mathf.Lerp(0.75f, 1.1f, edgeNoise);
@@ -221,7 +255,6 @@ public static class LunarTerrainMesh
                     }
                     g *= 1f - mare;
 
-                    // Soft pad apron darkening
                     if (dist < PadClearRadius + 55f)
                     {
                         float pt = Mathf.SmoothStep(0f, 1f, dist / (PadClearRadius + 55f));
@@ -229,7 +262,6 @@ public static class LunarTerrainMesh
                     }
                 }
 
-                // Outside disk — dark void (mesh clips circle; keep corners quiet)
                 if (dist > terrainRadius * 1.001f)
                 {
                     h = -4f;
@@ -239,30 +271,29 @@ public static class LunarTerrainMesh
                 hBuf[idx] = h;
                 aBuf[idx] = g;
             }
+            if ((y & 7) == 0) yield return null;
         }
 
-        // ── Rasterize craters largest-first (stable soft-min stacking) ──
         var order = new int[craters.Length];
         for (int i = 0; i < order.Length; i++) order[i] = i;
         System.Array.Sort(order, (ia, ib) => craters[ib].radius.CompareTo(craters[ia].radius));
+        yield return null;
         RasterizeCratersInto(hBuf, aBuf, craters, order, terrainRadius, texSize, half, metersPerTexel);
-
-        // Micro-craters: albedo + normal detail only (not in mesh)
+        yield return null;
         StampMicroCraters(hBuf, aBuf, terrainRadius, texSize, half, metersPerTexel, seed);
-
-        // Mild height blur (1 pass) kills single-texel spikes without smearing bowls
+        yield return null;
         BlurBuffer(hBuf, texSize, 1);
+        yield return null;
         BlurBuffer(aBuf, texSize, 1);
+        yield return null;
 
-        // ── Encode textures ──
-        albedoTex = new Texture2D(texSize, texSize, TextureFormat.RGB24, true, false);
+        var albedoTex = new Texture2D(texSize, texSize, TextureFormat.RGB24, true, false);
         albedoTex.name = "LunarAlbedo";
         albedoTex.wrapMode = TextureWrapMode.Clamp;
         albedoTex.filterMode = FilterMode.Trilinear;
         albedoTex.anisoLevel = 8;
 
-        // linear normal map
-        normalTex = new Texture2D(texSize, texSize, TextureFormat.RGBA32, true, true);
+        var normalTex = new Texture2D(texSize, texSize, TextureFormat.RGBA32, true, true);
         normalTex.name = "LunarNormal";
         normalTex.wrapMode = TextureWrapMode.Clamp;
         normalTex.filterMode = FilterMode.Trilinear;
@@ -279,15 +310,11 @@ public static class LunarTerrainMesh
                 int idx = y * texSize + x;
                 float g = Mathf.Clamp01(aBuf[idx]);
 
-                // Neutral cool-gray regolith (no warm brown)
                 float rC = Mathf.Clamp01(g * 0.985f);
                 float gC = g;
                 float bC = Mathf.Clamp01(g * 1.025f);
                 albedoCols[idx] = new Color(rC, gC, bC, 1f);
 
-                // Height → object normal, then to tangent space for URP Lit.
-                // Mesh UV: U↔X, V↔Z; RecalculateTangents → T=+X, B=+Z, N=+Y
-                // worldN=(nx,ny,nz) → tangentN=(nx, nz, ny)
                 float hL = hBuf[y * texSize + Mathf.Max(0, x - 1)];
                 float hR = hBuf[y * texSize + Mathf.Min(texSize - 1, x + 1)];
                 float hD = hBuf[Mathf.Max(0, y - 1) * texSize + x];
@@ -297,21 +324,26 @@ public static class LunarTerrainMesh
                 float nz = -(hU - hD) * nScale * 0.5f;
                 float len = Mathf.Sqrt(nx * nx + ny * ny + nz * nz);
                 if (len > 1e-8f) { nx /= len; ny /= len; nz /= len; }
-                float tx = nx;   // along tangent (+X)
-                float ty = nz;   // along bitangent (+Z)
-                float tz = ny;   // along mesh normal (+Y)
+                float tx = nx;
+                float ty = nz;
+                float tz = ny;
                 normalCols[idx] = new Color(
                     tx * 0.5f + 0.5f,
                     ty * 0.5f + 0.5f,
                     tz * 0.5f + 0.5f,
                     1f);
             }
+            if ((y & 7) == 0) yield return null;
         }
 
         albedoTex.SetPixels(albedoCols);
         albedoTex.Apply(true, true);
+        yield return null;
         normalTex.SetPixels(normalCols);
         normalTex.Apply(true, true);
+
+        setAlbedo?.Invoke(albedoTex);
+        setNormal?.Invoke(normalTex);
     }
 
     static void RasterizeCratersInto(float[] hBuf, float[] aBuf, Crater[] craters, int[] order,
@@ -853,15 +885,27 @@ public static class LunarTerrainMesh
     public static GameObject Create(Transform parent, Material baseMat,
         int resolution = 256, float radius = -1f)
     {
+        GameObject go = null;
+        Drain(CreateRoutine(parent, baseMat, g => go = g, resolution, radius));
+        return go;
+    }
+
+    public static IEnumerator CreateRoutine(Transform parent, Material baseMat,
+        System.Action<GameObject> onDone, int resolution = 256, float radius = -1f)
+    {
         if (radius < 1f) radius = TerrainRadius;
         var go = new GameObject("LunarTerrain");
         go.transform.SetParent(parent, false);
         go.transform.localPosition = Vector3.zero;
 
-        var mesh = Build(out Texture2D albedo, out Texture2D normalMap,
-            Mathf.Max(resolution, 420), radius, 42);
+        var box = new BuildOutput();
+        yield return BuildRoutine(box, Mathf.Max(resolution, 420), radius, 42);
+
         var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = mesh;
+        mf.sharedMesh = box.mesh;
+
+        var albedo = box.albedo;
+        var normalMap = box.normal;
 
         var mat = new Material(baseMat != null ? baseMat.shader : VisualMaterials.LitShader);
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
@@ -878,7 +922,6 @@ public static class LunarTerrainMesh
         if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", albedo);
         mat.mainTexture = albedo;
 
-        // Normal map — high-frequency relief without mesh density
         if (mat.HasProperty("_BumpMap") && normalMap != null)
         {
             mat.SetTexture("_BumpMap", normalMap);
@@ -887,7 +930,6 @@ public static class LunarTerrainMesh
         }
         if (mat.HasProperty("_DetailNormalMapScale")) mat.SetFloat("_DetailNormalMapScale", 0f);
 
-        // Very low specular — dry regolith
         if (mat.HasProperty("_SpecularHighlights")) mat.SetFloat("_SpecularHighlights", 0f);
         if (mat.HasProperty("_EnvironmentReflections")) mat.SetFloat("_EnvironmentReflections", 0f);
 
@@ -898,6 +940,6 @@ public static class LunarTerrainMesh
         if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 2f);
         mat.doubleSidedGI = false;
 
-        return go;
+        onDone?.Invoke(go);
     }
 }

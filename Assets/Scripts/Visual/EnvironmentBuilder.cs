@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -8,8 +9,16 @@ public static class EnvironmentBuilder
 {
     public static void Build()
     {
+        LunarTerrainMesh.Drain(BuildRoutine());
+    }
+
+    /// <summary>Stepped build — yields so splash spinner keeps spinning.</summary>
+    public static IEnumerator BuildRoutine()
+    {
         SetupLighting(out Light sun);
+        yield return null;
         SetupSkyAndFog();
+        yield return null;
 
         var existing = GameObject.Find("EnvironmentRoot");
         if (existing != null)
@@ -17,22 +26,26 @@ public static class EnvironmentBuilder
 
         var root = new GameObject("EnvironmentRoot");
 
-        BuildLunarSurface(root.transform);
+        yield return BuildLunarSurfaceRoutine(root.transform);
+        yield return null;
         BuildLandingPad(root.transform);
+        yield return null;
         var starPs = BuildStarField(root.transform);
+        yield return null;
         BuildSunDisc(root.transform);
+        yield return null;
         BuildApproachLights(root.transform);
+        yield return null;
 
         var amb = SpaceAmbience.Ensure();
         amb.Bind(root.transform, starPs, sun);
     }
 
-    static void BuildLunarSurface(Transform parent)
+    static IEnumerator BuildLunarSurfaceRoutine(Transform parent)
     {
         var surface = new GameObject("LunarSurface");
         surface.transform.SetParent(parent, false);
 
-        // Neutral cool-gray regolith (no warm/brown cast)
         var regolith = VisualMaterials.Lit(
             new Color(0.52f, 0.525f, 0.535f),
             metallic: 0.0f,
@@ -40,9 +53,8 @@ public static class EnvironmentBuilder
 
         float R = LunarTerrainMesh.TerrainRadius;
         int res = QualitySettings.GetQualityLevel() <= 1 ? 240 : 360;
-        LunarTerrainMesh.Create(surface.transform, regolith, resolution: res, radius: R);
+        yield return LunarTerrainMesh.CreateRoutine(surface.transform, regolith, null, res, R);
 
-        // Matching under-disk (same R — no gray collar past terrain)
         var farMat = VisualMaterials.Lit(new Color(0.30f, 0.305f, 0.315f), 0.0f, 0.02f);
         var far = SmoothMesh.MakeCylinder("HorizonDisk", surface.transform,
             new Vector3(0f, -2.8f, 0f), R * 2f, 2.2f, farMat);
@@ -52,8 +64,8 @@ public static class EnvironmentBuilder
             fr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             fr.receiveShadows = true;
         }
+        yield return null;
 
-        // Few large buried boulders only — craters do the realism work
         var rng = new System.Random(17);
         float clear = LunarTerrainMesh.PadClearRadius + 25f;
         var rockMat = VisualMaterials.Lit(new Color(0.38f, 0.385f, 0.395f), 0.02f, 0.05f);
@@ -66,11 +78,11 @@ public static class EnvironmentBuilder
             float z = Mathf.Sin(ang) * dist;
             float s = 2.2f + (float)rng.NextDouble() * 5.5f;
             float h = SampleApproxHeight(x, z);
-            // Deep bury so rocks sit in regolith, not hover
             SmoothMesh.MakeSphere($"Boulder_{i}", surface.transform,
                 new Vector3(x, h + s * 0.12f, z),
                 new Vector3(s * 1.0f, s * 0.42f, s * 0.95f),
                 rockMat);
+            if ((i & 3) == 0) yield return null;
         }
     }
 

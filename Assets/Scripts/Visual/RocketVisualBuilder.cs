@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -11,7 +12,13 @@ public static class RocketVisualBuilder
 
     public static void Build(RocketPhysics rocket)
     {
-        if (rocket == null) return;
+        LunarTerrainMesh.Drain(BuildRoutine(rocket));
+    }
+
+    /// <summary>Stepped build — yields between heavy skins so splash spinner keeps spinning.</summary>
+    public static IEnumerator BuildRoutine(RocketPhysics rocket)
+    {
+        if (rocket == null) yield break;
         Transform root = rocket.transform;
         root.localScale = Vector3.one;
 
@@ -37,20 +44,24 @@ public static class RocketVisualBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(root, false);
 
-        // ── Palette (restrained) ──
+        // ── Palette (restrained) — skins are expensive; yield after each ──
         var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.055f, seed: 11);
+        yield return null;
         var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.32f, panelContrast: 0.06f, seed: 29);
+        yield return null;
         var black = VisualMaterials.Lit(new Color(0.045f, 0.048f, 0.055f), 0.55f, 0.32f);
         var metal = VisualMaterials.Lit(new Color(0.74f, 0.76f, 0.80f), 0.94f, 0.82f);
         var titanium = VisualMaterials.Lit(new Color(0.60f, 0.62f, 0.66f), 0.90f, 0.70f);
         var carbon = VisualMaterials.Lit(new Color(0.07f, 0.075f, 0.08f), 0.42f, 0.42f);
         var silver = VisualMaterials.Lit(new Color(0.88f, 0.90f, 0.93f), 0.93f, 0.78f);
         var heat = MakeNozzleSkin("NozzleHeat", seed: 7);
+        yield return null;
         var copper = VisualMaterials.Lit(new Color(0.58f, 0.42f, 0.30f), 0.92f, 0.55f);
         var darkMetal = VisualMaterials.Lit(new Color(0.16f, 0.17f, 0.19f), 0.88f, 0.48f);
         var stripe = VisualMaterials.Lit(new Color(0.055f, 0.055f, 0.06f), 0.40f, 0.28f);
         var hydra = VisualMaterials.Lit(new Color(0.82f, 0.84f, 0.88f), 0.85f, 0.55f);
         var interstageMat = MakeInterstageSkin("InterstageCFRP", seed: 41);
+        yield return null;
 
         // ── Aft (octaweb + short skirt — no stringers / ribs clutter) ──
         SmoothCyl("Octaweb", visual.transform, 0.85f, Radius * 2.38f, 0.90f, black);
@@ -112,9 +123,13 @@ public static class RocketVisualBuilder
         Prim(PrimitiveType.Cube, "LogoPanel", visual.transform,
             new Vector3(0f, 24.2f, Radius + 0.03f), new Vector3(1.6f, 2.4f, 0.028f), black);
 
+        yield return null;
         BuildGridFins(visual.transform, titanium, silver, darkMetal, carbon, interstageMidY);
+        yield return null;
         BuildLegs(visual.transform, black, metal, titanium, carbon, darkMetal, hydra);
+        yield return null;
         BuildNozzles(visual.transform, heat, metal, copper, titanium, darkMetal);
+        yield return null;
         BuildEngineFX(visual.transform);
 
         var cap = root.GetComponent<CapsuleCollider>();

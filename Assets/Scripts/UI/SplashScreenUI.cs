@@ -5,31 +5,33 @@ using UnityEngine.EventSystems;
 using TMPro;
 
 /// <summary>
-/// Branded loading screen — clean Mission Control look, no blue Outline frames,
-/// animated spinner + dots so load state is obvious.
+/// Branded loading screen — starfield only, spinning loader, refined status card.
+/// Animations use unscaled time so they keep moving during bootstrap.
 /// </summary>
 [DefaultExecutionOrder(-1000)]
 public class SplashScreenUI : MonoBehaviour
 {
     public static SplashScreenUI Instance { get; private set; }
 
-    static readonly Color ColBgDeep = new(0.014f, 0.016f, 0.022f, 1f);
-    static readonly Color ColBgMid = new(0.03f, 0.034f, 0.048f, 1f);
-    static readonly Color ColCard = new(0.045f, 0.05f, 0.068f, 0.97f);
-    static readonly Color ColAccent = new(0.55f, 0.86f, 0.98f, 1f);
-    static readonly Color ColAmber = new(1f, 0.78f, 0.38f, 1f);
-    static readonly Color ColMuted = new(0.62f, 0.66f, 0.74f, 1f);
-    static readonly Color ColTrack = new(0.12f, 0.14f, 0.18f, 1f);
-    static readonly Color ColFill = new(0.35f, 0.78f, 0.95f, 1f);
-    static readonly Color ColBtn = new(0.12f, 0.14f, 0.18f, 0.95f);
-    static readonly Color ColClose = new(0.7f, 0.24f, 0.26f, 0.95f);
-    static readonly Color ColHair = new(1f, 1f, 1f, 0.08f);
+    static readonly Color ColBg = new(0.012f, 0.014f, 0.02f, 1f);
+    static readonly Color ColCard = new(0.04f, 0.045f, 0.062f, 0.94f);
+    static readonly Color ColCardEdge = new(0.55f, 0.78f, 0.95f, 0.22f);
+    static readonly Color ColAccent = new(0.58f, 0.88f, 1f, 1f);
+    static readonly Color ColAmber = new(1f, 0.8f, 0.42f, 1f);
+    static readonly Color ColMuted = new(0.58f, 0.62f, 0.72f, 1f);
+    static readonly Color ColDim = new(0.42f, 0.46f, 0.55f, 1f);
+    static readonly Color ColTrack = new(0.1f, 0.12f, 0.16f, 1f);
+    static readonly Color ColFill = new(0.38f, 0.8f, 0.96f, 1f);
+    static readonly Color ColBtn = new(0.1f, 0.12f, 0.16f, 0.92f);
+    static readonly Color ColClose = new(0.68f, 0.22f, 0.24f, 0.95f);
 
     Image barFill;
-    Image barShimmer;
+    Image barGlow;
     RectTransform spinnerRt;
-    Image[] spinnerSegs;
-    Image[] waitDots;
+    Image spinnerArc;
+    Image[] starImgs;
+    float[] starPhase;
+    float[] starBaseA;
     TMP_Text txtStatus;
     TMP_Text txtPct;
     string statusBase = "";
@@ -61,12 +63,37 @@ public class SplashScreenUI : MonoBehaviour
         SetProgress(0.02f, UILocale.IsUK ? "Ініціалізація" : "Initializing");
     }
 
-    void Update()
-    {
-        animT += Time.unscaledDeltaTime;
+    void Update() => TickVisuals();
 
-        // Smooth progress bar
-        displayProgress = Mathf.MoveTowards(displayProgress, targetProgress, Time.unscaledDeltaTime * 1.2f);
+    void LateUpdate() => TickSpinnerOnly();
+
+    /// <summary>
+    /// Wall-clock spin so the arc keeps the correct angle after frame hitches
+    /// and still advances every frame the main thread is free.
+    /// </summary>
+    void TickSpinnerOnly()
+    {
+        float wall = Time.realtimeSinceStartup;
+        if (spinnerRt != null)
+            spinnerRt.localRotation = Quaternion.Euler(0f, 0f, -wall * 280f);
+        if (spinnerArc != null)
+        {
+            float breathe = 0.72f + 0.28f * (0.5f + 0.5f * Mathf.Sin(wall * 4f));
+            var c = ColAccent;
+            c.a = breathe;
+            spinnerArc.color = c;
+        }
+    }
+
+    void TickVisuals()
+    {
+        float dt = Time.unscaledDeltaTime;
+        if (dt <= 0f) dt = 1f / 60f;
+        animT += dt;
+
+        TickSpinnerOnly();
+
+        displayProgress = Mathf.MoveTowards(displayProgress, targetProgress, dt * 0.85f);
         if (barFill != null)
         {
             var rt = barFill.rectTransform;
@@ -75,68 +102,46 @@ public class SplashScreenUI : MonoBehaviour
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
         }
-        if (txtPct != null)
-            txtPct.text = $"{Mathf.RoundToInt(displayProgress * 100f)}%";
-
-        // Shimmer sliding across the filled portion
-        if (barShimmer != null && barFill != null)
+        if (barGlow != null)
         {
             float w = Mathf.Clamp01(displayProgress);
-            if (w < 0.02f)
+            if (w < 0.03f)
             {
-                barShimmer.enabled = false;
+                barGlow.enabled = false;
             }
             else
             {
-                barShimmer.enabled = true;
-                float phase = Mathf.Repeat(animT * 0.85f, 1.2f) - 0.1f; // -0.1..1.1
-                var srt = barShimmer.rectTransform;
-                srt.anchorMin = new Vector2(Mathf.Clamp01(phase - 0.12f) * w, 0f);
-                srt.anchorMax = new Vector2(Mathf.Clamp01(phase + 0.02f) * w, 1f);
-                srt.offsetMin = Vector2.zero;
-                srt.offsetMax = Vector2.zero;
+                barGlow.enabled = true;
+                float tip = Mathf.Clamp01(w);
+                var gr = barGlow.rectTransform;
+                gr.anchorMin = new Vector2(Mathf.Max(0f, tip - 0.06f), 0f);
+                gr.anchorMax = new Vector2(tip, 1f);
+                gr.offsetMin = Vector2.zero;
+                gr.offsetMax = Vector2.zero;
+                float pulse = 0.45f + 0.35f * (0.5f + 0.5f * Mathf.Sin(animT * 6f));
+                var gc = barGlow.color;
+                gc.a = pulse;
+                barGlow.color = gc;
             }
         }
+        if (txtPct != null)
+            txtPct.text = $"{Mathf.RoundToInt(displayProgress * 100f)}%";
 
-        // Spinner ring rotation + segment chase
-        if (spinnerRt != null)
-            spinnerRt.localEulerAngles = new Vector3(0f, 0f, -animT * 140f);
-        if (spinnerSegs != null)
+        if (starImgs != null)
         {
-            int n = spinnerSegs.Length;
-            float head = Mathf.Repeat(animT * 2.2f, n);
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < starImgs.Length; i++)
             {
-                if (spinnerSegs[i] == null) continue;
-                float d = Mathf.Min(Mathf.Abs(i - head), n - Mathf.Abs(i - head));
-                float a = Mathf.Lerp(0.15f, 1f, 1f - Mathf.Clamp01(d / 3.5f));
-                var c = ColAccent;
-                c.a = a;
-                spinnerSegs[i].color = c;
+                if (starImgs[i] == null) continue;
+                float tw = 0.55f + 0.45f * Mathf.Sin(animT * (1.1f + starPhase[i] * 1.8f) + starPhase[i] * 6.28f);
+                var c = starImgs[i].color;
+                c.a = starBaseA[i] * tw;
+                starImgs[i].color = c;
             }
         }
 
-        // Bouncing wait dots
-        if (waitDots != null)
-        {
-            for (int i = 0; i < waitDots.Length; i++)
-            {
-                if (waitDots[i] == null) continue;
-                float bounce = Mathf.Sin(animT * 5.5f - i * 0.55f);
-                float a = 0.25f + 0.75f * (0.5f + 0.5f * bounce);
-                float y = 2f * Mathf.Max(0f, bounce);
-                var c = ColAmber;
-                c.a = a;
-                waitDots[i].color = c;
-                var rt = waitDots[i].rectTransform;
-                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
-            }
-        }
-
-        // Animated ellipsis on status
         if (txtStatus != null && !fading)
         {
-            int dots = 1 + (int)(animT * 2.5f) % 3;
+            int dots = 1 + (int)(animT * 2.4f) % 3;
             txtStatus.text = statusBase + new string('.', dots);
         }
 
@@ -166,72 +171,85 @@ public class SplashScreenUI : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         gameObject.AddComponent<GraphicRaycaster>();
 
-        // Full-screen background (no colored frames)
-        var bg = MakeImage(transform, "Bg", ColBgDeep);
+        var bg = MakeImage(transform, "Bg", ColBg);
         Stretch(bg.rectTransform, 0, 0, 0, 0);
         bg.raycastTarget = true;
 
-        var wash = MakeImage(transform, "Wash", new Color(ColBgMid.r, ColBgMid.g, ColBgMid.b, 0.5f));
-        var wr = wash.rectTransform;
-        wr.anchorMin = new Vector2(0f, 0.4f);
-        wr.anchorMax = Vector2.one;
-        wr.offsetMin = Vector2.zero;
-        wr.offsetMax = Vector2.zero;
+        // Starfield only — no moon, wash, or chrome chips on the backdrop
+        BuildStars(transform, 90);
 
-        BuildStars(transform, 40);
+        BuildCard(transform);
+        BuildFooter(transform);
+        BuildCaptionButtons();
+    }
 
-        // Soft moon — muted gray only, no cyan rim
-        BuildMoon(transform);
-
-        // Center card — flat, subtle white hairline only (no blue Outline)
-        var card = MakeImage(transform, "Card", ColCard);
+    void BuildCard(Transform parent)
+    {
+        var card = MakeImage(parent, "Card", ColCard);
         var crt = card.rectTransform;
-        crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.52f);
+        crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
         crt.pivot = new Vector2(0.5f, 0.5f);
-        crt.sizeDelta = new Vector2(560f, 360f);
+        crt.sizeDelta = new Vector2(520f, 280f);
 
-        // Neutral hairlines (white, very soft) — not cyan frames
-        MakeHairline(card.transform, true, ColHair);
-        MakeHairline(card.transform, false, new Color(1f, 1f, 1f, 0.05f));
+        // Thin cyan edge frame (1 px via 4 sides)
+        MakeFrame(card.transform, ColCardEdge);
 
-        // Spinner above title
+        // Top accent bar
+        var accent = MakeImage(card.transform, "AccentBar",
+            new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.85f));
+        var ar = accent.rectTransform;
+        ar.anchorMin = new Vector2(0f, 1f);
+        ar.anchorMax = new Vector2(1f, 1f);
+        ar.pivot = new Vector2(0.5f, 1f);
+        ar.anchoredPosition = Vector2.zero;
+        ar.sizeDelta = new Vector2(0f, 2.5f);
+
         BuildSpinner(card.transform);
 
-        var txtTitle = MakeText(card.transform, "BETELGEUSE", 38, ColAccent, FontStyles.Bold);
+        var txtTitle = MakeText(card.transform, "BETELGEUSE", 34, ColAccent, FontStyles.Bold);
         var tr = txtTitle.rectTransform;
-        tr.anchorMin = new Vector2(0f, 0.62f);
-        tr.anchorMax = new Vector2(1f, 0.78f);
-        tr.offsetMin = new Vector2(24f, 0f);
-        tr.offsetMax = new Vector2(-24f, 0f);
+        tr.anchorMin = new Vector2(0f, 0.58f);
+        tr.anchorMax = new Vector2(1f, 0.74f);
+        tr.offsetMin = new Vector2(28f, 0f);
+        tr.offsetMax = new Vector2(-28f, 0f);
         txtTitle.alignment = TextAlignmentOptions.Center;
-        txtTitle.characterSpacing = 5f;
+        txtTitle.characterSpacing = 8f;
 
         var txtSub = MakeText(card.transform,
             UILocale.IsUK
                 ? "Автономна посадка  ·  GNC Mission Control"
                 : "Autonomous Landing  ·  GNC Mission Control",
-            14, ColMuted, FontStyles.Normal);
+            13, ColMuted, FontStyles.Normal);
         var sr = txtSub.rectTransform;
-        sr.anchorMin = new Vector2(0f, 0.52f);
-        sr.anchorMax = new Vector2(1f, 0.62f);
-        sr.offsetMin = new Vector2(28f, 0f);
-        sr.offsetMax = new Vector2(-28f, 0f);
+        sr.anchorMin = new Vector2(0f, 0.46f);
+        sr.anchorMax = new Vector2(1f, 0.58f);
+        sr.offsetMin = new Vector2(32f, 0f);
+        sr.offsetMax = new Vector2(-32f, 0f);
         txtSub.alignment = TextAlignmentOptions.Center;
 
-        var txtStage = MakeText(card.transform, "PID  ·  FUZZY  ·  NEURAL  ·  HYBRID",
-            11, new Color(ColAmber.r, ColAmber.g, ColAmber.b, 0.8f), FontStyles.Bold);
-        var stg = txtStage.rectTransform;
-        stg.anchorMin = new Vector2(0f, 0.44f);
-        stg.anchorMax = new Vector2(1f, 0.52f);
-        stg.offsetMin = new Vector2(20f, 0f);
-        stg.offsetMax = new Vector2(-20f, 0f);
-        txtStage.alignment = TextAlignmentOptions.Center;
+        // Divider under subtitle
+        var div = MakeImage(card.transform, "Div", new Color(1f, 1f, 1f, 0.08f));
+        var dr = div.rectTransform;
+        dr.anchorMin = new Vector2(0.18f, 0.44f);
+        dr.anchorMax = new Vector2(0.82f, 0.44f);
+        dr.pivot = new Vector2(0.5f, 0.5f);
+        dr.sizeDelta = new Vector2(0f, 1f);
 
-        // Progress track — no outline
+        var txtStage = MakeText(card.transform, "PID  ·  FUZZY  ·  NEURAL  ·  HYBRID",
+            11, new Color(ColAmber.r, ColAmber.g, ColAmber.b, 0.75f), FontStyles.Bold);
+        var stg = txtStage.rectTransform;
+        stg.anchorMin = new Vector2(0f, 0.34f);
+        stg.anchorMax = new Vector2(1f, 0.44f);
+        stg.offsetMin = new Vector2(24f, 0f);
+        stg.offsetMax = new Vector2(-24f, 0f);
+        txtStage.alignment = TextAlignmentOptions.Center;
+        txtStage.characterSpacing = 1.5f;
+
+        // Progress track
         var trackGo = MakeImage(card.transform, "Track", ColTrack);
         var trk = trackGo.rectTransform;
-        trk.anchorMin = new Vector2(0.1f, 0.28f);
-        trk.anchorMax = new Vector2(0.9f, 0.34f);
+        trk.anchorMin = new Vector2(0.1f, 0.22f);
+        trk.anchorMax = new Vector2(0.9f, 0.28f);
         trk.offsetMin = Vector2.zero;
         trk.offsetMax = Vector2.zero;
 
@@ -242,127 +260,156 @@ public class SplashScreenUI : MonoBehaviour
         fr.offsetMin = Vector2.zero;
         fr.offsetMax = Vector2.zero;
 
-        barShimmer = MakeImage(trackGo.transform, "Shimmer", new Color(1f, 1f, 1f, 0.35f));
-        var shm = barShimmer.rectTransform;
-        shm.anchorMin = Vector2.zero;
-        shm.anchorMax = new Vector2(0.05f, 1f);
-        shm.offsetMin = Vector2.zero;
-        shm.offsetMax = Vector2.zero;
+        barGlow = MakeImage(trackGo.transform, "TipGlow", new Color(1f, 1f, 1f, 0.55f));
+        var bgr = barGlow.rectTransform;
+        bgr.anchorMin = Vector2.zero;
+        bgr.anchorMax = new Vector2(0.05f, 1f);
+        bgr.offsetMin = Vector2.zero;
+        bgr.offsetMax = Vector2.zero;
 
-        // Status + dots row
+        // Status row
         txtStatus = MakeText(card.transform, "…", 13, ColMuted, FontStyles.Normal);
         var st = txtStatus.rectTransform;
-        st.anchorMin = new Vector2(0.1f, 0.14f);
-        st.anchorMax = new Vector2(0.62f, 0.24f);
+        st.anchorMin = new Vector2(0.1f, 0.08f);
+        st.anchorMax = new Vector2(0.7f, 0.2f);
         st.offsetMin = Vector2.zero;
         st.offsetMax = Vector2.zero;
         txtStatus.alignment = TextAlignmentOptions.MidlineLeft;
         txtStatus.overflowMode = TextOverflowModes.Ellipsis;
 
-        BuildWaitDots(card.transform);
-
-        txtPct = MakeText(card.transform, "0%", 15, ColAmber, FontStyles.Bold);
+        txtPct = MakeText(card.transform, "0%", 16, ColAmber, FontStyles.Bold);
         var pr = txtPct.rectTransform;
-        pr.anchorMin = new Vector2(0.72f, 0.14f);
-        pr.anchorMax = new Vector2(0.9f, 0.24f);
+        pr.anchorMin = new Vector2(0.7f, 0.08f);
+        pr.anchorMax = new Vector2(0.9f, 0.2f);
         pr.offsetMin = Vector2.zero;
         pr.offsetMax = Vector2.zero;
         txtPct.alignment = TextAlignmentOptions.MidlineRight;
+    }
 
-        // Footer
-        var foot = MakeText(transform,
+    void BuildFooter(Transform parent)
+    {
+        var foot = MakeText(parent,
             UILocale.IsUK
                 ? "МКР 2026  ·  Soft-landing GNC  ·  v1.0.0"
                 : "MSc Thesis 2026  ·  Soft-landing GNC  ·  v1.0.0",
-            12, new Color(ColMuted.r, ColMuted.g, ColMuted.b, 0.65f), FontStyles.Normal);
+            12, new Color(ColDim.r, ColDim.g, ColDim.b, 0.85f), FontStyles.Normal);
         var ft = foot.rectTransform;
         ft.anchorMin = new Vector2(0f, 0f);
         ft.anchorMax = new Vector2(1f, 0f);
         ft.pivot = new Vector2(0.5f, 0f);
         ft.sizeDelta = new Vector2(0f, 36f);
-        ft.anchoredPosition = new Vector2(0f, 18f);
+        ft.anchoredPosition = new Vector2(0f, 20f);
         foot.alignment = TextAlignmentOptions.Center;
-
-        // Brand chip top-left
-        var brandChip = MakeImage(transform, "BrandChip", new Color(ColBtn.r, ColBtn.g, ColBtn.b, 0.8f));
-        var bcr = brandChip.rectTransform;
-        bcr.anchorMin = bcr.anchorMax = new Vector2(0f, 1f);
-        bcr.pivot = new Vector2(0f, 1f);
-        bcr.anchoredPosition = new Vector2(14f, -10f);
-        bcr.sizeDelta = new Vector2(160f, 28f);
-        var brandTxt = MakeText(brandChip.transform, "BETELGEUSE MC", 11, ColAccent, FontStyles.Bold);
-        Stretch(brandTxt.rectTransform, 8, 2, 8, 2);
-        brandTxt.alignment = TextAlignmentOptions.Center;
-
-        BuildCaptionButtons();
     }
 
     void BuildSpinner(Transform card)
     {
         var root = new GameObject("Spinner", typeof(RectTransform));
         root.transform.SetParent(card, false);
-        spinnerRt = root.GetComponent<RectTransform>();
-        spinnerRt.anchorMin = spinnerRt.anchorMax = new Vector2(0.5f, 0.88f);
-        spinnerRt.pivot = new Vector2(0.5f, 0.5f);
-        spinnerRt.sizeDelta = new Vector2(44f, 44f);
+        var rootRt = root.GetComponent<RectTransform>();
+        rootRt.anchorMin = rootRt.anchorMax = new Vector2(0.5f, 0.86f);
+        rootRt.pivot = new Vector2(0.5f, 0.5f);
+        rootRt.sizeDelta = new Vector2(48f, 48f);
 
-        const int segs = 10;
-        spinnerSegs = new Image[segs];
-        float radius = 16f;
-        for (int i = 0; i < segs; i++)
-        {
-            float ang = i * (360f / segs) * Mathf.Deg2Rad;
-            var seg = MakeImage(root.transform, "Seg" + i, ColAccent);
-            var rt = seg.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(4.5f, 10f);
-            rt.anchoredPosition = new Vector2(Mathf.Sin(ang) * radius, Mathf.Cos(ang) * radius);
-            rt.localEulerAngles = new Vector3(0f, 0f, -i * (360f / segs));
-            spinnerSegs[i] = seg;
-        }
+        // Static dim ring
+        var ring = MakeImage(root.transform, "Ring", new Color(1f, 1f, 1f, 0.1f));
+        ring.sprite = RingSprite(64, 5f, 1f);
+        ring.type = Image.Type.Simple;
+        ring.preserveAspect = true;
+        Stretch(ring.rectTransform, 0, 0, 0, 0);
+
+        // Spinning arc (partial ring)
+        var spinGo = new GameObject("ArcSpin", typeof(RectTransform));
+        spinGo.transform.SetParent(root.transform, false);
+        spinnerRt = spinGo.GetComponent<RectTransform>();
+        Stretch(spinnerRt, 0, 0, 0, 0);
+
+        spinnerArc = MakeImage(spinGo.transform, "Arc", ColAccent);
+        spinnerArc.sprite = RingSprite(64, 5.5f, 0.28f);
+        spinnerArc.type = Image.Type.Simple;
+        spinnerArc.preserveAspect = true;
+        Stretch(spinnerArc.rectTransform, 0, 0, 0, 0);
+
+        // Center dot
+        var core = MakeImage(root.transform, "Core", new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.35f));
+        var cr = core.rectTransform;
+        cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0.5f);
+        cr.pivot = new Vector2(0.5f, 0.5f);
+        cr.sizeDelta = new Vector2(6f, 6f);
     }
 
-    void BuildWaitDots(Transform card)
+    /// <summary>Procedural ring / arc sprite. fill01 = fraction of circumference drawn.</summary>
+    static Sprite RingSprite(int size, float thicknessPx, float fill01)
     {
-        var row = new GameObject("WaitDots", typeof(RectTransform));
-        row.transform.SetParent(card, false);
-        var rr = row.GetComponent<RectTransform>();
-        rr.anchorMin = rr.anchorMax = new Vector2(0.64f, 0.19f);
-        rr.pivot = new Vector2(0f, 0.5f);
-        rr.sizeDelta = new Vector2(48f, 12f);
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        tex.wrapMode = TextureWrapMode.Clamp;
+        float cx = (size - 1) * 0.5f;
+        float cy = (size - 1) * 0.5f;
+        float outer = size * 0.5f - 1f;
+        float inner = Mathf.Max(1f, outer - thicknessPx);
+        float fillAngle = Mathf.Clamp01(fill01) * Mathf.PI * 2f;
 
-        waitDots = new Image[3];
-        for (int i = 0; i < 3; i++)
+        var clear = new Color(0f, 0f, 0f, 0f);
+        for (int y = 0; y < size; y++)
         {
-            var d = MakeImage(row.transform, "D" + i, ColAmber);
-            var rt = d.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(5f, 5f);
-            rt.anchoredPosition = new Vector2(8f + i * 12f, 0f);
-            waitDots[i] = d;
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - cx;
+                float dy = y - cy;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                if (r < inner - 0.6f || r > outer + 0.6f)
+                {
+                    tex.SetPixel(x, y, clear);
+                    continue;
+                }
+                // 0 = up, increases clockwise
+                float ang = Mathf.Atan2(dx, dy);
+                if (ang < 0f) ang += Mathf.PI * 2f;
+                float edge = 1f;
+                if (r < inner) edge = 1f - (inner - r);
+                else if (r > outer) edge = 1f - (r - outer);
+                edge = Mathf.Clamp01(edge);
+
+                float a = ang <= fillAngle + 0.02f ? edge : 0f;
+                if (fill01 < 0.99f && ang > fillAngle - 0.12f && ang <= fillAngle)
+                    a *= (fillAngle - ang) / 0.12f;
+
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(a)));
+            }
         }
+        tex.Apply(false, true);
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
     }
 
-    static void MakeHairline(Transform parent, bool top, Color c)
+    static void MakeFrame(Transform parent, Color c)
     {
-        var line = MakeImage(parent, top ? "HairTop" : "HairBot", c);
-        var rt = line.rectTransform;
-        if (top)
+        void Edge(string name, Vector2 aMin, Vector2 aMax, Vector2 size)
         {
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
+            var img = MakeImage(parent, name, c);
+            var rt = img.rectTransform;
+            rt.anchorMin = aMin;
+            rt.anchorMax = aMax;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            if (size.x > 0f || size.y > 0f)
+                rt.sizeDelta = size;
+            // For stretch edges keep sizeDelta on the thin axis
+            if (Mathf.Approximately(aMin.x, 0f) && Mathf.Approximately(aMax.x, 1f))
+            {
+                rt.pivot = new Vector2(0.5f, aMin.y > 0.5f ? 1f : 0f);
+                rt.sizeDelta = new Vector2(0f, 1f);
+            }
+            else
+            {
+                rt.pivot = new Vector2(aMin.x > 0.5f ? 1f : 0f, 0.5f);
+                rt.sizeDelta = new Vector2(1f, 0f);
+            }
         }
-        else
-        {
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = new Vector2(1f, 0f);
-            rt.pivot = new Vector2(0.5f, 0f);
-        }
-        rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = new Vector2(0f, 1f);
+        Edge("FrT", new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero);
+        Edge("FrB", new Vector2(0f, 0f), new Vector2(1f, 0f), Vector2.zero);
+        Edge("FrL", new Vector2(0f, 0f), new Vector2(0f, 1f), Vector2.zero);
+        Edge("FrR", new Vector2(1f, 0f), new Vector2(1f, 1f), Vector2.zero);
     }
 
     void BuildCaptionButtons()
@@ -370,15 +417,14 @@ public class SplashScreenUI : MonoBehaviour
         const float capW = 48f;
         const float capH = 34f;
 
-        var bar = MakeImage(transform, "CaptionBar", new Color(ColCard.r, ColCard.g, ColCard.b, 0.95f));
+        var bar = MakeImage(transform, "CaptionBar", new Color(ColCard.r, ColCard.g, ColCard.b, 0.9f));
         var brt = bar.rectTransform;
         brt.anchorMin = brt.anchorMax = new Vector2(1f, 1f);
         brt.pivot = new Vector2(1f, 1f);
         brt.anchoredPosition = Vector2.zero;
         brt.sizeDelta = new Vector2(capW * 3f, capH);
 
-        // Neutral bottom edge only
-        var edge = MakeImage(bar.transform, "CapEdge", new Color(1f, 1f, 1f, 0.1f));
+        var edge = MakeImage(bar.transform, "CapEdge", new Color(1f, 1f, 1f, 0.08f));
         var ert = edge.rectTransform;
         ert.anchorMin = new Vector2(0f, 0f);
         ert.anchorMax = new Vector2(1f, 0f);
@@ -454,42 +500,27 @@ public class SplashScreenUI : MonoBehaviour
         starsRoot.transform.SetParent(parent, false);
         Stretch(starsRoot.GetComponent<RectTransform>(), 0, 0, 0, 0);
 
+        starImgs = new Image[count];
+        starPhase = new float[count];
+        starBaseA = new float[count];
+
         for (int i = 0; i < count; i++)
         {
             float x = (float)rng.NextDouble();
-            float y = 0.28f + (float)rng.NextDouble() * 0.72f;
-            float s = 1.2f + (float)rng.NextDouble() * 2.2f;
-            float a = 0.12f + (float)rng.NextDouble() * 0.45f;
-            var star = MakeImage(starsRoot.transform, "S" + i, new Color(0.9f, 0.93f, 1f, a));
+            float y = (float)rng.NextDouble();
+            float s = 1.1f + (float)rng.NextDouble() * 2.4f;
+            // Occasional brighter star
+            if (rng.NextDouble() < 0.08)
+                s += 1.6f;
+            float a = 0.18f + (float)rng.NextDouble() * 0.55f;
+            var star = MakeImage(starsRoot.transform, "S" + i, new Color(0.88f, 0.92f, 1f, a));
             var rt = star.rectTransform;
             rt.anchorMin = rt.anchorMax = new Vector2(x, y);
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(s, s);
-        }
-    }
-
-    void BuildMoon(Transform parent)
-    {
-        var moon = MakeImage(parent, "Moon", new Color(0.5f, 0.52f, 0.56f, 0.1f));
-        var rt = moon.rectTransform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0.88f, 0.16f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(260f, 260f);
-
-        var body = MakeImage(moon.transform, "Body", new Color(0.55f, 0.57f, 0.6f, 0.16f));
-        var br = body.rectTransform;
-        br.anchorMin = br.anchorMax = new Vector2(0.5f, 0.5f);
-        br.pivot = new Vector2(0.5f, 0.5f);
-        br.sizeDelta = new Vector2(190f, 190f);
-
-        float[,] craters = { { 0.35f, 0.55f, 26f }, { 0.62f, 0.4f, 16f }, { 0.48f, 0.32f, 12f } };
-        for (int i = 0; i < craters.GetLength(0); i++)
-        {
-            var c = MakeImage(body.transform, "Cr" + i, new Color(0.22f, 0.24f, 0.28f, 0.3f));
-            var cr = c.rectTransform;
-            cr.anchorMin = cr.anchorMax = new Vector2(craters[i, 0], craters[i, 1]);
-            cr.pivot = new Vector2(0.5f, 0.5f);
-            cr.sizeDelta = new Vector2(craters[i, 2], craters[i, 2]);
+            starImgs[i] = star;
+            starPhase[i] = (float)rng.NextDouble();
+            starBaseA[i] = a;
         }
     }
 
@@ -498,7 +529,6 @@ public class SplashScreenUI : MonoBehaviour
         targetProgress = Mathf.Clamp01(t01);
         if (!string.IsNullOrEmpty(status))
         {
-            // Strip trailing dots — Update appends animated ellipsis
             statusBase = status.TrimEnd('.', '…', ' ');
             if (txtStatus != null && fading)
                 txtStatus.text = statusBase;
