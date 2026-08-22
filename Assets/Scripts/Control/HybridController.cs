@@ -1,13 +1,15 @@
 using UnityEngine;
 
 /// <summary>
-/// Гібрид Neuro-Fuzzy — ядро теми МКР:
-/// сирий Sugeno + сирий MLP residual → один BlendThrust з профілем soft-landing.
-/// Біля землі (h&lt;50 м) α,β→0: пріоритет інтерпретованих fuzzy-правил.
-/// IdealLandingPresets зменшує residual для гарантованого soft-landing.
+/// Режим D — Neuro-Fuzzy (тема МКР): сирий Sugeno + MLP residual → один BlendThrust.
+/// Біля землі (h&lt;50 м) α,β→0. Реалізує <see cref="ILandingController"/>.
 /// </summary>
-public class HybridController : MonoBehaviour
+public class HybridController : MonoBehaviour, ILandingController
 {
+    public RocketPhysics.ControlMode Mode => RocketPhysics.ControlMode.Hybrid;
+    public string DisplayName => "Hybrid Neuro-Fuzzy";
+    public bool IsAvailable => isActive && enabled;
+
     [Header("Hybrid Neuro-Fuzzy")]
     public bool isActive = true;
     [Range(0f, 0.5f)] public float neuralThrustBlend = 0.25f;
@@ -75,5 +77,19 @@ public class HybridController : MonoBehaviour
         gimbalEuler.x = Mathf.Clamp(gimbalEuler.x, -18f, 18f);
         gimbalEuler.y = 0f;
         gimbalEuler.z = Mathf.Clamp(gimbalEuler.z, -18f, 18f);
+    }
+
+    public void ResetSession()
+    {
+        // Neural ES state is episode-level; hybrid itself is stateless per tick
+    }
+
+    public ControlCommand Evaluate(in ControlContext ctx)
+    {
+        CalculateControl(
+            ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
+            ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg, ctx.HorizSpeed,
+            out float thrust, out Vector3 gimbal);
+        return new ControlCommand(thrust, gimbal, lateralScale: 1.15f, gimbalBlend: 0.5f);
     }
 }

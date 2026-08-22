@@ -2,21 +2,23 @@ using UnityEngine;
 using System.IO;
 
 /// <summary>
-/// Нейромережевий контролер посадки: MLP 5→8→2 (tanh hidden, linear out).
-/// Навчання: еволюційна стратегія ES(1+λ) — мутація ваг, елітизм за cost touchdown.
-/// Входи (нормовані): h, Vy, mass, tilt, |Vh|;
-/// виходи: множник тяги, bias gimbal.
-/// Ваги зберігаються у BestWeights_Neural.json.
+/// Режим C — MLP 5→8→2 + ES(1+λ). Ваги: BestWeights_Neural.json.
+/// Реалізує <see cref="ILandingController"/>.
 /// </summary>
-public class NeuralController : MonoBehaviour
+public class NeuralController : MonoBehaviour, ILandingController
 {
+    public RocketPhysics.ControlMode Mode => RocketPhysics.ControlMode.Neural;
+    public string DisplayName => "Neural ES";
+    public bool IsAvailable => isActive && enabled;
+
     public const int InputSize = 5;
     public const int HiddenSize = 8;
     public const int OutputSize = 2;
 
     [Header("Neural Network (ES 1+λ)")]
     public bool isActive = true;
-    public bool enableTraining = true;
+    /// <summary>ES online-мутація після посадки. Off за замовч. — стабільне демо; увімкнути для дослідження навчання.</summary>
+    public bool enableTraining = false;
     [Range(4, 16)] public int hiddenNeurons = HiddenSize;
     [Range(1, 12)] public int lambda = 4;
     public float mutationSigma = 0.08f;
@@ -191,6 +193,20 @@ public class NeuralController : MonoBehaviour
     {
         if (!isActive) return SoftLandingGuidance.AttitudeGimbal(pitchError, yawError);
         return SoftLandingGuidance.AttitudeGimbal(pitchError, yawError);
+    }
+
+    public void ResetSession()
+    {
+        // Weights persist across flights; ES updates after episodes via Train()
+    }
+
+    public ControlCommand Evaluate(in ControlContext ctx)
+    {
+        CalculateControl(
+            ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
+            ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.HorizSpeed,
+            out float thrust, out Vector3 gimbal);
+        return new ControlCommand(thrust, gimbal, lateralScale: 0.85f, gimbalBlend: 0.4f);
     }
 
     /// <summary>

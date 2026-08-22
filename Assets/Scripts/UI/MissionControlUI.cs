@@ -3,12 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 /// <summary>
-/// Runtime HUD Mission Control (UA/EN, 8 тем UI).
-/// Top chrome: brand · mode · time | flight actions | Theme/Lang над Status/Hide.
-/// Ліворуч: landing GATE → guidance → primary/dynamics/propulsion → charts.
-/// Праворуч: quick-start → algorithm 2×2 → compare → cam → test sliders → %.
-/// Низ: смуга поточного кроку (фази посадки поточного алгоритму).
-/// Rebuild UI (тема/мова) зберігає samples графіків, слайдери й toggles.
+/// Основний runtime HUD: UA/EN, 8 тем, GATE, телеметрія, Monte-Carlo, модалка результату.
+/// Rebuild при зміні теми/мови зберігає samples графіків і setup-стан.
 /// </summary>
 [DefaultExecutionOrder(-50)]
 public class MissionControlUI : MonoBehaviour

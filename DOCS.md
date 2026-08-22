@@ -4,20 +4,20 @@
 Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання.
 
 **Платформа:** Unity 6000.x (URP) · C#  
-**Тип:** симулятор GNC (Guidance, Navigation & Control) першого ступеня ракетоносія  
-**Версія / статус:** **v1.0.0** — diploma release (2026-08-15) · див. [`RELEASE.md`](RELEASE.md)
+**Тип:** симулятор GNC (Guidance, Navigation & Control) першого ступеня  
+**Версія:** **v1.1.0** · див. [`RELEASE.md`](RELEASE.md) · архітектура [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ---
 
 ## 1. Призначення
 
-Програма моделює автономну посадку першого ступеня (клас Falcon 9 scale, ~42 м) і порівнює чотири алгоритми:
+Програма моделює автономну посадку першого ступеня (клас Falcon scale, ~42 м) і порівнює чотири алгоритми:
 
 | Код | Алгоритм | Роль |
 |-----|----------|------|
 | **A** | Класичний **PID** | Еталон |
-| **B** | **Нечітка логіка** Sugeno-0 5×5 | Інтелектуальне керування на правилах |
-| **C** | **Нейромережа** MLP + ES(1+λ) | Машинне навчання |
+| **B** | **Нечітка логіка** Sugeno-0 5×5 | Правила |
+| **C** | **Нейромережа** MLP + ES(1+λ) | ML |
 | **D** | **Гібрид Neuro-Fuzzy** | ★ Тема: Sugeno + residual MLP |
 
 Мета — показати, що гібрид (інтерпретований Sugeno + обмежена нейро-корекція) стійкіший за чистий PID під збуреннями.
@@ -26,12 +26,12 @@
 
 ## 2. Швидкий старт
 
-1. Unity **6000.x** + URP → `Assets/Scenes/SampleScene.unity` → **Play**.
-2. Права панель: алгоритм **D Гібрид**.
-3. (Опційно) **Ідеал** `[I]`.
-4. **Старт** `[Space]` (або top-menu).
-5. **Порівняти** `[P]` — Monte-Carlo.
-6. **Експорт** `[E]` → `SimulationLogs/`.
+1. Unity **6000.x** + URP → `Assets/Scenes/SampleScene.unity` → **Play**.  
+2. Права панель: алгоритм **D Гібрид**.  
+3. (Опційно) **Ідеал** `[I]`.  
+4. **Старт** `[Space]`.  
+5. **Порівняти** `[P]` — Monte-Carlo.  
+6. **Експорт** `[E]` → `SimulationLogs/`.  
 
 Ракета **чекає** кнопки (не падає одразу).
 
@@ -40,163 +40,118 @@
 ## 3. Інтерфейс
 
 ```
-┌── BETELGEUSE · mode · t     [Start|Stop|Ideal|Path|View|Export]  Theme Lang ┐
-│                                                      Status Hide (під ними) │
-├──────────────┬────────────────────────┬────────────────────────────────────┤
-│ ЛІВО:        │  ЦЕНТР 3D              │ ПРАВО:                             │
-│ GATE 2×2     │  Місяць + LZ pad       │ Швидкий старт                      │
-│ Підказка     │  ракета ~43 м          │ Алгоритм 2×2 (1–4)                 │
-│ Головне/dyn  │  траєкторія            │ Порівняти [P] / Скасувати [X]      │
-│ Графіки      │  orbit / zoom          │ Камера · Умови (вітер/шум/N/x)     │
-│              │                        │ Success % + winner                 │
-├──────────────┴────────────────────────┴────────────────────────────────────┤
-│              Крок: Hybrid | термінал / гальмування / …                      │
-└────────────────────────────────────────────────────────────────────────────┘
+┌── BETELGEUSE · mode · t     [Start|Stop|Ideal|Path|View|Export]  Theme Lang ─┐
+│                                                         Status Hide          │
+├──────────────┬────────────────────────┬──────────────────────────────────────┤
+│ ЛІВО:        │  ЦЕНТР 3D              │ ПРАВО:                               │
+│ GATE 2×2     │  Місяць + LZ pad       │ Швидкий старт                        │
+│ Підказка     │  ракета ~42 м          │ Алгоритм 2×2 (1–4)                   │
+│ Головне/dyn  │  траєкторія            │ Порівняти [P] / Скасувати [X]        │
+│ Графіки      │  orbit / zoom          │ Камера · Умови (вітер/шум/N/x)       │
+│              │                        │ Success % + winner                   │
+├──────────────┴────────────────────────┴──────────────────────────────────────┤
+│              Крок: Hybrid | термінал / гальмування / …                       │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Модалка результату посадки
+
+- Заголовок + **score pill** (`NN /100`)  
+- Один рядок підсумку  
+- 4 чіпи метрик (Vᵧ, нахил, промах, Vₕ) з green/red  
+- Один ряд кнопок: Траєкторія · Експорт · Зрозуміло  
 
 ### Теми UI (`Y`)
 
 Dark · Cyan · Amber · **Light** · Green · Violet · Red · **Ice**
 
-- Панелі / edge / accent / слайдери / рамки графіків — **theme-aware**.  
-- Rebuild при зміні теми **зберігає** samples strip-charts, значення слайдерів і toggles.  
-- Шрифт HUD: LiberationSans + dynamic Cyrillic fallback; без dilate/soft underlay.
+- Rebuild при зміні теми/мови **зберігає** samples strip-charts і setup.  
+- Шрифт HUD: dynamic Segoe UI SDF + LiberationSans fallback.
 
-### Критерії soft-landing
+### Критерії soft-landing (`LandingCriteria`)
 
-- \|Vᵧ\| < **3.5** м/с  
-- нахил < **7°**  
-- промах < **25** м  
-- \|Vₕ\| < **5** м/с  
+- |Vᵧ| &lt; **3.5** м/с  
+- нахил &lt; **7°**  
+- промах &lt; **25** м  
+- |Vₕ| &lt; **5** м/с  
 - без timeout  
 
 **SuccessScore** 0…100: швидкість 35% + кут 25% + паливо 15% + промах 15% + бічна 10%.
 
 ---
 
-## 4. Архітектура
+## 4. Архітектура (стисло)
 
 ```
 Assets/Scripts/
-├── Control/
-│   ├── PIDController.cs              # PID + anti-windup
-│   ├── SoftLandingGuidance.cs        # v=−√(2ah), BlendThrust, TVC-PD
-│   ├── FuzzyLandingController.cs     # Sugeno-0 5×5 + EvaluateSugenoThrust
-│   ├── NeuralController.cs           # MLP 5→8→2 + ES
-│   ├── HybridController.cs           # Neuro-Fuzzy (один blend)
-│   └── IdealLandingPresets.cs        # [I] номінал + per-mode тюнінг
-├── Core/
-│   ├── RocketPhysics.cs              # RK4, режими A–D, lateral, metrics
-│   ├── RocketState.cs
-│   ├── AtmosphereModel.cs             # g(h), ρ(h)
-│   ├── LandingMetrics.cs
-│   ├── SimulationManager.cs          # Monte-Carlo
-│   ├── ResearchExporter.cs
-│   └── DataLogger.cs
-├── Visual/
-│   ├── LunarTerrainMesh.cs           # heightmap + кратери до краю диска
-│   ├── EnvironmentBuilder.cs         # pad, сонце, зорі
-│   ├── RocketVisualBuilder.cs        # корпус ~42 м
-│   ├── RocketEngineFX.cs             # core/outer plume, дим, dust
-│   ├── SmoothMesh.cs / VisualMaterials.cs / SpaceAmbience.cs
-├── UI/
-│   ├── MissionControlUI.cs           # HUD UA/EN
-│   ├── TelemetryGraph.cs             # theme-aware strip charts
-│   ├── TrajectoryVisualizer.cs       # Chaikin-згладжена лінія
-│   ├── UiTheme.cs / UiTypography.cs / UILocale.cs
-└── Utils/
-    ├── SceneBootstrap.cs
-    └── CameraFollow.cs
+├── Domain/Control/     # ILandingController, Context/Command, Resolver, Criteria, PidStrategy
+├── Control/            # Fuzzy, Neural, Hybrid, SoftLandingGuidance, IdealLandingPresets
+├── Core/               # RocketPhysics, SimulationManager, ResearchExporter, metrics, logger
+├── Parameters/         # SimulationParameters
+├── Visual/             # LunarTerrainMesh, EnvironmentBuilder, RocketVisualBuilder, FX
+├── UI/                 # MissionControlUI, UiTheme, graphs, trajectory, splash
+└── Utils/              # SceneBootstrap, CameraFollow, BorderlessWindow
 ```
 
 ### Життєвий цикл Play
 
-1. `SceneBootstrap` — контролери, візуал, середовище, камера.  
+1. `SplashScreenUI` → `SceneBootstrap` (контролери, візуал, середовище, камера).  
 2. `MissionControlUI` — HUD.  
-3. `RocketPhysics`: `simulationArmed = false`.  
+3. `RocketPhysics.simulationArmed = false`.  
 4. Старт → `ResetSimulation` + `ApplyFlightDisturbances`.  
-5. `FixedUpdate`: RK4 + GNC до touchdown.  
-6. Metrics + CSV + (NN/Hybrid) ES-крок; траєкторія **лишається** до нового старту.
+5. `FixedUpdate`: RK4 + `ILandingController.Evaluate` до touchdown.  
+6. Metrics + CSV + (NN/Hybrid) ES-крок; траєкторія лишається до нового старту.  
+
+Деталі SOLID/патернів — у [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ---
 
-## 5. Фізика
+## 5. GNC
 
-| Аспект | Реалізація |
-|--------|------------|
-| Трансляція | RK4, `fixedTimeStep` ≈ 5 мс |
-| Орієнтація | Semi-implicit Euler + демпфінг |
-| g(h) | Inverse-square |
-| Атмосфера | Експоненційна ρ, drag |
-| Паливо | ṁ = F/(Isp·g₀) |
-| Вітер | kick + continuous air-relative |
-| TVC | gimbal у тілі, важіль ~11 м |
+| Режим | Закон |
+|-------|--------|
+| **A PID** | Hover FF + PID на `v_target`; слабший terminal / lateral |
+| **B Fuzzy** | Sugeno 5×5 product-AND + blend з soft-landing профілем |
+| **C Neural** | MLP residual + ES; ваги у `BestWeights_Neural.json` |
+| **D Hybrid** | Сирий Sugeno + сирий MLP residual → **один** `BlendThrust`; біля землі α,β→0 |
 
-| Режим | h₀ | Vᵧ | крен |
-|-------|----|----|------|
-| Номінал | ≈1800 м | ≈−72 м/с | ≈3.5° |
-| Ідеал `[I]` | 1400 м | −48 м/с | 0.4° |
+Спільне:
 
----
+- Soft-landing профіль `v=−√(2ah)` (`SoftLandingGuidance`)  
+- TVC-PD upright safety net  
+- Lateral guidance з масштабом від стратегії  
+- Термінал h&lt;~25 м  
 
-## 6. Алгоритми
+### Ideal `[I]`
 
-Усі: RK4, TVC-PD, lateral, **термінал h&lt;25 м → ProfileThrust**.
-
-### A PID
-Hover FF + PID на `v_target`; слабший під вітром.
-
-### B Fuzzy (Sugeno-0)
-5 MF × 5 MF, product-AND, weighted average → mult·mg.  
-`EvaluateSugenoThrust` — сирий вихід (для Hybrid без double-blend).
-
-### C Neural
-MLP 5→8→2, residual поверх профілю, ES після епізоду, `BestWeights_Neural.json`.
-
-### D Hybrid ★
-```
-smart  = lerp(sugeno, nnRaw, α(h))
-smart  = clamp(smart, sugeno ± residualMax)   // ДО blend
-thrust = BlendThrust(profile, smart, …)       // один раз
-```
-h&lt;50 м → α,β→0 (пріоритет fuzzy).
-
-### Lateral
-Знаки TVC узгоджені: `x>0 → gz>0`, `z>0 → gx<0`.
+Номінал (орієнтовно h≈1400 м, Vᵧ≈−48 м/с, вітер=0) + per-mode тюнінг → очікуваний soft-landing A–D.
 
 ---
 
-## 7. Monte-Carlo
+## 6. Фізика
 
-`SimulationManager`: N запусків × {PID, Fuzzy, Neural, Hybrid}, вітер/маса/кут, `timeScale`↑, звіти CSV/JSON/MD.
+- Трансляція: **RK4**  
+- Орієнтація: semi-implicit Euler + демпфінг  
+- `AtmosphereModel`: g(h), ρ(h)  
+- Drag: Cd≈0.85, S≈8.5 м²  
+- Вітер: UI → `ApplyFlightDisturbances` на одиночний старт  
+- `fixedTimeStep` синхронізується з `Time.fixedDeltaTime`  
 
 ---
 
-## 8. Візуалізація
+## 7. Візуалізація
 
 | Компонент | Опис |
 |-----------|------|
-| `LunarTerrainMesh` | Диск R=2000 м, heightmap ~448, C2-кратери, world-UV albedo+normal 2K |
-| `EnvironmentBuilder` | Premium LZ (steel deck, bullseye, leg pads, curb LED, beacons) |
-| `RocketVisualBuilder` | Falcon-class ~43 м, cyl-UV skins, CFRP interstage, tangent ogive fairing, bells |
-| `RocketEngineFX` | Core + outer plume, smoke, sparks, ground dust |
-| `TrajectoryVisualizer` | Catmull-Rom + Chaikin, live tip, лишається після посадки |
-| `CameraFollow` | Follow / Manual / Overview |
-| Фізика | Clamp горизонталі ≤ 0.92·R диска |
-
-### UI layout (актуально)
-
-| Зона | Вміст |
-|------|--------|
-| **Top chrome** | Brand + mode pill + time; flight actions; справа 2×2: Theme/Lang зверху, Status/Hide знизу |
-| **Ліва панель** | GATE → Підказка → Головне → Динаміка → Рушій → Піки → Графіки |
-| **Права панель** | Quick-start → Алгоритм → Порівняння → Камера → Умови тесту (3 слайдери 5 px + toggles) → % |
-| **Низ** | Смуга кроку фази посадки (`PID \| Крок: …`) |
-| **Слайдери** | Однакова товщина треку 5 px; fill без stretch-height; handle 11×11 |
+| `LunarTerrainMesh` | Диск R=2000 м, heightmap, круглі C2-кратери, cool-gray albedo |
+| `EnvironmentBuilder` | LZ pad, сонце, зірки, approach markers |
+| `RocketVisualBuilder` | Falcon-class ~42 м, UV-skins, fins, ноги, bell nozzles |
+| `RocketEngineFX` | Core/outer plume, дим, sparks, dust |
+| `TrajectoryVisualizer` | Catmull-Rom + Chaikin, live tip |
 
 ---
 
-## 9. Експорт
+## 8. Експорт
 
 ```
 SimulationLogs/Landing_Full_<algo>_<ts>/
@@ -204,47 +159,68 @@ SimulationLogs/Landing_Full_<algo>_<ts>/
   03–07_*.svg · 08_step_analysis.md
 ```
 
+Monte-Carlo: `SimulationLogs/Research_Comparison_*`.
+
 ---
 
-## 10. Тести
+## 9. Тести
 
 | Набір | Зміст |
 |-------|--------|
-| EditMode | PID, Atmosphere, Metrics, Export, Fuzzy, signs |
+| EditMode | PID, Atmosphere, Metrics, Export, Fuzzy, gimbal/Neural signs, **ThesisCoverage** |
 | PlayMode | Hold, landing finish, NaN-free, camera, logger |
 
 ---
 
-## 11. Відповідність темі — фінальний вердикт
+## 10. Відповідність темі — вердикт
 
-| Вимога | Статус | Де |
-|--------|--------|-----|
-| Автономна посадка ракетоносія | ✅ | `RocketPhysics` + soft-landing критерії |
-| Нечітка логіка | ✅ | `FuzzyLandingController` Sugeno-0 |
-| Машинне навчання | ✅ | `NeuralController` MLP + ES |
-| Інтелектуальна (гібридна) система | ✅ | `HybridController` Neuro-Fuzzy |
-| Порівняння / дослідження | ✅ | Monte-Carlo + ResearchExporter |
-| Демо UI | ✅ | MissionControl · UA/EN · 8 тем |
-| Візуалізація | ✅ | Місяць, pad, ракета, FX, траєкторія |
+**Тема:** *Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання.*
 
-### Вердикт — v1.0.0 (2026-08-15)
+| Фрагмент теми | Реалізація | Де |
+|---------------|------------|-----|
+| Автономна посадка ракетоносія | GNC без пілота до touchdown | `RocketPhysics`, soft-landing |
+| Нечітка логіка | Sugeno-0 5×5 + fuzzy gimbal | `FuzzyLandingController` **B** |
+| Машинне навчання | MLP 5→8→2 + ES(1+λ) | `NeuralController` **C**, toggle **Train** |
+| Інтелектуальна система | Neuro-Fuzzy (Sugeno + NN residual) | `HybridController` **D** ★ |
+| Дослідження / порівняння | Monte-Carlo + export pack | `SimulationManager`, `ResearchExporter` |
+| Презентація | 3D + HUD UA/EN + 8 тем | `MissionControlUI`, Visual/* |
 
-**Тема повністю реалізована** — **реліз v1.0.0** для захисту МКР.
+| Вимога | Статус |
+|--------|--------|
+| Автономна посадка | ✅ |
+| Нечітка логіка | ✅ |
+| Машинне навчання | ✅ (Train off за замовч. — стабільне демо) |
+| Гібрид (тема) | ✅ |
+| Порівняння + export | ✅ |
+| UI / 3D | ✅ |
+| SOLID GNC layer | ✅ |
 
-| Шар | Стан |
-|-----|------|
-| Алгоритми A–D + Ideal + Monte-Carlo | ✅ коректні знаки TVC/lateral, hybrid residual cap |
-| Фізика RK4 + критерії + metrics/export | ✅ |
-| 3D: lunar disk, LZ pad, Falcon-class, FX | ✅ premium procedural |
-| HUD: UA/EN, 8 тем, GATE, step strip | ✅ theme-safe rebuild |
-| Тести Edit/Play | ✅ за архітектурою |
+### Готовність до захисту
 
-**Межі (чесно для захисту):** не industrial avionics (немає Kalman/INS, CFD, повного thruster CFD). Достатньо для МКР: інтерпретований Sugeno + NN residual, відтворювані експерименти, пакет експорту, наочна 3D-демо.
+**Вердикт: ТАК** — логіка відповідає темі; проєкт готовий до повноцінної презентації за демо-сценарієм нижче.
 
-**Рекомендована демо-послідовність:** `4` Hybrid → `I` Ideal (опційно) → `Space` → ліва телеметрія/GATE → `T` траєкторія → `E` експорт → `P` порівняння.
+**Межі (чесно):** не industrial avionics (немає Kalman/INS, CFD, сертифікації ПЗ). Рівень МКР: відтворюваний GNC research simulator.
+
+### Демо на захист
+
+1. `4` Hybrid  
+2. `I` Ideal (вітер/шум off, ваги NN ideal, Train off)  
+3. `Space` — GATE, score, модалка  
+4. `T` траєкторія  
+5. `E` експорт  
+6. `P` Monte-Carlo (A–D)  
+7. Опційно: **Train** on + Neural — показати ES  
+
+### Стабільність демо
+
+- `LoadBestWeights` / fallback `InstallIdealWeights`  
+- ES-мутація вимкнена за замовчуванням  
+- Ideal `[I]` тюнить GNC під обраний режим  
+
+Тести покриття теми: `ThesisCoverageTests` (EditMode).
 
 ---
 
-## 12. Автор
+## 11. Автор
 
 Магістерська кваліфікаційна робота, 2026.

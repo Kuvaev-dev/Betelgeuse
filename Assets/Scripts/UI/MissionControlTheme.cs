@@ -3,8 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Космічна палітра Mission Control (legacy scene UI).
-/// Основний HUD будує MissionControlUI — цей клас лише для старих елементів.
+/// Фіксована палітра для legacy scene UI (<see cref="TelemetryHUD"/>, <see cref="ExperimentDashboard"/>).
+/// Теми основного HUD — у <see cref="UiTheme"/>.
 /// </summary>
 [DefaultExecutionOrder(-100)]
 public class MissionControlTheme : MonoBehaviour

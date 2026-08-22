@@ -3,9 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-/// Процедурний диск Місяця (R≈2000 м) для демо посадки.
-/// Декартова heightmap + crater field; albedo/normal у world-space UV
-/// (без викривлення і без bilinear-«сходинок» з coarse shade).
+/// Процедурний диск Місяця (R≈2000 м): heightmap, круглі C2-кратери,
+/// cool-gray albedo у world-UV. Без зовнішніх тайлів.
 /// </summary>
 public static class LunarTerrainMesh
 {

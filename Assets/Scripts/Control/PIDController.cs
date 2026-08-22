@@ -1,9 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Класичний PID з anti-windup (∫e clamp ±15).
-/// Режим A: вертикаль (hover FF + PID на v_target) і attitude.
-/// u = Kp·e + Ki·∫e + Kd·de/dt, e = setpoint − measured.
+/// PID з anti-windup (∫e clamp ±15). u = Kp·e + Ki·∫e + Kd·de/dt.
 /// </summary>
 [System.Serializable]
 public class PIDController

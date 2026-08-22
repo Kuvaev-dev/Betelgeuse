@@ -2,7 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Scene init after Load: controllers, visuals, environment — stepped with splash progress.
+/// Ініціалізація сцени після Load: контролери, візуал, середовище (кроками зі splash).
 /// </summary>
 public static class SceneBootstrap
 {
@@ -161,6 +161,28 @@ public class BootstrapRunner : MonoBehaviour
         rocket.fuzzyController = rocket.GetComponent<FuzzyLandingController>();
         rocket.neuralController = rocket.GetComponent<NeuralController>();
         rocket.hybridController = rocket.GetComponent<HybridController>();
+
+        // Hybrid wiring + stable NN weights for presentation
+        if (rocket.hybridController != null)
+        {
+            rocket.hybridController.fuzzy = rocket.fuzzyController;
+            rocket.hybridController.neural = rocket.neuralController;
+        }
+        if (rocket.neuralController != null)
+        {
+            rocket.neuralController.LoadBestWeights();
+            if (rocket.neuralController.generation <= 0
+                && rocket.neuralController.bestCost >= float.MaxValue * 0.5f)
+                rocket.neuralController.InstallIdealWeights();
+            // Demo-safe default; UI «Train» can re-enable ES
+            if (!UserSettings.Train)
+                rocket.neuralController.enableTraining = false;
+        }
+
+        // Default mode Hybrid (тема МКР) if not overridden later by UI settings
+        if (rocket.controlMode != RocketPhysics.ControlMode.Hybrid
+            && UserSettings.ControlMode == 3)
+            rocket.controlMode = RocketPhysics.ControlMode.Hybrid;
     }
 
     static void SetupCamera(RocketPhysics rocket)

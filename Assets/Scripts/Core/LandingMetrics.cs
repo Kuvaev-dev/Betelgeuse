@@ -46,8 +46,8 @@ public class LandingMetrics
         }
     }
 
-    /// <summary>Текстовий висновок UA/EN: чому успіх / невдача (export + legacy).</summary>
-    /// <param name="includeTitle">false — коли заголовок уже є в UI-модалці</param>
+    /// <summary>Текстовий висновок UA/EN для експорту та діалогів.</summary>
+    /// <param name="includeTitle">false — якщо заголовок уже в UI</param>
     public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 25f, float maxH = 5f,
         bool includeTitle = true)
     {

@@ -2,8 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Середовище посадки: crater-диск Місяця, industrial pad, підхідні маркери, небо.
-/// Рельєф — один heightmap-меш (LunarTerrainMesh); pad — smooth cylinders/rings.
+/// Середовище посадки: диск Місяця, LZ pad, зірки, сонце, підхідні маркери.
 /// </summary>
 public static class EnvironmentBuilder
 {

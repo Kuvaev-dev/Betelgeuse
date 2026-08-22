@@ -33,7 +33,8 @@ public static class UserSettings
 
     public static bool Train
     {
-        get => PlayerPrefs.GetInt(P + "Train", 1) != 0;
+        // Default off: stable presentation; enable for ES research demos
+        get => PlayerPrefs.GetInt(P + "Train", 0) != 0;
         set => PlayerPrefs.SetInt(P + "Train", value ? 1 : 0);
     }
 

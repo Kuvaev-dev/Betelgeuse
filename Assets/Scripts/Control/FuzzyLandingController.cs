@@ -1,13 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// Zero-order Sugeno (TSK-0) — нечітке керування посадкою.
-/// Фазифікація 5 MF (h, |Vy|); база 5×5 product-AND; дефазифікація = зважене середнє.
-/// Окремий fuzzy-канал gimbal (|error|×|rate|).
-/// За замовчуванням smartWeight високий — алгоритм помітно відрізняється від PID.
+/// Режим B — Sugeno-0 5×5 (product-AND) для тяги + fuzzy gimbal. Реалізує <see cref="ILandingController"/>.
 /// </summary>
-public class FuzzyLandingController : MonoBehaviour
+public class FuzzyLandingController : MonoBehaviour, ILandingController
 {
+    public RocketPhysics.ControlMode Mode => RocketPhysics.ControlMode.Fuzzy;
+    public string DisplayName => "Fuzzy Sugeno";
+    public bool IsAvailable => isActive && enabled;
+
     [Header("Fuzzy Logic (Sugeno 0-order)")]
     public bool isActive = true;
 
@@ -95,6 +96,16 @@ public class FuzzyLandingController : MonoBehaviour
 
     public Vector3 CalculateGimbal(float pitchError, float yawError)
         => CalculateGimbal(pitchError, yawError, 0f, 0f);
+
+    public void ResetSession() { /* stateless Sugeno */ }
+
+    public ControlCommand Evaluate(in ControlContext ctx)
+    {
+        float thrust = CalculateThrust(ctx.Height, ctx.VerticalVelocity, ctx.Mass);
+        Vector3 gimbal = CalculateGimbal(
+            ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg);
+        return new ControlCommand(thrust, gimbal, lateralScale: 1.0f, gimbalBlend: 0.55f);
+    }
 
     float FuzzyAxis(float errorDeg, float rateDeg)
     {

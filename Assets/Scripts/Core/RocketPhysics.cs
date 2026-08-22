@@ -1,11 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Ядро фізики та GNC ракетоносія.
-/// — Трансляція: RK4; орієнтація: semi-implicit Euler + демпфінг;
-/// — Режими A–D: PID / Fuzzy Sugeno / Neural ES / Hybrid (різні закони керування);
-/// — Спільне: TVC-PD, lateral guidance, термінал soft-landing (h&lt;25 м);
-/// — Старт лише після simulationArmed (UI / Ideal presets не автозапуск).
+/// Ядро фізики та GNC: RK4-трансляція, Euler-орієнтація, TVC і soft-landing.
+/// Керування A–D через <see cref="ILandingController"/> / <see cref="LandingControllerResolver"/>.
+/// Політ стартує лише після <c>simulationArmed</c>.
 /// </summary>
 [RequireComponent(typeof(DataLogger))]
 public class RocketPhysics : MonoBehaviour
@@ -29,19 +27,17 @@ public class RocketPhysics : MonoBehaviour
     public bool applyContinuousWind = true;
 
     private DataLogger logger;
-    // Класичний PID: слабший integral — менше windup, але гірше за Hybrid під збуреннями
-    private PIDController pitchPID = new PIDController() { Kp = 0.55f, Ki = 0.04f, Kd = 0.48f };
-    private PIDController yawPID = new PIDController() { Kp = 0.55f, Ki = 0.04f, Kd = 0.48f };
-    private PIDController thrustPID = new PIDController() { Kp = 2.8f, Ki = 0.25f, Kd = 1.4f };
+
+    /// <summary>PID strategy (mode A) — pure class via Strategy pattern.</summary>
+    readonly PidLandingStrategy pidStrategy = new PidLandingStrategy();
+
+    /// <summary>Resolves ILandingController by ControlMode (DIP).</summary>
+    LandingControllerResolver controllerResolver;
 
     /// <summary>Налаштування PID з IdealLandingPresets / UI.</summary>
     public void SetPidGains(float thrustKp, float thrustKi, float thrustKd,
         float attKp, float attKi, float attKd)
-    {
-        thrustPID.Kp = thrustKp; thrustPID.Ki = thrustKi; thrustPID.Kd = thrustKd;
-        pitchPID.Kp = attKp; pitchPID.Ki = attKi; pitchPID.Kd = attKd;
-        yawPID.Kp = attKp; yawPID.Ki = attKi; yawPID.Kd = attKd;
-    }
+        => pidStrategy.SetGains(thrustKp, thrustKi, thrustKd, attKp, attKi, attKd);
 
     public FuzzyLandingController fuzzyController;
     public NeuralController neuralController;
@@ -76,8 +72,17 @@ public class RocketPhysics : MonoBehaviour
         hybridController.fuzzy = fuzzyController;
         hybridController.neural = neuralController;
 
-        if (neuralController != null) neuralController.LoadBestWeights();
+        if (neuralController != null)
+        {
+            neuralController.LoadBestWeights();
+            // Гарантія демо: якщо файлу ваг немає — встановити фізично обґрунтовані
+            if (neuralController.generation <= 0 && neuralController.bestCost >= float.MaxValue * 0.5f)
+                neuralController.InstallIdealWeights();
+        }
         cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
+
+        // Composition root: register strategies once
+        controllerResolver = LandingControllerResolver.CreateDefault(this, pidStrategy);
 
         SyncFixedTimestep();
         InitializeSimulation();
@@ -162,65 +167,26 @@ public class RocketPhysics : MonoBehaviour
 
     void UpdateControl()
     {
-        Vector3 up = state.rotation * Vector3.up;
-        float pitchError = Vector3.SignedAngle(up, Vector3.up, Vector3.right);
-        float yawError = Vector3.SignedAngle(up, Vector3.up, Vector3.forward);
-        float pitchRate = state.angularVelocity.x * Mathf.Rad2Deg;
-        float yawRate = state.angularVelocity.z * Mathf.Rad2Deg;
-        float horizSpeed = new Vector2(state.velocity.x, state.velocity.z).magnitude;
-        float tilt = Vector3.Angle(up, Vector3.up);
-        float h = state.position.y;
-        float mass = state.TotalMass;
+        float dt = parameters != null ? parameters.fixedTimeStep : Time.fixedDeltaTime;
+        var ctx = ControlContext.FromState(state, dt);
+        float h = ctx.Height;
+        float mass = ctx.Mass;
+        float tilt = ctx.TiltDeg;
 
-        // Базовий PD (TVC) — safety net для всіх режимів
+        // Safety PD upright gimbal — shared envelope for all strategies
         Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(
             state.rotation, state.angularVelocity, maxDeg: 16f, kp: 0.7f, kd: 0.92f);
-        Vector3 gCmd = baseGimbal;
-        float thrustCmd = SoftLandingGuidance.ProfileThrust(h, state.velocity.y, mass);
 
-        switch (controlMode)
-        {
-            case ControlMode.Fuzzy when fuzzyController != null && fuzzyController.isActive:
-            {
-                // B: Sugeno thrust + fuzzy gimbal (помітна різниця від PID)
-                thrustCmd = fuzzyController.CalculateThrust(h, state.velocity.y, mass);
-                Vector3 fg = fuzzyController.CalculateGimbal(pitchError, yawError, pitchRate, yawRate);
-                gCmd = Vector3.Lerp(baseGimbal, fg, 0.55f);
-                break;
-            }
-            case ControlMode.Neural when neuralController != null && neuralController.isActive:
-            {
-                // C: MLP residual thrust + limited gimbal bias
-                neuralController.CalculateControl(
-                    h, state.velocity.y, mass, state.currentThrust,
-                    pitchError, yawError, horizSpeed,
-                    out thrustCmd, out Vector3 ng);
-                gCmd = Vector3.Lerp(baseGimbal, ng, 0.4f);
-                break;
-            }
-            case ControlMode.Hybrid when hybridController != null && hybridController.isActive:
-            {
-                // D: Neuro-Fuzzy — fuzzy base + NN residual
-                hybridController.CalculateControl(
-                    h, state.velocity.y, mass, state.currentThrust,
-                    pitchError, yawError, pitchRate, yawRate, horizSpeed,
-                    out thrustCmd, out Vector3 hg);
-                gCmd = Vector3.Lerp(baseGimbal, hg, 0.5f);
-                break;
-            }
-            default:
-            {
-                // A: класичний PID (тяга + attitude) — еталон, гірший під збуреннями
-                thrustCmd = CalculateThrustPID();
-                float pc = pitchPID.Calculate(0f, pitchError, parameters.fixedTimeStep);
-                float yc = yawPID.Calculate(0f, yawError, parameters.fixedTimeStep);
-                gCmd = new Vector3(
-                    Mathf.Clamp(baseGimbal.x + pc * 0.35f, -16f, 16f),
-                    0f,
-                    Mathf.Clamp(baseGimbal.z + yc * 0.35f, -16f, 16f));
-                break;
-            }
-        }
+        if (controllerResolver == null)
+            controllerResolver = LandingControllerResolver.CreateDefault(this, pidStrategy);
+
+        ILandingController strategy = controllerResolver.Resolve(controlMode);
+        ControlCommand cmd = strategy != null
+            ? strategy.Evaluate(in ctx)
+            : ControlCommand.ProfileFallback(in ctx);
+
+        float thrustCmd = cmd.Thrust;
+        Vector3 gCmd = Vector3.Lerp(baseGimbal, cmd.GimbalEuler, cmd.GimbalBlend);
 
         // Великий нахил — пріоритет вирівнювання
         float upright = SoftLandingGuidance.UprightThrustScale(tilt);
@@ -237,18 +203,9 @@ public class RocketPhysics : MonoBehaviour
         gCmd.z = Mathf.Clamp(gCmd.z, -16f, 16f);
         state.thrustDirection = (Quaternion.Euler(gCmd) * Vector3.up).normalized;
 
-        // Бічне наведення: Hybrid/Fuzzy сильніші за PID (реалістична різниця)
+        // Бічне наведення — scale from strategy (PID weak … Hybrid strong)
         if (tilt < 12f && h < 1000f)
-        {
-            float latScale = controlMode switch
-            {
-                ControlMode.Hybrid => 1.15f,
-                ControlMode.Fuzzy => 1.0f,
-                ControlMode.Neural => 0.85f,
-                _ => 0.55f // PID — слабке бічне
-            };
-            ApplyLateralGuidance(latScale);
-        }
+            ApplyLateralGuidance(cmd.LateralScale);
 
         state.currentThrust = Mathf.Clamp(thrustCmd, 0f, state.maxThrust);
         if (state.currentFuelMass <= 0f) state.currentThrust = 0f;
@@ -353,31 +310,6 @@ public class RocketPhysics : MonoBehaviour
         return acc;
     }
 
-    /// <summary>
-    /// Класичний вертикальний PID: hover FF + PID на v_target.
-    /// Слабший термінал ніж у Fuzzy/Hybrid — реалістично гірший під вітром.
-    /// </summary>
-    float CalculateThrustPID()
-    {
-        float h = Mathf.Max(0f, state.position.y);
-        float mass = state.TotalMass;
-        float g = AtmosphereModel.GetGravity(h);
-        float hover = mass * g;
-        float target = SoftLandingGuidance.TargetDescentRate(h);
-        float pid = thrustPID.Calculate(target, state.velocity.y, parameters.fixedTimeStep);
-        float thrust = hover + pid * 16000f;
-        thrust = Mathf.Clamp(thrust, hover * 0.15f, state.maxThrust);
-
-        // Термінал м’якший і пізніший — PID частіше «промахує» soft contact під збуреннями
-        if (h < 12f)
-        {
-            float profile = SoftLandingGuidance.ProfileThrust(h, state.velocity.y, mass);
-            float t = 1f - Mathf.Clamp01(h / 12f);
-            thrust = Mathf.Lerp(thrust, profile, t * 0.7f);
-        }
-        return thrust;
-    }
-
     void FinishLanding(bool timeout)
     {
         if (!timeout)
@@ -395,20 +327,8 @@ public class RocketPhysics : MonoBehaviour
         metrics.totalFlightTime = state.time;
         metrics.timedOut = timeout;
 
-        // Захист: якщо asset не серіалізував критерії (0), беремо номінал
-        float maxV = parameters != null && parameters.maxTouchdownVelocity > 0.1f
-            ? parameters.maxTouchdownVelocity : 3.5f;
-        float maxA = parameters != null && parameters.maxLandingAngle > 0.1f
-            ? parameters.maxLandingAngle : 7f;
-        float maxM = parameters != null && parameters.maxHorizontalMiss > 0.1f
-            ? parameters.maxHorizontalMiss : 25f;
-        float maxH = parameters != null && parameters.maxHorizontalSpeed > 0.1f
-            ? parameters.maxHorizontalSpeed : 5f;
-        metrics.isSuccessfulLanding = !timeout
-            && metrics.touchdownVelocity < maxV
-            && metrics.landingAngleError < maxA
-            && metrics.horizontalMiss < maxM
-            && metrics.horizontalSpeed < maxH;
+        // Single source of truth for soft-landing gate (Domain/LandingCriteria)
+        LandingCriteria.ApplySuccessFlag(metrics, parameters);
 
         state.velocity = Vector3.zero;
         state.angularVelocity = Vector3.zero;
@@ -469,9 +389,8 @@ public class RocketPhysics : MonoBehaviour
         applyContinuousWind = true;
         simulationArmed = true;
 
-        pitchPID.Reset();
-        yawPID.Reset();
-        thrustPID.Reset();
+        controllerResolver?.ResetAll();
+        pidStrategy.ResetSession();
 
         SyncFixedTimestep();
         InitializeSimulation();
@@ -544,9 +463,8 @@ public class RocketPhysics : MonoBehaviour
         windVelocity = Vector3.zero;
         simulationArmed = false;
 
-        pitchPID.Reset();
-        yawPID.Reset();
-        thrustPID.Reset();
+        controllerResolver?.ResetAll();
+        pidStrategy.ResetSession();
 
         SyncFixedTimestep();
         InitializeSimulation();

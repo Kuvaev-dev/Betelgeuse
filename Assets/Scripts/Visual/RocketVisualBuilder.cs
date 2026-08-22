@@ -2,8 +2,7 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Процедурна модель 1-го ступеня ~42 м (Falcon-class).
-/// Чистий силует: UV-скіни несуть деталь; меші — тільки ключові форми.
+/// Процедурна модель 1-го ступеня ~42 м (Falcon-class): корпус, fins, ноги, сопла, FX.
 /// </summary>
 public static class RocketVisualBuilder
 {

@@ -2,7 +2,7 @@ using UnityEngine;
 using TMPro;
 
 /// <summary>
-/// Mission-Control телеметрія в реальному часі.
+/// Legacy scene HUD (TMP-поля в SampleScene). Основний інтерфейс — <see cref="MissionControlUI"/>.
 /// </summary>
 public class TelemetryHUD : MonoBehaviour
 {

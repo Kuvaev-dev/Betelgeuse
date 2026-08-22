@@ -3,7 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Mission-Control панель експериментів: PID / Fuzzy / Neural / Hybrid + Monte-Carlo.
+/// Legacy scene dashboard кнопок режимів / Monte-Carlo. Основний UI — <see cref="MissionControlUI"/>.
 /// </summary>
 public class ExperimentDashboard : MonoBehaviour
 {

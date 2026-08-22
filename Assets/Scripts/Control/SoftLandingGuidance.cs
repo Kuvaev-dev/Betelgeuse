@@ -1,10 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Спільний soft-landing профіль: v_target = −√(2 a h) + PD по помилці швидкості.
-/// Використовується як:
-/// — повна база для PID (слабкий blend) / Fuzzy / NN / Hybrid;
-/// — обов’язковий термінал (h &lt; ~25 м) для м’якого контакту.
+/// Спільний soft-landing профіль v_target=−√(2ah) + PD; TVC upright; BlendThrust.
+/// База для всіх режимів і термінал h&lt;~25 м.
 /// </summary>
 public static class SoftLandingGuidance
 {

@@ -86,6 +86,13 @@ crashlytics-build.properties
 
 # TestRunner generated files
 InitTestScene*.unity*
+TestLog-*.txt
+
+# Simulation / research export dumps (regenerated in Play)
+/[Ss]imulation[Ll]ogs/
+
+# Local agent / IDE scratch
+.mimocode/
 
 # Addressables default ignores, before user customizations
 /ServerData
