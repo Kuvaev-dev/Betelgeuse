@@ -47,15 +47,17 @@ public static class EnvironmentBuilder
         surface.transform.SetParent(parent, false);
 
         var regolith = VisualMaterials.Lit(
-            new Color(0.52f, 0.525f, 0.535f),
+            new Color(0.40f, 0.405f, 0.42f),
             metallic: 0.0f,
-            smooth: 0.025f);
+            smooth: 0.028f);
 
         float R = LunarTerrainMesh.TerrainRadius;
-        int res = QualitySettings.GetQualityLevel() <= 1 ? 240 : 360;
+        // Higher mesh res → smooth circular crater rims (low res looked ragged)
+        int res = QualitySettings.GetQualityLevel() <= 1 ? 320 : 420;
         yield return LunarTerrainMesh.CreateRoutine(surface.transform, regolith, null, res, R);
 
-        var farMat = VisualMaterials.Lit(new Color(0.30f, 0.305f, 0.315f), 0.0f, 0.02f);
+        // Horizon ring uses the same NASA LROC albedo (darker, no normal — cheap far field)
+        var farMat = MakeHorizonMaterial();
         var far = SmoothMesh.MakeCylinder("HorizonDisk", surface.transform,
             new Vector3(0f, -2.8f, 0f), R * 2f, 2.2f, farMat);
         var fr = far.GetComponent<MeshRenderer>();
@@ -68,7 +70,7 @@ public static class EnvironmentBuilder
 
         var rng = new System.Random(17);
         float clear = LunarTerrainMesh.PadClearRadius + 25f;
-        var rockMat = VisualMaterials.Lit(new Color(0.38f, 0.385f, 0.395f), 0.02f, 0.05f);
+        var rockMat = MakeRockMaterial();
         int nRocks = QualitySettings.GetQualityLevel() <= 1 ? 14 : 22;
         for (int i = 0; i < nRocks; i++)
         {
@@ -90,9 +92,9 @@ public static class EnvironmentBuilder
     {
         float dist = Mathf.Sqrt(x * x + z * z);
         if (dist < LunarTerrainMesh.PadClearRadius) return 0f;
-        float n = Mathf.PerlinNoise(x * 0.004f + 10f, z * 0.004f + 3f);
+        float n = Mathf.PerlinNoise(x * 0.0018f + 10f, z * 0.0018f + 3f);
         float blend = Mathf.Clamp01((dist - LunarTerrainMesh.PadClearRadius) / 50f);
-        return ((n - 0.5f) * 3f) * blend * blend;
+        return ((n - 0.5f) * 2.4f) * blend * blend;
     }
 
     static void BuildLandingPad(Transform parent)
@@ -114,9 +116,9 @@ public static class EnvironmentBuilder
         var steel = VisualMaterials.Lit(new Color(0.66f, 0.68f, 0.72f), 0.82f, 0.48f);
         var dark = VisualMaterials.Lit(new Color(0.22f, 0.23f, 0.26f), 0.75f, 0.32f);
         var curb = VisualMaterials.Lit(new Color(0.38f, 0.39f, 0.42f), 0.60f, 0.38f);
-        var regDeep = VisualMaterials.Lit(new Color(0.42f, 0.425f, 0.435f), 0f, 0.04f);
-        var regMid = VisualMaterials.Lit(new Color(0.50f, 0.505f, 0.515f), 0f, 0.05f);
-        var regLite = VisualMaterials.Lit(new Color(0.56f, 0.565f, 0.575f), 0f, 0.06f);
+        var regDeep = VisualMaterials.Lit(new Color(0.34f, 0.345f, 0.36f), 0f, 0.04f);
+        var regMid = VisualMaterials.Lit(new Color(0.40f, 0.405f, 0.42f), 0f, 0.05f);
+        var regLite = VisualMaterials.Lit(new Color(0.46f, 0.465f, 0.48f), 0f, 0.06f);
         var grate = VisualMaterials.Lit(new Color(0.14f, 0.145f, 0.16f), 0.88f, 0.28f);
         var whiteMat = VisualMaterials.Unlit(white, white * 0.85f);
         var amberMat = VisualMaterials.Unlit(amber, amber);
@@ -388,6 +390,21 @@ public static class EnvironmentBuilder
         var sunMat = VisualMaterials.Unlit(new Color(1f, 0.98f, 0.94f), new Color(1f, 0.95f, 0.85f));
         SmoothMesh.MakeSphere("SunDisc", sky.transform,
             new Vector3(-2600f, 1700f, -1900f), Vector3.one * 100f, sunMat);
+    }
+
+    static Material MakeHorizonMaterial()
+    {
+        // Slightly deeper than the main disk — depth without looking black
+        var mat = VisualMaterials.Lit(new Color(0.32f, 0.325f, 0.34f), 0f, 0.02f);
+        mat.name = "HorizonDisk_SolidGray";
+        return mat;
+    }
+
+    static Material MakeRockMaterial()
+    {
+        var mat = VisualMaterials.Lit(new Color(0.36f, 0.365f, 0.38f), 0.03f, 0.045f);
+        mat.name = "Boulder_SolidGray";
+        return mat;
     }
 
     static void SetupLighting(out Light sun)
