@@ -487,7 +487,7 @@ public class MissionControlUI : MonoBehaviour
         mrt.anchorMin = mrt.anchorMax = new Vector2(0, 0.5f);
         mrt.pivot = new Vector2(0, 0.5f);
         mrt.anchoredPosition = new Vector2(110, 0);
-        mrt.sizeDelta = new Vector2(88, 26);
+        mrt.sizeDelta = new Vector2(96, 26);
         txtMode = CreateText(modeBg.transform, "PID", 12, C_Amber, FontStyles.Bold);
         StretchFull(txtMode.rectTransform, 4, 2, 4, 2);
         txtMode.alignment = TextAlignmentOptions.Center;
@@ -1091,13 +1091,13 @@ public class MissionControlUI : MonoBehaviour
         txtHdrInsight = Header(root, UILocale.T("h_insight"), ref y, pad, inner);
         var insightBg = CreatePanel("InsightBg", root, C_PanelSoft);
         insightBg.GetComponent<Image>().raycastTarget = false;
-        PinTL(insightBg.GetComponent<RectTransform>(), pad, y, inner, 56);
-        txtInsight = CreateText(insightBg.transform, UILocale.T("ins_wait"), 13, C_Text);
+        PinTL(insightBg.GetComponent<RectTransform>(), pad, y, inner, 48);
+        txtInsight = CreateText(insightBg.transform, UILocale.T("ins_wait"), 12, C_Text);
         txtInsight.textWrappingMode = TextWrappingModes.Normal;
-        txtInsight.alignment = TextAlignmentOptions.TopLeft;
+        txtInsight.alignment = TextAlignmentOptions.MidlineLeft;
         txtInsight.overflowMode = TextOverflowModes.Ellipsis;
-        StretchFull(txtInsight.rectTransform, 8, 6, 8, 6);
-        y -= 62f;
+        StretchFull(txtInsight.rectTransform, 10, 6, 10, 6);
+        y -= 54f;
 
         // ── 3. PRIMARY FLIGHT STATE ──
         y -= 2f;
@@ -1245,13 +1245,13 @@ public class MissionControlUI : MonoBehaviour
         Header(root, UILocale.T("h_how"), ref y, pad, inner);
         var howBg = CreatePanel("HowBg", root, C_PanelSoft);
         howBg.GetComponent<Image>().raycastTarget = false;
-        PinTL(howBg.GetComponent<RectTransform>(), pad, y, inner, 40);
+        PinTL(howBg.GetComponent<RectTransform>(), pad, y, inner, 36);
         txtHow = CreateText(howBg.transform, UILocale.T("how"), 12, C_Accent, FontStyles.Bold);
         txtHow.alignment = TextAlignmentOptions.Center;
         txtHow.textWrappingMode = TextWrappingModes.Normal;
-        txtHow.overflowMode = TextOverflowModes.Overflow;
-        StretchFull(txtHow.rectTransform, 10, 6, 10, 6);
-        y -= 46f;
+        txtHow.overflowMode = TextOverflowModes.Ellipsis;
+        StretchFull(txtHow.rectTransform, 10, 5, 10, 5);
+        y -= 42f;
 
         // ── 1. Algorithm 2x2 ──
         Header(root, UILocale.T("h_step1"), ref y, pad, inner);
@@ -1347,13 +1347,13 @@ public class MissionControlUI : MonoBehaviour
         Header(root, UILocale.T("h_msg"), ref y, pad, inner);
         var infoBg = CreatePanel("InfoBox", root, C_PanelSoft);
         infoBg.GetComponent<Image>().raycastTarget = false;
-        PinTL(infoBg.GetComponent<RectTransform>(), pad, y, inner, 64);
+        PinTL(infoBg.GetComponent<RectTransform>(), pad, y, inner, 52);
         txtInfo = CreateText(infoBg.transform, UILocale.T("tip"), 11, C_Muted);
-        StretchFull(txtInfo.rectTransform, 8, 6, 8, 6);
+        StretchFull(txtInfo.rectTransform, 10, 6, 10, 6);
         txtInfo.textWrappingMode = TextWrappingModes.Normal;
         txtInfo.overflowMode = TextOverflowModes.Ellipsis;
         txtInfo.alignment = TextAlignmentOptions.TopLeft;
-        y -= 70f;
+        y -= 58f;
 
         crt.sizeDelta = new Vector2(0, Mathf.Max(180f, -y + 20f));
     }
@@ -1780,15 +1780,17 @@ public class MissionControlUI : MonoBehaviour
             resultAccentBar.color = c;
         }
 
-        // Compact metric cards
+        // Compact metric cards (localized units)
+        string ums = UILocale.T("u_ms");
+        string um = UILocale.T("u_m");
         SetResultMetric(0, UILocale.T("res_m_v"),
-            $"{m.touchdownVelocity:F1} m/s", m.touchdownVelocity < maxV, $"< {maxV:F1}");
+            $"{m.touchdownVelocity:F1} {ums}", m.touchdownVelocity < maxV);
         SetResultMetric(1, UILocale.T("res_m_tilt"),
-            $"{m.landingAngleError:F1}°", m.landingAngleError < maxA, $"< {maxA:F0}°");
+            $"{m.landingAngleError:F1}°", m.landingAngleError < maxA);
         SetResultMetric(2, UILocale.T("res_m_miss"),
-            $"{m.horizontalMiss:F1} m", m.horizontalMiss < maxM, $"< {maxM:F0} m");
+            $"{m.horizontalMiss:F1} {um}", m.horizontalMiss < maxM);
         SetResultMetric(3, UILocale.T("res_m_hv"),
-            $"{m.horizontalSpeed:F1} m/s", m.horizontalSpeed < maxH, $"< {maxH:F1}");
+            $"{m.horizontalSpeed:F1} {ums}", m.horizontalSpeed < maxH);
 
         if (txtResultBody)
         {
@@ -1845,7 +1847,7 @@ public class MissionControlUI : MonoBehaviour
         Write(txtScore, $"{m.SuccessScore:F0}", status);
     }
 
-    void SetResultMetric(int i, string key, string value, bool pass, string limitHint)
+    void SetResultMetric(int i, string key, string value, bool pass)
     {
         if (resultMetricKeys == null || i < 0 || i >= resultMetricKeys.Length) return;
         if (resultMetricKeys[i] != null)
@@ -1858,22 +1860,14 @@ public class MissionControlUI : MonoBehaviour
             resultMetricVals[i].text = value;
             resultMetricVals[i].color = pass ? C_Ok : C_Alert;
         }
-        // Optional: tint chip background via parent Image
-        if (resultMetricKeys[i] != null)
-        {
-            var chip = resultMetricKeys[i].transform.parent;
-            if (chip != null)
-            {
-                var img = chip.GetComponent<Image>();
-                if (img != null)
-                {
-                    Color c = pass ? C_Ok : C_Alert;
-                    c.a = UiTheme.IsLightBackground ? 0.10f : 0.14f;
-                    img.color = c;
-                }
-            }
-        }
-        _ = limitHint;
+        if (resultMetricKeys[i] == null) return;
+        var chip = resultMetricKeys[i].transform.parent;
+        if (chip == null) return;
+        var img = chip.GetComponent<Image>();
+        if (img == null) return;
+        Color c = pass ? C_Ok : C_Alert;
+        c.a = UiTheme.IsLightBackground ? 0.10f : 0.14f;
+        img.color = c;
     }
 
     public void HideLandingResult()
@@ -1899,11 +1893,11 @@ public class MissionControlUI : MonoBehaviour
         var crt = card.GetComponent<RectTransform>();
         crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
         crt.pivot = new Vector2(0.5f, 0.5f);
-        crt.sizeDelta = new Vector2(480f, 206f);
-        Outline(card, 1.4f);
+        crt.sizeDelta = new Vector2(492f, 212f);
+        Outline(card, 1.5f);
 
         // Status accent bar
-        var accent = CreatePanel("ResAccent", card.transform, new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.85f));
+        var accent = CreatePanel("ResAccent", card.transform, new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.9f));
         resultAccentBar = accent.GetComponent<Image>();
         resultAccentBar.raycastTarget = false;
         var art = accent.GetComponent<RectTransform>();
@@ -1914,15 +1908,16 @@ public class MissionControlUI : MonoBehaviour
         art.sizeDelta = new Vector2(0f, 3f);
 
         // Header row: title (left) + score pill (right)
-        txtResultTitle = CreateText(card.transform, UILocale.T("res_ok"), 17, C_Ok, FontStyles.Bold);
+        txtResultTitle = CreateText(card.transform, UILocale.T("res_ok"), 16, C_Ok, FontStyles.Bold);
         var trtTitle = txtResultTitle.rectTransform;
         trtTitle.anchorMin = new Vector2(0f, 1f);
         trtTitle.anchorMax = new Vector2(1f, 1f);
         trtTitle.pivot = new Vector2(0f, 1f);
-        trtTitle.anchoredPosition = new Vector2(20f, -14f);
-        trtTitle.sizeDelta = new Vector2(-110f, 26f);
+        trtTitle.anchoredPosition = new Vector2(18f, -14f);
+        trtTitle.sizeDelta = new Vector2(-118f, 24f);
         txtResultTitle.alignment = TextAlignmentOptions.MidlineLeft;
-        txtResultTitle.characterSpacing = 0.8f;
+        txtResultTitle.characterSpacing = 0.6f;
+        txtResultTitle.overflowMode = TextOverflowModes.Ellipsis;
 
         var scorePill = CreatePanel("ScorePill", card.transform, new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.18f));
         resultScoreBg = scorePill.GetComponent<Image>();
@@ -1930,13 +1925,26 @@ public class MissionControlUI : MonoBehaviour
         var sprt = scorePill.GetComponent<RectTransform>();
         sprt.anchorMin = sprt.anchorMax = new Vector2(1f, 1f);
         sprt.pivot = new Vector2(1f, 1f);
-        sprt.anchoredPosition = new Vector2(-16f, -12f);
-        sprt.sizeDelta = new Vector2(72f, 36f);
+        sprt.anchoredPosition = new Vector2(-14f, -11f);
+        sprt.sizeDelta = new Vector2(78f, 40f);
 
-        txtResultScore = CreateText(scorePill.transform, "—", 20, C_Ok, FontStyles.Bold);
-        StretchFull(txtResultScore.rectTransform, 2, 2, 2, 2);
+        txtResultScore = CreateText(scorePill.transform, "—", 18, C_Ok, FontStyles.Bold);
+        var srt = txtResultScore.rectTransform;
+        srt.anchorMin = new Vector2(0f, 0.28f);
+        srt.anchorMax = new Vector2(1f, 1f);
+        srt.offsetMin = new Vector2(2f, 0f);
+        srt.offsetMax = new Vector2(-2f, -2f);
         txtResultScore.alignment = TextAlignmentOptions.Center;
-        txtResultScore.characterSpacing = 1f;
+        txtResultScore.characterSpacing = 0.5f;
+
+        var scoreUnit = CreateText(scorePill.transform, UILocale.T("u_score"), 9, C_Muted, FontStyles.Bold);
+        var surt = scoreUnit.rectTransform;
+        surt.anchorMin = new Vector2(0f, 0f);
+        surt.anchorMax = new Vector2(1f, 0.36f);
+        surt.offsetMin = new Vector2(2f, 2f);
+        surt.offsetMax = new Vector2(-2f, 0f);
+        scoreUnit.alignment = TextAlignmentOptions.Center;
+        scoreUnit.raycastTarget = false;
 
         // One-line subtitle
         txtResultBody = CreateText(card.transform, "", 11, C_Muted);
@@ -1947,8 +1955,8 @@ public class MissionControlUI : MonoBehaviour
         brt.anchorMin = new Vector2(0f, 1f);
         brt.anchorMax = new Vector2(1f, 1f);
         brt.pivot = new Vector2(0f, 1f);
-        brt.anchoredPosition = new Vector2(20f, -42f);
-        brt.sizeDelta = new Vector2(-40f, 18f);
+        brt.anchoredPosition = new Vector2(18f, -44f);
+        brt.sizeDelta = new Vector2(-36f, 16f);
 
         // Four metric chips in one tight row
         resultMetricKeys = new TMP_Text[4];
@@ -1957,10 +1965,10 @@ public class MissionControlUI : MonoBehaviour
             UILocale.T("res_m_v"), UILocale.T("res_m_tilt"),
             UILocale.T("res_m_miss"), UILocale.T("res_m_hv")
         };
-        float rowChipW = 102f;
+        float rowChipW = 106f;
         float rowGap = 8f;
         float rowW = rowChipW * 4f + rowGap * 3f;
-        float rowX0 = (480f - rowW) * 0.5f;
+        float rowX0 = (492f - rowW) * 0.5f;
         for (int i = 0; i < 4; i++)
         {
             var chip = CreatePanel($"Metric_{i}", card.transform, C_PanelSoft);
@@ -1968,8 +1976,8 @@ public class MissionControlUI : MonoBehaviour
             var crtChip = chip.GetComponent<RectTransform>();
             crtChip.anchorMin = crtChip.anchorMax = new Vector2(0f, 1f);
             crtChip.pivot = new Vector2(0f, 1f);
-            crtChip.anchoredPosition = new Vector2(rowX0 + i * (rowChipW + rowGap), -64f);
-            crtChip.sizeDelta = new Vector2(rowChipW, 58f);
+            crtChip.anchoredPosition = new Vector2(rowX0 + i * (rowChipW + rowGap), -66f);
+            crtChip.sizeDelta = new Vector2(rowChipW, 56f);
 
             resultMetricKeys[i] = CreateText(chip.transform, keyPh[i], 10, C_Muted, FontStyles.Bold);
             var krt = resultMetricKeys[i].rectTransform;
@@ -1993,9 +2001,9 @@ public class MissionControlUI : MonoBehaviour
         float btnH = 32f;
         float btnY = 12f;
         float btnGap = 8f;
-        float btnW = 140f;
+        float btnW = 144f;
         float btnsW = btnW * 3f + btnGap * 2f;
-        float btnX0 = (480f - btnsW) * 0.5f;
+        float btnX0 = (492f - btnsW) * 0.5f;
 
         void MakeResultBtn(string name, string label, Color bg, float x, System.Action onClick)
         {
@@ -2485,22 +2493,21 @@ public class MissionControlUI : MonoBehaviour
 
     TMP_Text Header(Transform parent, string title, ref float y, float pad = 14f, float width = 300f)
     {
-        // Title → gap → visible underline → gap (Критерії / Швидкий старт / усі секції)
-        var t = CreateText(parent, title, 11, C_Accent, FontStyles.Bold);
-        t.characterSpacing = 4f;
-        PinTL(t.rectTransform, pad, y, width, 16);
-        y -= 18f;
+        // Section label + hairline — tight, consistent rhythm
+        var t = CreateText(parent, title, 10, C_Accent, FontStyles.Bold);
+        t.characterSpacing = 3.2f;
+        PinTL(t.rectTransform, pad, y, width, 15);
+        y -= 16f;
 
-        // 2 px theme-tinted rule — always readable on first section too
         Color lineCol = Color.Lerp(C_Accent, UiTheme.IsLightBackground
             ? new Color(0.55f, 0.58f, 0.62f, 1f)
-            : new Color(0.85f, 0.88f, 0.92f, 1f), 0.45f);
-        lineCol.a = UiTheme.IsLightBackground ? 0.7f : 0.55f;
+            : new Color(0.85f, 0.88f, 0.92f, 1f), 0.42f);
+        lineCol.a = UiTheme.IsLightBackground ? 0.65f : 0.48f;
 
         var line = CreatePanel("HeaderLine", parent, lineCol);
         line.GetComponent<Image>().raycastTarget = false;
-        PinTL(line.GetComponent<RectTransform>(), pad, y, width, 2f);
-        y -= 12f;
+        PinTL(line.GetComponent<RectTransform>(), pad, y, width, 1.5f);
+        y -= 10f;
         return t;
     }
 
@@ -2706,13 +2713,13 @@ public class MissionControlUI : MonoBehaviour
         g.BindLabelRoot(rootRt); // labels as siblings of plot, on top
         g.Configure(title, unit, line, threshold);
 
-        y -= gH + 12f;
+        y -= gH + 10f;
         return g;
     }
 
     void BuildStepBar(Transform parent)
     {
-        // Same panel chrome as left/right sidebars
+        // Floating phase strip — matches side panel chrome, left accent stripe
         stepBarGo = CreatePanel("StepBar", parent, C_Panel);
         stepBarGo.GetComponent<Image>().raycastTarget = false;
         Outline(stepBarGo, 1f);
@@ -2720,11 +2727,20 @@ public class MissionControlUI : MonoBehaviour
         rt.anchorMin = new Vector2(0.5f, 0f);
         rt.anchorMax = new Vector2(0.5f, 0f);
         rt.pivot = new Vector2(0.5f, 0f);
-        rt.anchoredPosition = new Vector2(0f, 12f);
-        rt.sizeDelta = new Vector2(520f, 32f);
+        rt.anchoredPosition = new Vector2(0f, 14f);
+        rt.sizeDelta = new Vector2(540f, 34f);
+
+        var stripe = CreatePanel("StepAccent", stepBarGo.transform, C_Accent);
+        stripe.GetComponent<Image>().raycastTarget = false;
+        var srt = stripe.GetComponent<RectTransform>();
+        srt.anchorMin = new Vector2(0f, 0f);
+        srt.anchorMax = new Vector2(0f, 1f);
+        srt.pivot = new Vector2(0f, 0.5f);
+        srt.anchoredPosition = Vector2.zero;
+        srt.sizeDelta = new Vector2(3f, 0f);
 
         txtStep = CreateText(stepBarGo.transform, UILocale.T("step_ready"), 12, C_Text, FontStyles.Bold);
-        StretchFull(txtStep.rectTransform, 12, 4, 12, 4);
+        StretchFull(txtStep.rectTransform, 16, 5, 14, 5);
         txtStep.alignment = TextAlignmentOptions.Center;
         txtStep.overflowMode = TextOverflowModes.Ellipsis;
         txtStep.textWrappingMode = TextWrappingModes.NoWrap;
@@ -2735,10 +2751,26 @@ public class MissionControlUI : MonoBehaviour
     {
         if (txtStep == null || rocket == null) return;
 
+        void PaintStep(string key, Color col)
+        {
+            txtStep.text = UILocale.T(key);
+            txtStep.color = col;
+            var stripe = stepBarGo != null ? stepBarGo.transform.Find("StepAccent") : null;
+            if (stripe != null)
+            {
+                var img = stripe.GetComponent<Image>();
+                if (img != null)
+                {
+                    var c = col;
+                    c.a = 0.9f;
+                    img.color = c;
+                }
+            }
+        }
+
         if (sim != null && sim.IsExperimentRunning)
         {
-            txtStep.text = UILocale.T("step_batch");
-            txtStep.color = C_Amber;
+            PaintStep("step_batch", C_Amber);
             return;
         }
 
@@ -2749,8 +2781,8 @@ public class MissionControlUI : MonoBehaviour
         if (s.simulationFinished && rocket.metrics != null && rocket.metrics.totalFlightTime > 0.05f)
         {
             bool ok = rocket.metrics.isSuccessfulLanding;
-            key = ok ? "step_ok" : "step_fail";
-            col = ok ? C_Ok : C_Alert;
+            PaintStep(ok ? "step_ok" : "step_fail", ok ? C_Ok : C_Alert);
+            return;
         }
         else if (!rocket.simulationArmed)
         {
@@ -2767,6 +2799,17 @@ public class MissionControlUI : MonoBehaviour
         string mode = UILocale.ModeNameShort(rocket.controlMode);
         txtStep.text = mode + "  |  " + UILocale.T(key);
         txtStep.color = col;
+        var stripeTf = stepBarGo != null ? stepBarGo.transform.Find("StepAccent") : null;
+        if (stripeTf != null)
+        {
+            var img = stripeTf.GetComponent<Image>();
+            if (img != null)
+            {
+                var c = col;
+                c.a = 0.9f;
+                img.color = c;
+            }
+        }
     }
 
     Button ModeButtonAt(Transform parent, float x, float y, float w, float h,

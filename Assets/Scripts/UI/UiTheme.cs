@@ -126,8 +126,8 @@ public static class UiTheme
         : new Color(0.08f, 0.08f, 0.1f, 0.98f);
 
     public static Color ModalScrim => IsLightBackground
-        ? new Color(0.15f, 0.16f, 0.2f, 0.45f)
-        : new Color(0.02f, 0.02f, 0.03f, 0.78f);
+        ? new Color(0.12f, 0.14f, 0.18f, 0.52f)
+        : new Color(0.01f, 0.012f, 0.018f, 0.82f);
 
     /// <summary>Текст для фону bg (автоконтраст).</summary>
     public static Color ContrastOn(Color bg)

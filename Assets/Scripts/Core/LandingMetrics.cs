@@ -46,45 +46,67 @@ public class LandingMetrics
         }
     }
 
-    /// <summary>Текстовий висновок українською: чому успіх / невдача.</summary>
+    /// <summary>Текстовий висновок UA/EN: чому успіх / невдача (export + legacy).</summary>
     /// <param name="includeTitle">false — коли заголовок уже є в UI-модалці</param>
     public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 25f, float maxH = 5f,
         bool includeTitle = true)
     {
+        bool uk = UILocale.IsUK;
         var sb = new StringBuilder();
         if (isSuccessfulLanding)
         {
             if (includeTitle)
             {
-                sb.AppendLine("ПОСАДКУ ВИКОНАНО УСПІШНО");
+                sb.AppendLine(uk ? "ПОСАДКУ ВИКОНАНО УСПІШНО" : "LANDING SUCCESSFUL");
                 sb.AppendLine();
             }
-            sb.AppendLine($"• Швидкість: {touchdownVelocity:F1} м/с  (норма < {maxV})");
-            sb.AppendLine($"• Нахил: {landingAngleError:F1}°  (норма < {maxA}°)");
-            sb.AppendLine($"• Промах: {horizontalMiss:F1} м  (норма < {maxM} м)");
-            sb.AppendLine($"• Бічна V: {horizontalSpeed:F1} м/с  (норма < {maxH})");
-            sb.AppendLine($"• Оцінка: {SuccessScore:F0} / 100");
+            if (uk)
+            {
+                sb.AppendLine($"• Швидкість: {touchdownVelocity:F1} м/с  (норма < {maxV})");
+                sb.AppendLine($"• Нахил: {landingAngleError:F1}°  (норма < {maxA}°)");
+                sb.AppendLine($"• Промах: {horizontalMiss:F1} м  (норма < {maxM} м)");
+                sb.AppendLine($"• Бічна V: {horizontalSpeed:F1} м/с  (норма < {maxH})");
+                sb.AppendLine($"• Оцінка: {SuccessScore:F0} / 100");
+            }
+            else
+            {
+                sb.AppendLine($"• Velocity: {touchdownVelocity:F1} m/s  (limit < {maxV})");
+                sb.AppendLine($"• Tilt: {landingAngleError:F1}°  (limit < {maxA}°)");
+                sb.AppendLine($"• Miss: {horizontalMiss:F1} m  (limit < {maxM} m)");
+                sb.AppendLine($"• Lateral V: {horizontalSpeed:F1} m/s  (limit < {maxH})");
+                sb.AppendLine($"• Score: {SuccessScore:F0} / 100");
+            }
             return sb.ToString().TrimEnd();
         }
 
         if (includeTitle)
         {
-            sb.AppendLine("ПОСАДКА НЕВДАЛА");
+            sb.AppendLine(uk ? "ПОСАДКА НЕВДАЛА" : "LANDING FAILED");
             sb.AppendLine();
         }
-        sb.AppendLine("Причини:");
+        sb.AppendLine(uk ? "Причини:" : "Reasons:");
         if (timedOut)
-            sb.AppendLine("• Час симуляції вичерпано");
+            sb.AppendLine(uk ? "• Час симуляції вичерпано" : "• Simulation time exhausted");
         if (touchdownVelocity >= maxV)
-            sb.AppendLine($"• Швидкість {touchdownVelocity:F1} м/с  (треба < {maxV})");
+            sb.AppendLine(uk
+                ? $"• Швидкість {touchdownVelocity:F1} м/с  (треба < {maxV})"
+                : $"• Velocity {touchdownVelocity:F1} m/s  (need < {maxV})");
         if (landingAngleError >= maxA)
-            sb.AppendLine($"• Нахил {landingAngleError:F1}°  (треба < {maxA}°)");
+            sb.AppendLine(uk
+                ? $"• Нахил {landingAngleError:F1}°  (треба < {maxA}°)"
+                : $"• Tilt {landingAngleError:F1}°  (need < {maxA}°)");
         if (horizontalMiss >= maxM)
-            sb.AppendLine($"• Промах {horizontalMiss:F1} м  (треба < {maxM} м)");
+            sb.AppendLine(uk
+                ? $"• Промах {horizontalMiss:F1} м  (треба < {maxM} м)"
+                : $"• Miss {horizontalMiss:F1} m  (need < {maxM} m)");
         if (horizontalSpeed >= maxH)
-            sb.AppendLine($"• Бічна V {horizontalSpeed:F1} м/с  (треба < {maxH})");
+            sb.AppendLine(uk
+                ? $"• Бічна V {horizontalSpeed:F1} м/с  (треба < {maxH})"
+                : $"• Lateral V {horizontalSpeed:F1} m/s  (need < {maxH})");
         sb.AppendLine();
-        sb.AppendLine($"Оцінка: {SuccessScore:F0} / 100");
+        sb.AppendLine(uk
+            ? $"Оцінка: {SuccessScore:F0} / 100"
+            : $"Score: {SuccessScore:F0} / 100");
         return sb.ToString().TrimEnd();
     }
 

@@ -429,13 +429,13 @@ public static class EnvironmentBuilder
         // ~22° elevation — readable relief without harsh black voids
         sun.transform.rotation = Quaternion.Euler(22f, -48f, 0f);
 
-        // Tiny fill + rim (vacuum still dark, but contact shadows readable)
-        EnsureDir("FillLight", new Color(0.42f, 0.43f, 0.48f), 0.08f, Quaternion.Euler(200f, 50f, 0f));
-        EnsureDir("RimLight", new Color(0.38f, 0.40f, 0.48f), 0.06f, Quaternion.Euler(-6f, 150f, 0f));
+        // Soft fill + rim — vacuum still dark, white booster reads cleanly
+        EnsureDir("FillLight", new Color(0.48f, 0.50f, 0.56f), 0.14f, Quaternion.Euler(200f, 50f, 0f));
+        EnsureDir("RimLight", new Color(0.42f, 0.46f, 0.55f), 0.10f, Quaternion.Euler(-6f, 150f, 0f));
 
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.045f, 0.045f, 0.052f);
-        RenderSettings.reflectionIntensity = 0.03f;
+        RenderSettings.ambientLight = new Color(0.065f, 0.068f, 0.078f);
+        RenderSettings.reflectionIntensity = 0.04f;
 
         // Adaptive shadows — long range on strong GPUs, lighter on weak
         bool low = SystemInfo.graphicsMemorySize > 0 && SystemInfo.graphicsMemorySize < 3000
