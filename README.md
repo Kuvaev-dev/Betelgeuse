@@ -77,12 +77,22 @@ Assets/Scripts/
 
 ## Експорт
 
-| Шлях | Зміст |
-|------|--------|
-| `SimulationLogs/Landing_Full_*/` | MD · CSV · JSON · SVG |
-| `…/01_step_calculations.csv` | Покрокові GNC |
-| `SimulationLogs/Research_Comparison_*` | Monte-Carlo |
-| `BestWeights_Neural.json` | Ваги MLP |
+Кожен запуск = **окремий каталог** у `SimulationLogs/` (нічого не розкидано в корені).
+
+```
+SimulationLogs/
+  Landing_<Algorithm>_<timestamp>/
+    00_README.md          ← з чого почати
+    01_SUMMARY.md         ← головний звіт
+    02_metrics.json
+    03_timeseries.csv
+    04_analysis.md
+    charts/*.svg
+  Comparison_<timestamp>/
+    00_README.md · 01_SUMMARY.md · 02_results.csv · 03_results.json
+```
+
+`BestWeights_Neural.json` — ваги MLP (корінь проєкту).
 
 ## Тести
 

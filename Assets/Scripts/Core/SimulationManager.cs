@@ -1,36 +1,35 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 
 /// <summary>
-/// Менеджер порівняльних Monte-Carlo експериментів.
-/// НЕ стартує сам — лише через RequestFullExperiment() з UI.
-/// Послідовно: PID → Fuzzy → Neural → Hybrid (N запусків кожен),
-/// з випадковим вітром/масою/кутом. Результати → UI + ResearchExporter.
+/// ÐœÐµÐ½ÐµÐ´Ð¶ÐµÑ€ Ð¿Ð¾Ñ€Ñ–Ð²Ð½ÑÐ»ÑŒÐ½Ð¸Ñ… Monte-Carlo ÐµÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚Ñ–Ð².
+/// ÐÐ• ÑÑ‚Ð°Ñ€Ñ‚ÑƒÑ” ÑÐ°Ð¼ â€” Ð»Ð¸ÑˆÐµ Ñ‡ÐµÑ€ÐµÐ· RequestFullExperiment() Ð· UI.
+/// ÐŸÐ¾ÑÐ»Ñ–Ð´Ð¾Ð²Ð½Ð¾: PID â†’ Fuzzy â†’ Neural â†’ Hybrid (N Ð·Ð°Ð¿ÑƒÑÐºÑ–Ð² ÐºÐ¾Ð¶ÐµÐ½),
+/// Ð· Ð²Ð¸Ð¿Ð°Ð´ÐºÐ¾Ð²Ð¸Ð¼ Ð²Ñ–Ñ‚Ñ€Ð¾Ð¼/Ð¼Ð°ÑÐ¾ÑŽ/ÐºÑƒÑ‚Ð¾Ð¼. Ð ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð¸ â†’ UI + ResearchExporter.
 /// </summary>
 public class SimulationManager : MonoBehaviour
 {
-    [Header("Основні посилання")]
+    [Header("ÐžÑÐ½Ð¾Ð²Ð½Ñ– Ð¿Ð¾ÑÐ¸Ð»Ð°Ð½Ð½Ñ")]
     public RocketPhysics rocketPhysics;
     public ExperimentDashboard dashboard;
 
-    [Header("Налаштування експерименту")]
+    [Header("ÐÐ°Ð»Ð°ÑˆÑ‚ÑƒÐ²Ð°Ð½Ð½Ñ ÐµÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚Ñƒ")]
     public int testsPerAlgorithm = 15;
     public float delayBetweenTests = 0.05f;
     public bool includeHybrid = true;
     [Range(1f, 50f)] public float experimentTimeScale = 20f;
 
-    [Header("Невизначеність (Monte-Carlo)")]
+    [Header("ÐÐµÐ²Ð¸Ð·Ð½Ð°Ñ‡ÐµÐ½Ñ–ÑÑ‚ÑŒ (Monte-Carlo)")]
     public bool enableNoise = true;
-    // Defaults hard enough that A–D diverge (100% all modes is not realistic)
+    // Defaults hard enough that Aâ€“D diverge (100% all modes is not realistic)
     [Range(0f, 25f)] public float windStrength = 14f;
     [Range(0f, 20f)] public float massVariationPercent = 10f;
     [Range(0f, 15f)] public float angleVariationDegrees = 11f;
     [Range(0f, 80f)] public float positionJitterMeters = 35f;
     public bool continuousWind = true;
 
-    // Internal flag — never leave true in inspector permanently
+    // Internal flag â€” never leave true in inspector permanently
     [HideInInspector] public bool runFullExperiment;
 
     public bool IsExperimentRunning { get; private set; }
@@ -75,7 +74,7 @@ public class SimulationManager : MonoBehaviour
         running = StartCoroutine(RunFullComparisonExperiment());
     }
 
-    /// <summary>Єдиний правильний спосіб старту з UI.</summary>
+    /// <summary>Ð„Ð´Ð¸Ð½Ð¸Ð¹ Ð¿Ñ€Ð°Ð²Ð¸Ð»ÑŒÐ½Ð¸Ð¹ ÑÐ¿Ð¾ÑÑ–Ð± ÑÑ‚Ð°Ñ€Ñ‚Ñƒ Ð· UI.</summary>
     public void RequestFullExperiment()
     {
         if (IsExperimentRunning) return;
@@ -108,7 +107,7 @@ public class SimulationManager : MonoBehaviour
         float prevFixed = Time.fixedDeltaTime;
         rocketPhysics.batchDrivenTicks = true;
 
-        // Monte-Carlo must use HARD nominal IC (not leftover Ideal [I] gentleness → fake 100%)
+        // Monte-Carlo must use HARD nominal IC (not leftover Ideal [I] gentleness â†’ fake 100%)
         RestoreHardInitialConditions();
         IdealLandingPresets.ApplyDefaultControllerTuning(
             rocketPhysics,
@@ -124,7 +123,7 @@ public class SimulationManager : MonoBehaviour
         // Hide landing result popups during batch
         MissionControlUI.Instance?.SetBatchMode(true);
         OnExperimentStarted?.Invoke();
-        SetProgress("Старт авто-тесту…", 0f);
+        SetProgress("Ð¡Ñ‚Ð°Ñ€Ñ‚ Ð°Ð²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚Ñƒâ€¦", 0f);
 
         int algos = includeHybrid ? 4 : 3;
         int doneAlgos = 0;
@@ -133,17 +132,17 @@ public class SimulationManager : MonoBehaviour
         doneAlgos++;
         if (cancelRequested) goto cleanup;
 
-        yield return RunAlgoBlock(RocketPhysics.ControlMode.Fuzzy, "Нечітка логіка", fuzzyResults, doneAlgos, algos);
+        yield return RunAlgoBlock(RocketPhysics.ControlMode.Fuzzy, "ÐÐµÑ‡Ñ–Ñ‚ÐºÐ° Ð»Ð¾Ð³Ñ–ÐºÐ°", fuzzyResults, doneAlgos, algos);
         doneAlgos++;
         if (cancelRequested) goto cleanup;
 
-        yield return RunAlgoBlock(RocketPhysics.ControlMode.Neural, "Нейромережа", neuralResults, doneAlgos, algos);
+        yield return RunAlgoBlock(RocketPhysics.ControlMode.Neural, "ÐÐµÐ¹Ñ€Ð¾Ð¼ÐµÑ€ÐµÐ¶Ð°", neuralResults, doneAlgos, algos);
         doneAlgos++;
         if (cancelRequested) goto cleanup;
 
         if (includeHybrid)
         {
-            yield return RunAlgoBlock(RocketPhysics.ControlMode.Hybrid, "Гібрид", hybridResults, doneAlgos, algos);
+            yield return RunAlgoBlock(RocketPhysics.ControlMode.Hybrid, "Ð“Ñ–Ð±Ñ€Ð¸Ð´", hybridResults, doneAlgos, algos);
             doneAlgos++;
         }
 
@@ -158,14 +157,14 @@ public class SimulationManager : MonoBehaviour
             dashboard?.UpdateStatistics(pid, fuzzy, neural, hybrid);
             MissionControlUI.Instance?.UpdateStatistics(pid, fuzzy, neural, hybrid);
             string exportDir = SaveComparisonReports();
-            SetProgress("Авто-тест завершено", 1f);
+            SetProgress("ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¾", 1f);
             MissionControlUI.Instance?.NotifyInfo(
-                $"✓ Авто-тест завершено. Звіти CSV/JSON/MD збережено:\n{exportDir}");
+                $"âœ“ ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¾. Ð—Ð²Ñ–Ñ‚Ð¸ CSV/JSON/MD Ð·Ð±ÐµÑ€ÐµÐ¶ÐµÐ½Ð¾:\n{exportDir}");
         }
         else
         {
-            SetProgress("Авто-тест скасовано", Progress01);
-            MissionControlUI.Instance?.NotifyInfo("Авто-тест зупинено користувачем.");
+            SetProgress("ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ ÑÐºÐ°ÑÐ¾Ð²Ð°Ð½Ð¾", Progress01);
+            MissionControlUI.Instance?.NotifyInfo("ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ Ð·ÑƒÐ¿Ð¸Ð½ÐµÐ½Ð¾ ÐºÐ¾Ñ€Ð¸ÑÑ‚ÑƒÐ²Ð°Ñ‡ÐµÐ¼.");
         }
 
         cleanup:
@@ -181,7 +180,7 @@ public class SimulationManager : MonoBehaviour
         running = null;
         MissionControlUI.Instance?.SetBatchMode(false);
         OnExperimentFinished?.Invoke();
-        Debug.Log(cancelRequested ? "══ Експеримент скасовано ══" : "══ Експеримент завершено ══");
+        Debug.Log(cancelRequested ? "â•â• Ð•ÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚ ÑÐºÐ°ÑÐ¾Ð²Ð°Ð½Ð¾ â•â•" : "â•â• Ð•ÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¾ â•â•");
     }
 
     IEnumerator RunAlgoBlock(RocketPhysics.ControlMode mode, string label,
@@ -189,7 +188,7 @@ public class SimulationManager : MonoBehaviour
     {
         rocketPhysics.controlMode = mode;
         results.Clear();
-        Debug.Log($"▶ {label}: {testsPerAlgorithm} симуляцій...");
+        Debug.Log($"â–¶ {label}: {testsPerAlgorithm} ÑÐ¸Ð¼ÑƒÐ»ÑÑ†Ñ–Ð¹...");
 
         float maxT = rocketPhysics.parameters != null
             ? rocketPhysics.parameters.maxSimulationTime + 5f
@@ -201,7 +200,7 @@ public class SimulationManager : MonoBehaviour
 
             float local = (i + 1f) / testsPerAlgorithm;
             float global = (algoIndex + local) / algoTotal;
-            SetProgress($"Авто-тест: {label}  ·  запуск {i + 1}/{testsPerAlgorithm}", global);
+            SetProgress($"ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚: {label}  Â·  Ð·Ð°Ð¿ÑƒÑÐº {i + 1}/{testsPerAlgorithm}", global);
 
             if (rocketPhysics.parameters != null)
                 rocketPhysics.parameters.fuelMass = originalFuelMass;
@@ -212,10 +211,10 @@ public class SimulationManager : MonoBehaviour
             // Always disturb: wind from slider + (if noise ON) mass/angle/offset
             ApplyRandomNoiseToState();
 
-            // Burst RK4 ticks per frame — reliable speed independent of timeScale budget
+            // Burst RK4 ticks per frame â€” reliable speed independent of timeScale budget
             float dt = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
             int maxSteps = Mathf.CeilToInt(maxT / Mathf.Max(1e-4f, dt)) + 64;
-            // experimentTimeScale ≈ how many ticks per rendered frame (clamped)
+            // experimentTimeScale â‰ˆ how many ticks per rendered frame (clamped)
             int burst = Mathf.Clamp(Mathf.RoundToInt(experimentTimeScale * 4f), 20, 200);
             int steps = 0;
             while (!rocketPhysics.state.simulationFinished && steps < maxSteps)
@@ -306,7 +305,7 @@ public class SimulationManager : MonoBehaviour
             rocketPhysics.state.rotation = Quaternion.Normalize(
                 rocketPhysics.state.rotation * Quaternion.Euler(ax, 0f, az));
 
-            // Lateral offset — main reason PID fails while Hybrid holds
+            // Lateral offset â€” main reason PID fails while Hybrid holds
             float jit = Mathf.Max(0f, positionJitterMeters);
             if (jit > 0.1f)
             {
@@ -320,7 +319,7 @@ public class SimulationManager : MonoBehaviour
 
     void ShowFinalComparison()
     {
-        Debug.Log("── Фінальне порівняння ──");
+        Debug.Log("â”€â”€ Ð¤Ñ–Ð½Ð°Ð»ÑŒÐ½Ðµ Ð¿Ð¾Ñ€Ñ–Ð²Ð½ÑÐ½Ð½Ñ â”€â”€");
         PrintStats("PID", pidResults);
         PrintStats("Fuzzy Sugeno", fuzzyResults);
         PrintStats("Neural ES", neuralResults);
@@ -333,7 +332,7 @@ public class SimulationManager : MonoBehaviour
         float successRate = GetSuccessRate(list);
         Debug.Log($"{name.ToUpperInvariant()} | success={successRate:F1}% | " +
                   $"V={GetAverage(list, m => m.touchdownVelocity):F2} | " +
-                  $"∠={GetAverage(list, m => m.landingAngleError):F2}° | " +
+                  $"âˆ ={GetAverage(list, m => m.landingAngleError):F2}Â° | " +
                   $"miss={GetAverage(list, m => m.horizontalMiss):F1}m | " +
                   $"score={GetAverage(list, m => m.SuccessScore):F1}");
     }
@@ -346,23 +345,10 @@ public class SimulationManager : MonoBehaviour
         return sum / list.Count;
     }
 
-    /// <summary>Повний експорт порівняння (CSV + JSON + Markdown).</summary>
+    /// <summary>ÐŸÐ¾Ð²Ð½Ð¸Ð¹ ÐµÐºÑÐ¿Ð¾Ñ€Ñ‚ Ð¿Ð¾Ñ€Ñ–Ð²Ð½ÑÐ½Ð½Ñ Ð² Ð¾ÐºÑ€ÐµÐ¼Ð¸Ð¹ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³ Comparison_*.</summary>
     public string SaveComparisonReports()
     {
         var data = BuildComparisonExportData();
-        // Legacy short CSV for backwards compatibility
-        string dir = ResearchExporter.LogsDirectory;
-        string legacy = Path.Combine(dir, $"Final_Comparison_{data.timestamp}.csv");
-        var lines = new List<string>
-        {
-            "Algorithm,Tests,SuccessRate(%),AvgTouchdownVelocity,AvgAngleError,AvgHorizontalMiss,AvgFuelRemaining,AvgSuccessScore"
-        };
-        foreach (var a in data.algorithms)
-        {
-            lines.Add($"{a.name},{a.tests},{a.successRate:F2},{a.avgTouchdownVelocity:F2}," +
-                      $"{a.avgAngleError:F2},{a.avgHorizontalMiss:F2},{a.avgFuelRemaining:F2},{a.avgSuccessScore:F2}");
-        }
-        File.WriteAllLines(legacy, lines);
         return ResearchExporter.ExportComparison(data);
     }
 
@@ -386,7 +372,7 @@ public class SimulationManager : MonoBehaviour
         return data;
     }
 
-    /// <summary>Доступ до останніх результатів (для UI-експорту / тестів).</summary>
+    /// <summary>Ð”Ð¾ÑÑ‚ÑƒÐ¿ Ð´Ð¾ Ð¾ÑÑ‚Ð°Ð½Ð½Ñ–Ñ… Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ñ–Ð² (Ð´Ð»Ñ UI-ÐµÐºÑÐ¿Ð¾Ñ€Ñ‚Ñƒ / Ñ‚ÐµÑÑ‚Ñ–Ð²).</summary>
     public IReadOnlyList<LandingMetrics> PidResults => pidResults;
     public IReadOnlyList<LandingMetrics> FuzzyResults => fuzzyResults;
     public IReadOnlyList<LandingMetrics> NeuralResults => neuralResults;

@@ -40,8 +40,8 @@ public class DataLogger : MonoBehaviour
     public void Initialize()
     {
         rocket = GetComponent<RocketPhysics>();
-        filePath = Path.Combine(ResearchExporter.LogsDirectory,
-            $"Landing_{System.DateTime.Now:yyyyMMdd_HHmmss}.csv");
+        // Memory-only until export packs a run folder (no loose files in SimulationLogs root)
+        filePath = null;
         data.Clear();
         samples.Clear();
         data.Add(
@@ -110,10 +110,16 @@ public class DataLogger : MonoBehaviour
             s.tiltDeg, s.pitchRate, s.yawRate, s.gimbalX, s.gimbalZ, s.miss, s.controlMode));
     }
 
-    public void Save()
+    /// <summary>
+    /// Optionally write timeseries into a run pack folder. No root-level scatter.
+    /// </summary>
+    public void Save(string runDirectory = null)
     {
-        if (string.IsNullOrEmpty(filePath) || data.Count <= 1) return;
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? ResearchExporter.LogsDirectory);
+        if (data.Count <= 1) return;
+        if (string.IsNullOrEmpty(runDirectory) || !Directory.Exists(runDirectory))
+            return; // kept in memory for ResearchExporter.ExportLanding
+
+        filePath = Path.Combine(runDirectory, "03_timeseries.csv");
         File.WriteAllLines(filePath, data, Encoding.UTF8);
         Debug.Log($"Лог траєкторії: {filePath}");
     }

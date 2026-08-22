@@ -6,9 +6,8 @@ using System.Text;
 using UnityEngine;
 
 /// <summary>
-/// Експорт результатів дослідження для диплому та подальшого аналізу.
-/// Формати: CSV (Excel), JSON (скрипти), Markdown (звіт/розділ роботи).
-/// Каталог: SimulationLogs/ (корінь проєкту).
+/// Експорт результатів: кожен запуск = окремий каталог у SimulationLogs/.
+/// Landing_* — одна посадка; Comparison_* — Monte-Carlo.
 /// </summary>
 public static class ResearchExporter
 {
@@ -22,6 +21,17 @@ public static class ResearchExporter
             Directory.CreateDirectory(dir);
             return dir;
         }
+    }
+
+    /// <summary>Create empty run folder under SimulationLogs (unique stamp).</summary>
+    public static string CreateRunDirectory(string kind, string label)
+    {
+        string stamp = Stamp();
+        string safe = Sanitize(string.IsNullOrEmpty(label) ? kind : label);
+        string name = $"{Sanitize(kind)}_{safe}_{stamp}";
+        string dir = Path.Combine(LogsDirectory, name);
+        Directory.CreateDirectory(dir);
+        return dir;
     }
 
     public sealed class LandingExportData
@@ -73,8 +83,7 @@ public static class ResearchExporter
     public static string Stamp() => DateTime.Now.ToString("yyyyMMdd_HHmmss", Inv);
 
     /// <summary>
-    /// Повний пакет експорту посадки:
-    /// CSV покрокових розрахунків, JSON, Markdown, SVG-графіки траєкторії.
+    /// Один каталог на посадку — усі файли всередині, без розкиданих копій у корені.
     /// </summary>
     public static string ExportLanding(LandingExportData data)
     {
@@ -82,80 +91,85 @@ public static class ResearchExporter
             throw new ArgumentNullException(nameof(data));
 
         string stamp = string.IsNullOrEmpty(data.timestamp) ? Stamp() : data.timestamp;
+        data.timestamp = stamp;
         string safeAlgo = Sanitize(data.algorithm);
-        string packName = $"Landing_Full_{safeAlgo}_{stamp}";
+        string packName = $"Landing_{safeAlgo}_{stamp}";
         string dir = Path.Combine(LogsDirectory, packName);
         Directory.CreateDirectory(dir);
+        string charts = Path.Combine(dir, "charts");
+        Directory.CreateDirectory(charts);
 
-        string csvPath = Path.Combine(dir, "01_step_calculations.csv");
-        string jsonPath = Path.Combine(dir, "02_summary.json");
-        string mdPath = Path.Combine(dir, "00_REPORT.md");
-        string svgAlt = Path.Combine(dir, "03_altitude_vs_time.svg");
-        string svgPath = Path.Combine(dir, "04_trajectory_XZ.svg");
-        string svgVel = Path.Combine(dir, "05_velocity_vs_time.svg");
-        string svgThr = Path.Combine(dir, "06_thrust_vs_time.svg");
-        string svgSide = Path.Combine(dir, "07_trajectory_side_XY.svg");
-        string calcMd = Path.Combine(dir, "08_step_analysis.md");
+        string readme = Path.Combine(dir, "00_README.md");
+        string mdPath = Path.Combine(dir, "01_SUMMARY.md");
+        string jsonPath = Path.Combine(dir, "02_metrics.json");
+        string csvPath = Path.Combine(dir, "03_timeseries.csv");
+        string calcMd = Path.Combine(dir, "04_analysis.md");
 
-        // 1) Step CSV
+        // Timeseries
         if (data.trajectoryRows != null && data.trajectoryRows.Count > 0)
             File.WriteAllLines(csvPath, data.trajectoryRows, Encoding.UTF8);
         else if (!string.IsNullOrEmpty(data.trajectoryCsvPath) && File.Exists(data.trajectoryCsvPath))
             File.Copy(data.trajectoryCsvPath, csvPath, overwrite: true);
         else
-            File.WriteAllText(csvPath, "step,time_s\n", Encoding.UTF8);
+            File.WriteAllText(csvPath,
+                "step,time_s,posX_m,posY_m,posZ_m\n(no samples)\n", Encoding.UTF8);
 
-        // Also mirror short CSV at SimulationLogs root for compatibility
-        string legacyCsv = Path.Combine(LogsDirectory, $"Landing_Report_{safeAlgo}_{stamp}.csv");
-        File.Copy(csvPath, legacyCsv, overwrite: true);
-
-        // 2) JSON + MD
         File.WriteAllText(jsonPath, BuildLandingJson(data), Encoding.UTF8);
         File.WriteAllText(mdPath, BuildLandingMarkdown(data, packName), new UTF8Encoding(true));
-        File.WriteAllText(Path.Combine(LogsDirectory, $"Landing_Report_{safeAlgo}_{stamp}.md"),
-            BuildLandingMarkdown(data, packName), new UTF8Encoding(true));
-        File.WriteAllText(Path.Combine(LogsDirectory, $"Landing_Report_{safeAlgo}_{stamp}.json"),
-            BuildLandingJson(data), Encoding.UTF8);
+        File.WriteAllText(readme, BuildLandingReadme(data, packName), new UTF8Encoding(true));
 
-        // 3) SVG charts from samples
         var samples = data.samples;
         if (samples != null && samples.Count >= 2)
         {
-            File.WriteAllText(svgAlt, BuildSvgSeries(samples, s => s.time, s => s.posY,
-                "Altitude h(t)", "t, s", "h, m", "#222", true), Encoding.UTF8);
-            File.WriteAllText(svgVel, BuildSvgSeries(samples, s => s.time, s => s.velY,
-                "Vertical velocity Vy(t)", "t, s", "Vy, m/s", "#333", true), Encoding.UTF8);
-            File.WriteAllText(svgThr, BuildSvgSeries(samples, s => s.time, s => s.thrustKn,
-                "Thrust F(t)", "t, s", "F, kN", "#444", true), Encoding.UTF8);
-            File.WriteAllText(svgPath, BuildSvgSeries(samples, s => s.posX, s => s.posZ,
-                "Ground track XZ (pad at 0,0)", "X, m", "Z, m", "#222", false), Encoding.UTF8);
-            File.WriteAllText(svgSide, BuildSvgSeries(samples, s => s.posX, s => s.posY,
-                "Side view X–h", "X, m", "h, m", "#222", false), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "altitude_vs_time.svg"),
+                BuildSvgSeries(samples, s => s.time, s => s.posY,
+                    "Altitude h(t)", "t, s", "h, m", "#222", true), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "velocity_vs_time.svg"),
+                BuildSvgSeries(samples, s => s.time, s => s.velY,
+                    "Vertical velocity Vy(t)", "t, s", "Vy, m/s", "#333", true), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "thrust_vs_time.svg"),
+                BuildSvgSeries(samples, s => s.time, s => s.thrustKn,
+                    "Thrust F(t)", "t, s", "F, kN", "#444", true), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "track_XZ.svg"),
+                BuildSvgSeries(samples, s => s.posX, s => s.posZ,
+                    "Ground track XZ (pad at 0,0)", "X, m", "Z, m", "#222", false), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "side_Xh.svg"),
+                BuildSvgSeries(samples, s => s.posX, s => s.posY,
+                    "Side view X–h", "X, m", "h, m", "#222", false), Encoding.UTF8);
             File.WriteAllText(calcMd, BuildStepAnalysisMarkdown(data), new UTF8Encoding(true));
         }
+        else
+        {
+            File.WriteAllText(calcMd,
+                "# Аналіз\n\nНедостатньо семплів для графіків (потрібно ≥ 2).\n",
+                new UTF8Encoding(true));
+        }
 
-        Debug.Log($"[Export] Повний пакет посадки: {dir}");
+        Debug.Log($"[Export] Пакет посадки: {dir}");
         return dir;
     }
 
-    /// <summary>Експорт Monte-Carlo порівняння: CSV + JSON + Markdown.</summary>
+    /// <summary>Один каталог на Monte-Carlo порівняння.</summary>
     public static string ExportComparison(ComparisonExportData data)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
 
         string stamp = string.IsNullOrEmpty(data.timestamp) ? Stamp() : data.timestamp;
-        string baseName = $"Research_Comparison_{stamp}";
-        string dir = LogsDirectory;
+        data.timestamp = stamp;
+        string packName = $"Comparison_{stamp}";
+        string dir = Path.Combine(LogsDirectory, packName);
+        Directory.CreateDirectory(dir);
 
-        string csvPath = Path.Combine(dir, baseName + ".csv");
-        string jsonPath = Path.Combine(dir, baseName + ".json");
-        string mdPath = Path.Combine(dir, baseName + ".md");
+        File.WriteAllText(Path.Combine(dir, "00_README.md"),
+            BuildComparisonReadme(data, packName), new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(dir, "01_SUMMARY.md"),
+            BuildComparisonMarkdown(data), new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(dir, "02_results.csv"),
+            BuildComparisonCsv(data), Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "03_results.json"),
+            BuildComparisonJson(data), Encoding.UTF8);
 
-        File.WriteAllText(csvPath, BuildComparisonCsv(data), Encoding.UTF8);
-        File.WriteAllText(jsonPath, BuildComparisonJson(data), Encoding.UTF8);
-        File.WriteAllText(mdPath, BuildComparisonMarkdown(data), new UTF8Encoding(true));
-
-        Debug.Log($"[Export] Звіт порівняння: {mdPath}");
+        Debug.Log($"[Export] Пакет порівняння: {dir}");
         return dir;
     }
 
@@ -249,80 +263,180 @@ public static class ResearchExporter
         return sb.ToString();
     }
 
+    public static string BuildLandingReadme(LandingExportData d, string packFolder)
+    {
+        var m = d.metrics;
+        var sb = new StringBuilder(1500);
+        bool uk = UILocale.IsUK;
+        if (uk)
+        {
+            sb.AppendLine("# Як читати цей каталог");
+            sb.AppendLine();
+            sb.AppendLine("Це **один запуск посадки**. Усі файли цього запуску лежать тут — нічого не розкидано по `SimulationLogs/`.");
+            sb.AppendLine();
+            sb.AppendLine("| Файл / папка | Навіщо |");
+            sb.AppendLine("|--------------|--------|");
+            sb.AppendLine("| **`01_SUMMARY.md`** | Головний звіт: успіх/невдача, таблиця критеріїв, пояснення |");
+            sb.AppendLine("| `02_metrics.json` | Ті самі метрики для Excel/скриптів |");
+            sb.AppendLine("| `03_timeseries.csv` | Покроковий часовий ряд (стан, тяга, gimbal) |");
+            sb.AppendLine("| `04_analysis.md` | Екстремуми польоту та формули моделі |");
+            sb.AppendLine("| `charts/*.svg` | Графіки — відкривайте у браузері |");
+            sb.AppendLine();
+            sb.AppendLine("**З чого почати:** відкрийте `01_SUMMARY.md`.");
+            sb.AppendLine();
+            sb.AppendLine($"- Алгоритм: **{d.algorithm}**");
+            sb.AppendLine($"- Результат: **{(m.isSuccessfulLanding ? "успіх" : "невдача")}** · Score **{m.SuccessScore:F0}/100**");
+            sb.AppendLine($"- Папка: `SimulationLogs/{packFolder}/`");
+        }
+        else
+        {
+            sb.AppendLine("# How to read this folder");
+            sb.AppendLine();
+            sb.AppendLine("This is **one landing run**. All files for this run are here — nothing is scattered in `SimulationLogs/` root.");
+            sb.AppendLine();
+            sb.AppendLine("| File / folder | Purpose |");
+            sb.AppendLine("|---------------|---------|");
+            sb.AppendLine("| **`01_SUMMARY.md`** | Main report: pass/fail, criteria table, explanation |");
+            sb.AppendLine("| `02_metrics.json` | Same metrics for Excel/scripts |");
+            sb.AppendLine("| `03_timeseries.csv` | Step time series (state, thrust, gimbal) |");
+            sb.AppendLine("| `04_analysis.md` | Flight extremes and model formulas |");
+            sb.AppendLine("| `charts/*.svg` | Charts — open in a browser |");
+            sb.AppendLine();
+            sb.AppendLine("**Start here:** open `01_SUMMARY.md`.");
+            sb.AppendLine();
+            sb.AppendLine($"- Algorithm: **{d.algorithm}**");
+            sb.AppendLine($"- Result: **{(m.isSuccessfulLanding ? "success" : "fail")}** · Score **{m.SuccessScore:F0}/100**");
+            sb.AppendLine($"- Folder: `SimulationLogs/{packFolder}/`");
+        }
+        return sb.ToString();
+    }
+
     public static string BuildLandingMarkdown(LandingExportData d, string packFolder = null)
     {
         var m = d.metrics;
         var sb = new StringBuilder(4096);
-        sb.AppendLine("# Betelgeuse — Повний звіт посадки");
+        bool ok = m.isSuccessfulLanding;
+        sb.AppendLine("# Звіт посадки / Landing report");
         sb.AppendLine();
-        sb.AppendLine($"**Тема роботи:** {d.thesisTopic}");
+        sb.AppendLine(ok ? "## Результат: УСПІШНА ПОСАДКА" : "## Результат: НЕВДАЛА ПОСАДКА");
         sb.AppendLine();
-        sb.AppendLine($"**Дата:** {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        sb.AppendLine($"**Алгоритм GNC:** {d.algorithm}");
-        sb.AppendLine($"**Результат:** {(m.isSuccessfulLanding ? "✅ УСПІШНА ПОСАДКА" : "❌ НЕВДАЛА ПОСАДКА")}");
-        sb.AppendLine($"**Кроків логу:** {(d.samples != null ? d.samples.Count : 0)}");
+        sb.AppendLine($"| | |");
+        sb.AppendLine($"|--|--|");
+        sb.AppendLine($"| **Алгоритм** | {d.algorithm} |");
+        sb.AppendLine($"| **Дата** | {DateTime.Now:yyyy-MM-dd HH:mm:ss} |");
+        sb.AppendLine($"| **Оцінка (SuccessScore)** | **{m.SuccessScore:F1} / 100** |");
+        sb.AppendLine($"| **Кроків у CSV** | {(d.samples != null ? d.samples.Count : 0)} |");
+        if (!string.IsNullOrEmpty(packFolder))
+            sb.AppendLine($"| **Каталог** | `SimulationLogs/{packFolder}/` |");
         sb.AppendLine();
-        sb.AppendLine("## 1. Критерії soft-landing і метрики");
+        sb.AppendLine("### Тема роботи");
+        sb.AppendLine();
+        sb.AppendLine(d.thesisTopic);
+        sb.AppendLine();
+        sb.AppendLine("## 1. Критерії soft-landing");
+        sb.AppendLine();
+        sb.AppendLine("Посадка **успішна**, лише якщо виконані **всі** норми нижче (і немає timeout).");
         sb.AppendLine();
         sb.AppendLine("| Параметр | Значення | Норма | Статус |");
         sb.AppendLine("|----------|----------|-------|--------|");
-        sb.AppendLine(Row("Швидкість приземлення |Vy|", $"{m.touchdownVelocity:F2} м/с", $"< {d.maxTouchdownVelocity}", m.touchdownVelocity < d.maxTouchdownVelocity && !m.timedOut));
+        sb.AppendLine(Row("|Vy| приземлення", $"{m.touchdownVelocity:F2} м/с", $"< {d.maxTouchdownVelocity}", m.touchdownVelocity < d.maxTouchdownVelocity && !m.timedOut));
         sb.AppendLine(Row("Нахил корпусу", $"{m.landingAngleError:F2}°", $"< {d.maxLandingAngle}°", m.landingAngleError < d.maxLandingAngle && !m.timedOut));
-        sb.AppendLine(Row("Промах (pad)", $"{m.horizontalMiss:F2} м", $"< {d.maxHorizontalMiss} м", m.horizontalMiss < d.maxHorizontalMiss && !m.timedOut));
-        sb.AppendLine(Row("Бічна швидкість |Vh|", $"{m.horizontalSpeed:F2} м/с", $"< {d.maxHorizontalSpeed}", m.horizontalSpeed < d.maxHorizontalSpeed && !m.timedOut));
-        sb.AppendLine(Row("Залишок палива", $"{m.fuelRemaining:F1} кг", "—", true));
-        sb.AppendLine(Row("Час польоту", $"{m.totalFlightTime:F1} с", "—", true));
-        sb.AppendLine(Row("Макс. висота", $"{m.maxAltitude:F0} м", "—", true));
-        sb.AppendLine(Row("SuccessScore", $"{m.SuccessScore:F1} / 100", "вище = краще", true));
+        sb.AppendLine(Row("Промах від центру pad", $"{m.horizontalMiss:F2} м", $"< {d.maxHorizontalMiss} м", m.horizontalMiss < d.maxHorizontalMiss && !m.timedOut));
+        sb.AppendLine(Row("|Vh| бічна швидкість", $"{m.horizontalSpeed:F2} м/с", $"< {d.maxHorizontalSpeed}", m.horizontalSpeed < d.maxHorizontalSpeed && !m.timedOut));
         if (m.timedOut)
-            sb.AppendLine(Row("Timeout", "так", "ні", false));
+            sb.AppendLine(Row("Timeout симуляції", "так", "ні", false));
         sb.AppendLine();
-        sb.AppendLine("## 2. Файли пакета");
+        sb.AppendLine("## 2. Додаткові метрики");
         sb.AppendLine();
-        sb.AppendLine("| Файл | Зміст |");
-        sb.AppendLine("|------|--------|");
-        sb.AppendLine("| `01_step_calculations.csv` | Покрокові розрахунки (час, стан, тяга, T/W, gimbal) |");
-        sb.AppendLine("| `02_summary.json` | Машиночитаний підсумок |");
-        sb.AppendLine("| `03_altitude_vs_time.svg` | Графік висоти h(t) |");
-        sb.AppendLine("| `04_trajectory_XZ.svg` | Траєкторія на горизонтальній площині |");
-        sb.AppendLine("| `05_velocity_vs_time.svg` | Вертикальна швидкість Vy(t) |");
-        sb.AppendLine("| `06_thrust_vs_time.svg` | Тяга F(t) |");
-        sb.AppendLine("| `07_trajectory_side_XY.svg` | Бічний профіль X–h |");
-        sb.AppendLine("| `08_step_analysis.md` | Аналіз кроків і екстремумів |");
+        sb.AppendLine("| Параметр | Значення |");
+        sb.AppendLine("|----------|----------|");
+        sb.AppendLine($"| Залишок палива | {m.fuelRemaining:F1} кг |");
+        sb.AppendLine($"| Час польоту | {m.totalFlightTime:F1} с |");
+        sb.AppendLine($"| Макс. висота | {m.maxAltitude:F0} м |");
         sb.AppendLine();
-        if (!string.IsNullOrEmpty(packFolder))
-            sb.AppendLine($"**Каталог:** `SimulationLogs/{packFolder}/`");
+        sb.AppendLine("**SuccessScore** (0…100): 35% швидкість + 25% кут + 15% паливо + 15% промах + 10% бічна V.");
         sb.AppendLine();
-        sb.AppendLine("## 3. Графіки (відкрийте SVG у браузері)");
-        sb.AppendLine();
-        sb.AppendLine("![h(t)](03_altitude_vs_time.svg)");
-        sb.AppendLine();
-        sb.AppendLine("![Vy(t)](05_velocity_vs_time.svg)");
-        sb.AppendLine();
-        sb.AppendLine("![F(t)](06_thrust_vs_time.svg)");
-        sb.AppendLine();
-        sb.AppendLine("![XZ](04_trajectory_XZ.svg)");
-        sb.AppendLine();
-        sb.AppendLine("![side](07_trajectory_side_XY.svg)");
-        sb.AppendLine();
-        sb.AppendLine("## 4. Пояснення результату");
+        sb.AppendLine("## 3. Пояснення");
         sb.AppendLine();
         sb.AppendLine("```");
         sb.AppendLine(m.BuildUserSummary(d.maxTouchdownVelocity, d.maxLandingAngle, d.maxHorizontalMiss, d.maxHorizontalSpeed));
         sb.AppendLine("```");
         sb.AppendLine();
-        sb.AppendLine("## 5. Відповідність темі");
+        sb.AppendLine("## 4. Графіки");
         sb.AppendLine();
-        sb.AppendLine("| Аспект теми | Реалізація в Betelgeuse |");
-        sb.AppendLine("|-------------|-------------------------|");
-        sb.AppendLine("| Автономна посадка | RK4 + критерії soft-landing |");
-        sb.AppendLine("| Нечітка логіка | Fuzzy Sugeno-0 5×5 |");
-        sb.AppendLine("| Машинне навчання | MLP 5→8→2 + ES(1+λ) |");
-        sb.AppendLine("| Інтелектуальна гібридна система | Hybrid Neuro-Fuzzy |");
-        sb.AppendLine("| Дослідження / порівняння | Monte-Carlo + CSV/JSON/MD/SVG |");
+        sb.AppendLine("Відкрийте SVG у браузері (подвійний клік або перетягніть у Chrome/Edge).");
+        sb.AppendLine();
+        sb.AppendLine("| Файл | Що показує |");
+        sb.AppendLine("|------|------------|");
+        sb.AppendLine("| `charts/altitude_vs_time.svg` | Висота h(t) |");
+        sb.AppendLine("| `charts/velocity_vs_time.svg` | Вертикальна швидкість Vy(t) |");
+        sb.AppendLine("| `charts/thrust_vs_time.svg` | Тяга F(t) |");
+        sb.AppendLine("| `charts/track_XZ.svg` | Слід на землі (pad = 0,0) |");
+        sb.AppendLine("| `charts/side_Xh.svg` | Бічний профіль X–h |");
+        sb.AppendLine();
+        sb.AppendLine("![h(t)](charts/altitude_vs_time.svg)");
+        sb.AppendLine();
+        sb.AppendLine("![Vy(t)](charts/velocity_vs_time.svg)");
+        sb.AppendLine();
+        sb.AppendLine("![F(t)](charts/thrust_vs_time.svg)");
+        sb.AppendLine();
+        sb.AppendLine("![XZ](charts/track_XZ.svg)");
+        sb.AppendLine();
+        sb.AppendLine("![side](charts/side_Xh.svg)");
+        sb.AppendLine();
+        sb.AppendLine("## 5. Інші файли цього запуску");
+        sb.AppendLine();
+        sb.AppendLine("| Файл | Для кого |");
+        sb.AppendLine("|------|----------|");
+        sb.AppendLine("| `00_README.md` | Коротка навігація папкою |");
+        sb.AppendLine("| `02_metrics.json` | Скрипти / Excel Power Query |");
+        sb.AppendLine("| `03_timeseries.csv` | Excel: увесь політ по кроках |");
+        sb.AppendLine("| `04_analysis.md` | Екстремуми + формули моделі |");
         sb.AppendLine();
         sb.AppendLine("---");
-        sb.AppendLine("*Betelgeuse · магістерська кваліфікаційна робота, 2026*");
+        sb.AppendLine("*Betelgeuse · МКР 2026 · один запуск = один каталог*");
+        return sb.ToString();
+    }
+
+    public static string BuildComparisonReadme(ComparisonExportData d, string packFolder)
+    {
+        var sb = new StringBuilder(1200);
+        if (UILocale.IsUK)
+        {
+            sb.AppendLine("# Як читати цей каталог (порівняння)");
+            sb.AppendLine();
+            sb.AppendLine("Це **один прогін Monte-Carlo** (усі алгоритми A–D). Усі файли — лише в цій папці.");
+            sb.AppendLine();
+            sb.AppendLine("| Файл | Зміст |");
+            sb.AppendLine("|------|--------|");
+            sb.AppendLine("| **`01_SUMMARY.md`** | Головний звіт + переможець |");
+            sb.AppendLine("| `02_results.csv` | Таблиця для Excel |");
+            sb.AppendLine("| `03_results.json` | Для скриптів |");
+            sb.AppendLine();
+            sb.AppendLine($"- Запусків на алгоритм: **{d.testsPerAlgorithm}**");
+            sb.AppendLine($"- Збурення: **{(d.enableNoise ? "увімкнено" : "вимкнено")}**");
+            sb.AppendLine($"- Папка: `SimulationLogs/{packFolder}/`");
+            sb.AppendLine();
+            sb.AppendLine("**З чого почати:** `01_SUMMARY.md`.");
+        }
+        else
+        {
+            sb.AppendLine("# How to read this folder (comparison)");
+            sb.AppendLine();
+            sb.AppendLine("This is **one Monte-Carlo run** (all algorithms). All files are only in this folder.");
+            sb.AppendLine();
+            sb.AppendLine("| File | Content |");
+            sb.AppendLine("|------|---------|");
+            sb.AppendLine("| **`01_SUMMARY.md`** | Main report + winner |");
+            sb.AppendLine("| `02_results.csv` | Excel table |");
+            sb.AppendLine("| `03_results.json` | For scripts |");
+            sb.AppendLine();
+            sb.AppendLine($"- Runs per algorithm: **{d.testsPerAlgorithm}**");
+            sb.AppendLine($"- Disturbances: **{(d.enableNoise ? "on" : "off")}**");
+            sb.AppendLine($"- Folder: `SimulationLogs/{packFolder}/`");
+            sb.AppendLine();
+            sb.AppendLine("**Start here:** `01_SUMMARY.md`.");
+        }
         return sb.ToString();
     }
 
@@ -452,7 +566,7 @@ public static class ResearchExporter
         sb.AppendLine("- T/W = F / (m · g(h))");
         sb.AppendLine("- SuccessScore = 0.35·vel + 0.25·angle + 0.15·fuel + 0.15·miss + 0.10·Vh");
         sb.AppendLine();
-        sb.AppendLine($"Повний часовий ряд: **{d.samples.Count}** кроків у `01_step_calculations.csv`.");
+        sb.AppendLine($"Повний часовий ряд: **{d.samples.Count}** кроків у `03_timeseries.csv`.");
         return sb.ToString();
     }
 
@@ -528,19 +642,20 @@ public static class ResearchExporter
     public static string BuildComparisonMarkdown(ComparisonExportData d)
     {
         var sb = new StringBuilder(4096);
-        sb.AppendLine("# Betelgeuse — Звіт порівняння алгоритмів GNC");
+        sb.AppendLine("# Порівняння алгоритмів GNC (Monte-Carlo)");
         sb.AppendLine();
-        sb.AppendLine("**Тема:** Розроблення інтелектуальної системи автономної посадки ракетоносія");
-        sb.AppendLine("на основі нечіткої логіки та машинного навчання.");
+        sb.AppendLine("Один експеримент: кожен алгоритм (PID / Fuzzy / Neural / Hybrid) запускається N разів із випадковими збуреннями.");
         sb.AppendLine();
-        sb.AppendLine($"**Дата:** {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        sb.AppendLine($"**Запусків на алгоритм:** {d.testsPerAlgorithm}");
-        sb.AppendLine($"**Збурення (Monte-Carlo):** {(d.enableNoise ? "увімкнено" : "вимкнено")}");
+        sb.AppendLine($"| | |");
+        sb.AppendLine($"|--|--|");
+        sb.AppendLine($"| **Дата** | {DateTime.Now:yyyy-MM-dd HH:mm:ss} |");
+        sb.AppendLine($"| **Запусків на алгоритм (N)** | {d.testsPerAlgorithm} |");
+        sb.AppendLine($"| **Збурення** | {(d.enableNoise ? "увімкнено" : "вимкнено")} |");
         if (d.enableNoise)
         {
-            sb.AppendLine($"- Сила вітру: {d.windStrength:F1}");
-            sb.AppendLine($"- Варіація маси: ±{d.massVariationPercent:F1}%");
-            sb.AppendLine($"- Варіація кута: ±{d.angleVariationDegrees:F1}°");
+            sb.AppendLine($"| Вітер | {d.windStrength:F1} |");
+            sb.AppendLine($"| ±маса | {d.massVariationPercent:F1}% |");
+            sb.AppendLine($"| ±кут | {d.angleVariationDegrees:F1}° |");
         }
         sb.AppendLine();
         sb.AppendLine("## Зведена таблиця");
@@ -566,7 +681,9 @@ public static class ResearchExporter
                 winner = a.name;
             }
         }
-        sb.AppendLine($"## Переможець: **{winner}** ({bestRate:F1}% успішних посадок)");
+        sb.AppendLine($"## Переможець: **{winner}** ({bestRate:F1}% успішних)");
+        sb.AppendLine();
+        sb.AppendLine("Критерій перемоги: вищий **% успіху**; при рівності — вищий середній **SuccessScore**.");
         sb.AppendLine();
         sb.AppendLine("## Деталі по алгоритмах");
         sb.AppendLine();
@@ -574,21 +691,27 @@ public static class ResearchExporter
         {
             sb.AppendLine($"### {a.name}");
             sb.AppendLine();
-            sb.AppendLine($"- Успішних: {a.successCount} / {a.tests} ({a.successRate:F1}%)");
-            sb.AppendLine($"- V_touch: середнє {a.avgTouchdownVelocity:F2}, мін {a.minTouchdownVelocity:F2}, макс {a.maxTouchdownVelocity:F2} м/с");
-            sb.AppendLine($"- Кут нахилу: {a.avgAngleError:F2}°");
-            sb.AppendLine($"- Горизонтальний промах: {a.avgHorizontalMiss:F2} м");
-            sb.AppendLine($"- Бічна швидкість: {a.avgHorizontalSpeed:F2} м/с");
-            sb.AppendLine($"- Паливо: {a.avgFuelRemaining:F0} кг · час: {a.avgFlightTime:F1} с");
-            sb.AppendLine($"- SuccessScore: {a.avgSuccessScore:F1} / 100");
+            sb.AppendLine($"- Успішних: **{a.successCount} / {a.tests}** ({a.successRate:F1}%)");
+            sb.AppendLine($"- V_touch: сер. {a.avgTouchdownVelocity:F2} · мін {a.minTouchdownVelocity:F2} · макс {a.maxTouchdownVelocity:F2} м/с");
+            sb.AppendLine($"- Кут: {a.avgAngleError:F2}° · промах: {a.avgHorizontalMiss:F2} м · Vh: {a.avgHorizontalSpeed:F2} м/с");
+            sb.AppendLine($"- Паливо: {a.avgFuelRemaining:F0} кг · час: {a.avgFlightTime:F1} с · Score: {a.avgSuccessScore:F1}/100");
             sb.AppendLine();
         }
-        sb.AppendLine("## Критерії успіху");
+        sb.AppendLine("## Критерії успішної посадки (кожен запуск)");
         sb.AppendLine();
-        sb.AppendLine("|V_y| < 3.5 м/с · нахил < 7° · промах < 25 м · |V_h| < 5 м/с");
+        sb.AppendLine("|Vy| &lt; 3.5 м/с · нахил &lt; 7° · промах &lt; 25 м · |Vh| &lt; 5 м/с · без timeout");
+        sb.AppendLine();
+        sb.AppendLine("## Файли цього експерименту");
+        sb.AppendLine();
+        sb.AppendLine("| Файл | Призначення |");
+        sb.AppendLine("|------|-------------|");
+        sb.AppendLine("| `00_README.md` | Навігація папкою |");
+        sb.AppendLine("| `01_SUMMARY.md` | Цей звіт |");
+        sb.AppendLine("| `02_results.csv` | Excel |");
+        sb.AppendLine("| `03_results.json` | Скрипти |");
         sb.AppendLine();
         sb.AppendLine("---");
-        sb.AppendLine("*Згенеровано симулятором Betelgeuse · Monte-Carlo експеримент*");
+        sb.AppendLine("*Betelgeuse · Monte-Carlo · один експеримент = один каталог*");
         return sb.ToString();
     }
 

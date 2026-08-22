@@ -102,12 +102,14 @@ public class ResearchExporterTests
 
         string dir = ResearchExporter.ExportLanding(data);
         Assert.IsTrue(Directory.Exists(dir));
-        Assert.IsTrue(File.Exists(Path.Combine(dir, "00_REPORT.md")));
-        Assert.IsTrue(File.Exists(Path.Combine(dir, "01_step_calculations.csv")));
-        Assert.IsTrue(File.Exists(Path.Combine(dir, "02_summary.json")));
-        Assert.IsTrue(File.Exists(Path.Combine(dir, "03_altitude_vs_time.svg")));
-        Assert.IsTrue(File.Exists(Path.Combine(dir, "04_trajectory_XZ.svg")));
-        Assert.IsTrue(File.Exists(Path.Combine(dir, "08_step_analysis.md")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "00_README.md")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "01_SUMMARY.md")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "02_metrics.json")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "03_timeseries.csv")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "04_analysis.md")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "charts", "altitude_vs_time.svg")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "charts", "track_XZ.svg")));
+        StringAssert.Contains("Landing_", Path.GetFileName(dir));
 
         try { Directory.Delete(dir, true); } catch { /* ignore */ }
     }
@@ -133,9 +135,13 @@ public class ResearchExporterTests
         var data = SampleComparison();
         data.timestamp = "TEST_" + System.Guid.NewGuid().ToString("N").Substring(0, 8);
         string dir = ResearchExporter.ExportComparison(data);
-        string[] files = Directory.GetFiles(dir, $"Research_Comparison_{data.timestamp}*");
-        Assert.GreaterOrEqual(files.Length, 3);
-        foreach (var f in files) File.Delete(f);
+        Assert.IsTrue(Directory.Exists(dir));
+        StringAssert.Contains("Comparison_", Path.GetFileName(dir));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "00_README.md")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "01_SUMMARY.md")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "02_results.csv")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "03_results.json")));
+        try { Directory.Delete(dir, true); } catch { /* ignore */ }
     }
 
     static LandingMetrics Ok(float v) => new()

@@ -153,13 +153,34 @@ Assets/Scripts/
 
 ## 8. Експорт
 
+**Правило:** один запуск → один каталог у `SimulationLogs/`. У корені `SimulationLogs/` лише підпапки.
+
+### Одна посадка (`[E]` або авто після touchdown)
+
 ```
-SimulationLogs/Landing_Full_<algo>_<ts>/
-  00_REPORT.md · 01_step_calculations.csv · 02_summary.json
-  03–07_*.svg · 08_step_analysis.md
+SimulationLogs/Landing_<Algorithm>_<yyyyMMdd_HHmmss>/
+  00_README.md       # навігація папкою
+  01_SUMMARY.md      # головний звіт (критерії, score, пояснення)
+  02_metrics.json    # машиночитані метрики
+  03_timeseries.csv  # покроковий стан / тяга / gimbal
+  04_analysis.md     # екстремуми + формули
+  charts/
+    altitude_vs_time.svg
+    velocity_vs_time.svg
+    thrust_vs_time.svg
+    track_XZ.svg
+    side_Xh.svg
 ```
 
-Monte-Carlo: `SimulationLogs/Research_Comparison_*`.
+### Monte-Carlo порівняння (`[P]` → експорт)
+
+```
+SimulationLogs/Comparison_<yyyyMMdd_HHmmss>/
+  00_README.md
+  01_SUMMARY.md      # таблиця + переможець
+  02_results.csv
+  03_results.json
+```
 
 ---
 

@@ -112,3 +112,6 @@ TestLog-*.txt
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# Simulation logs
+SimulationLogs/
