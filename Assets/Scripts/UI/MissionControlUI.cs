@@ -29,7 +29,10 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text txtInsight, txtFuelPct;
     TMP_Text txtPid, txtFuzzy, txtNeural, txtHybrid, txtWinner, txtInfo;
     TMP_Text txtWindVal, txtTestsVal;
-    TMP_Text txtResultTitle, txtResultBody, txtProgress, txtCamMode, txtCamHelp;
+    TMP_Text txtResultTitle, txtResultBody, txtResultScore, txtProgress, txtCamMode, txtCamHelp;
+    TMP_Text[] resultMetricKeys;
+    TMP_Text[] resultMetricVals;
+    Image resultAccentBar, resultScoreBg;
     TMP_Text txtTrajBtn, txtTitle, txtHow, txtGraphHint;
     TMP_Text txtHdrTelem, txtHdrLive, txtHdrCrit, txtHdrInsight, txtHdrGraphs;
     TMP_Text txtStep;
@@ -1752,23 +1755,69 @@ public class MissionControlUI : MonoBehaviour
         float maxH = p != null && p.maxHorizontalSpeed > 0.1f ? p.maxHorizontalSpeed : 5f;
 
         bool ok = m.isSuccessfulLanding;
+        Color status = ok ? C_Ok : C_Alert;
+
         if (txtResultTitle)
         {
             txtResultTitle.text = ok ? UILocale.T("res_ok") : UILocale.T("res_fail");
-            txtResultTitle.color = ok ? C_Ok : C_Alert;
+            txtResultTitle.color = status;
         }
+        if (txtResultScore)
+        {
+            txtResultScore.text = $"{m.SuccessScore:F0}";
+            txtResultScore.color = status;
+        }
+        if (resultScoreBg != null)
+        {
+            var c = status;
+            c.a = UiTheme.IsLightBackground ? 0.16f : 0.22f;
+            resultScoreBg.color = c;
+        }
+        if (resultAccentBar != null)
+        {
+            var c = status;
+            c.a = 0.85f;
+            resultAccentBar.color = c;
+        }
+
+        // Compact metric cards
+        SetResultMetric(0, UILocale.T("res_m_v"),
+            $"{m.touchdownVelocity:F1} m/s", m.touchdownVelocity < maxV, $"< {maxV:F1}");
+        SetResultMetric(1, UILocale.T("res_m_tilt"),
+            $"{m.landingAngleError:F1}°", m.landingAngleError < maxA, $"< {maxA:F0}°");
+        SetResultMetric(2, UILocale.T("res_m_miss"),
+            $"{m.horizontalMiss:F1} m", m.horizontalMiss < maxM, $"< {maxM:F0} m");
+        SetResultMetric(3, UILocale.T("res_m_hv"),
+            $"{m.horizontalSpeed:F1} m/s", m.horizontalSpeed < maxH, $"< {maxH:F1}");
+
         if (txtResultBody)
         {
-            txtResultBody.text = m.BuildUserSummary(maxV, maxA, maxM, maxH, includeTitle: false)
-                                 + "\n" + UILocale.T("res_footer");
-            txtResultBody.color = C_Text;
+            if (ok)
+            {
+                txtResultBody.text = string.Format(UILocale.T("res_ok_sub"),
+                    m.totalFlightTime, m.fuelRemaining);
+                txtResultBody.color = C_Muted;
+            }
+            else if (m.timedOut)
+            {
+                txtResultBody.text = UILocale.IsUK
+                    ? "Час симуляції вичерпано"
+                    : "Simulation time exhausted";
+                txtResultBody.color = C_Alert;
+            }
+            else
+            {
+                txtResultBody.text = UILocale.T("res_fail_sub");
+                txtResultBody.color = C_Muted;
+            }
         }
+
         if (txtInsight != null)
         {
             txtInsight.text = ok
                 ? string.Format(UILocale.T("ins_ok"), m.SuccessScore)
                 : (UILocale.IsUK ? "Див. вікно результату →" : "See result dialog →");
-            txtInsight.color = ok ? C_Ok : C_Alert;
+            txtInsight.color = status;
         }
 
         try
@@ -1781,20 +1830,50 @@ public class MissionControlUI : MonoBehaviour
         }
         if (resultPanelBg)
         {
-            // Soft success/fail wash on panel chrome (not a flat slab)
             if (UiTheme.IsLightBackground)
                 resultPanelBg.color = ok
-                    ? Color.Lerp(C_Panel, new Color(0.78f, 0.92f, 0.84f, 1f), 0.55f)
-                    : Color.Lerp(C_Panel, new Color(0.96f, 0.82f, 0.82f, 1f), 0.55f);
+                    ? Color.Lerp(C_Panel, new Color(0.82f, 0.94f, 0.88f, 1f), 0.45f)
+                    : Color.Lerp(C_Panel, new Color(0.97f, 0.86f, 0.86f, 1f), 0.45f);
             else
                 resultPanelBg.color = ok
-                    ? Color.Lerp(C_Panel, new Color(0.10f, 0.18f, 0.14f, 1f), 0.65f)
-                    : Color.Lerp(C_Panel, new Color(0.20f, 0.10f, 0.10f, 1f), 0.65f);
-            var a = resultPanelBg.color; a.a = 0.97f; resultPanelBg.color = a;
+                    ? Color.Lerp(C_Panel, new Color(0.09f, 0.16f, 0.13f, 1f), 0.55f)
+                    : Color.Lerp(C_Panel, new Color(0.18f, 0.09f, 0.09f, 1f), 0.55f);
+            var a = resultPanelBg.color; a.a = 0.98f; resultPanelBg.color = a;
         }
 
-        SetStatusVisual(ok ? "st_success" : "st_fail", ok ? C_Ok : C_Alert);
-        Write(txtScore, $"{m.SuccessScore:F0}", ok ? C_Ok : C_Alert);
+        SetStatusVisual(ok ? "st_success" : "st_fail", status);
+        Write(txtScore, $"{m.SuccessScore:F0}", status);
+    }
+
+    void SetResultMetric(int i, string key, string value, bool pass, string limitHint)
+    {
+        if (resultMetricKeys == null || i < 0 || i >= resultMetricKeys.Length) return;
+        if (resultMetricKeys[i] != null)
+        {
+            resultMetricKeys[i].text = key;
+            resultMetricKeys[i].color = C_Muted;
+        }
+        if (resultMetricVals != null && resultMetricVals[i] != null)
+        {
+            resultMetricVals[i].text = value;
+            resultMetricVals[i].color = pass ? C_Ok : C_Alert;
+        }
+        // Optional: tint chip background via parent Image
+        if (resultMetricKeys[i] != null)
+        {
+            var chip = resultMetricKeys[i].transform.parent;
+            if (chip != null)
+            {
+                var img = chip.GetComponent<Image>();
+                if (img != null)
+                {
+                    Color c = pass ? C_Ok : C_Alert;
+                    c.a = UiTheme.IsLightBackground ? 0.10f : 0.14f;
+                    img.color = c;
+                }
+            }
+        }
+        _ = limitHint;
     }
 
     public void HideLandingResult()
@@ -1814,98 +1893,132 @@ public class MissionControlUI : MonoBehaviour
         resultRoot.GetComponent<Image>().raycastTarget = true;
         resultRoot.transform.SetAsLastSibling();
 
-        // Original dialog layout, refined chrome
+        // Compact card — content-tight, no dead air
         var card = CreatePanel("ResultCard", resultRoot.transform, C_Panel);
         resultPanelBg = card.GetComponent<Image>();
         var crt = card.GetComponent<RectTransform>();
         crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
         crt.pivot = new Vector2(0.5f, 0.5f);
-        crt.sizeDelta = new Vector2(540f, 320f);
-        Outline(card, 1.5f);
+        crt.sizeDelta = new Vector2(480f, 206f);
+        Outline(card, 1.4f);
 
-        // Thin accent strip under top edge
-        var accent = CreatePanel("ResAccent", card.transform, new Color(C_Cyan.r, C_Cyan.g, C_Cyan.b, 0.55f));
+        // Status accent bar
+        var accent = CreatePanel("ResAccent", card.transform, new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.85f));
+        resultAccentBar = accent.GetComponent<Image>();
+        resultAccentBar.raycastTarget = false;
         var art = accent.GetComponent<RectTransform>();
         art.anchorMin = new Vector2(0f, 1f);
         art.anchorMax = new Vector2(1f, 1f);
         art.pivot = new Vector2(0.5f, 1f);
         art.anchoredPosition = Vector2.zero;
         art.sizeDelta = new Vector2(0f, 3f);
-        accent.GetComponent<Image>().raycastTarget = false;
 
-        txtResultTitle = CreateText(card.transform, "РЕЗУЛЬТАТ", 20, C_Ok, FontStyles.Bold);
+        // Header row: title (left) + score pill (right)
+        txtResultTitle = CreateText(card.transform, UILocale.T("res_ok"), 17, C_Ok, FontStyles.Bold);
         var trtTitle = txtResultTitle.rectTransform;
-        trtTitle.anchorMin = new Vector2(0, 1);
-        trtTitle.anchorMax = new Vector2(1, 1);
-        trtTitle.pivot = new Vector2(0.5f, 1);
-        trtTitle.anchoredPosition = new Vector2(0, -18);
-        trtTitle.sizeDelta = new Vector2(-40, 28);
-        txtResultTitle.alignment = TextAlignmentOptions.Center;
-        txtResultTitle.characterSpacing = 1.5f;
+        trtTitle.anchorMin = new Vector2(0f, 1f);
+        trtTitle.anchorMax = new Vector2(1f, 1f);
+        trtTitle.pivot = new Vector2(0f, 1f);
+        trtTitle.anchoredPosition = new Vector2(20f, -14f);
+        trtTitle.sizeDelta = new Vector2(-110f, 26f);
+        txtResultTitle.alignment = TextAlignmentOptions.MidlineLeft;
+        txtResultTitle.characterSpacing = 0.8f;
 
-        // Soft divider under title
-        var div = CreatePanel("ResDiv", card.transform, new Color(1f, 1f, 1f, 0.08f));
-        var drt = div.GetComponent<RectTransform>();
-        drt.anchorMin = new Vector2(0.12f, 1f);
-        drt.anchorMax = new Vector2(0.88f, 1f);
-        drt.pivot = new Vector2(0.5f, 1f);
-        drt.anchoredPosition = new Vector2(0f, -50f);
-        drt.sizeDelta = new Vector2(0f, 1f);
-        div.GetComponent<Image>().raycastTarget = false;
+        var scorePill = CreatePanel("ScorePill", card.transform, new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.18f));
+        resultScoreBg = scorePill.GetComponent<Image>();
+        resultScoreBg.raycastTarget = false;
+        var sprt = scorePill.GetComponent<RectTransform>();
+        sprt.anchorMin = sprt.anchorMax = new Vector2(1f, 1f);
+        sprt.pivot = new Vector2(1f, 1f);
+        sprt.anchoredPosition = new Vector2(-16f, -12f);
+        sprt.sizeDelta = new Vector2(72f, 36f);
 
-        txtResultBody = CreateText(card.transform, "", 14, C_Text);
-        txtResultBody.textWrappingMode = TextWrappingModes.Normal;
-        txtResultBody.overflowMode = TextOverflowModes.Overflow;
-        txtResultBody.alignment = TextAlignmentOptions.TopLeft;
-        txtResultBody.lineSpacing = 4f;
+        txtResultScore = CreateText(scorePill.transform, "—", 20, C_Ok, FontStyles.Bold);
+        StretchFull(txtResultScore.rectTransform, 2, 2, 2, 2);
+        txtResultScore.alignment = TextAlignmentOptions.Center;
+        txtResultScore.characterSpacing = 1f;
+
+        // One-line subtitle
+        txtResultBody = CreateText(card.transform, "", 11, C_Muted);
+        txtResultBody.textWrappingMode = TextWrappingModes.NoWrap;
+        txtResultBody.overflowMode = TextOverflowModes.Ellipsis;
+        txtResultBody.alignment = TextAlignmentOptions.MidlineLeft;
         var brt = txtResultBody.rectTransform;
-        brt.anchorMin = new Vector2(0, 0);
-        brt.anchorMax = new Vector2(1, 1);
-        brt.offsetMin = new Vector2(28, 92);
-        brt.offsetMax = new Vector2(-28, -58);
+        brt.anchorMin = new Vector2(0f, 1f);
+        brt.anchorMax = new Vector2(1f, 1f);
+        brt.pivot = new Vector2(0f, 1f);
+        brt.anchoredPosition = new Vector2(20f, -42f);
+        brt.sizeDelta = new Vector2(-40f, 18f);
 
-        float btnY = 48f;
-        var trGo = CreatePanel("ShowTraj", card.transform, C_Btn);
-        var trt = trGo.GetComponent<RectTransform>();
-        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0);
-        trt.pivot = new Vector2(0.5f, 0);
-        trt.anchoredPosition = new Vector2(-110, btnY);
-        trt.sizeDelta = new Vector2(200, 34);
-        var tbtn = trGo.AddComponent<Button>();
-        tbtn.targetGraphic = trGo.GetComponent<Image>();
-        var ttxt = CreateText(trGo.transform, UILocale.T("btn_show_traj"), 13,
-            UiTheme.ContrastOn(C_Btn), FontStyles.Bold);
-        StretchFull(ttxt.rectTransform, 4, 3, 4, 3);
-        ttxt.alignment = TextAlignmentOptions.Center;
-        tbtn.onClick.AddListener(() => { HideLandingResult(); OnFullTrajectoryView(); });
+        // Four metric chips in one tight row
+        resultMetricKeys = new TMP_Text[4];
+        resultMetricVals = new TMP_Text[4];
+        string[] keyPh = {
+            UILocale.T("res_m_v"), UILocale.T("res_m_tilt"),
+            UILocale.T("res_m_miss"), UILocale.T("res_m_hv")
+        };
+        float rowChipW = 102f;
+        float rowGap = 8f;
+        float rowW = rowChipW * 4f + rowGap * 3f;
+        float rowX0 = (480f - rowW) * 0.5f;
+        for (int i = 0; i < 4; i++)
+        {
+            var chip = CreatePanel($"Metric_{i}", card.transform, C_PanelSoft);
+            chip.GetComponent<Image>().raycastTarget = false;
+            var crtChip = chip.GetComponent<RectTransform>();
+            crtChip.anchorMin = crtChip.anchorMax = new Vector2(0f, 1f);
+            crtChip.pivot = new Vector2(0f, 1f);
+            crtChip.anchoredPosition = new Vector2(rowX0 + i * (rowChipW + rowGap), -64f);
+            crtChip.sizeDelta = new Vector2(rowChipW, 58f);
 
-        var exGo = CreatePanel("ExportResult", card.transform, C_Btn);
-        var ert = exGo.GetComponent<RectTransform>();
-        ert.anchorMin = ert.anchorMax = new Vector2(0.5f, 0);
-        ert.pivot = new Vector2(0.5f, 0);
-        ert.anchoredPosition = new Vector2(110, btnY);
-        ert.sizeDelta = new Vector2(200, 34);
-        var ebtn = exGo.AddComponent<Button>();
-        ebtn.targetGraphic = exGo.GetComponent<Image>();
-        var etxt = CreateText(exGo.transform, UILocale.T("btn_export_short"), 13,
-            UiTheme.ContrastOn(C_Btn), FontStyles.Bold);
-        StretchFull(etxt.rectTransform, 4, 3, 4, 3);
-        etxt.alignment = TextAlignmentOptions.Center;
-        ebtn.onClick.AddListener(OnExportResults);
+            resultMetricKeys[i] = CreateText(chip.transform, keyPh[i], 10, C_Muted, FontStyles.Bold);
+            var krt = resultMetricKeys[i].rectTransform;
+            krt.anchorMin = new Vector2(0f, 1f);
+            krt.anchorMax = new Vector2(1f, 1f);
+            krt.pivot = new Vector2(0.5f, 1f);
+            krt.anchoredPosition = new Vector2(0f, -8f);
+            krt.sizeDelta = new Vector2(-10f, 16f);
+            resultMetricKeys[i].alignment = TextAlignmentOptions.Center;
 
-        var closeGo = CreatePanel("CloseResult", card.transform, C_BtnActive);
-        var clrt = closeGo.GetComponent<RectTransform>();
-        clrt.anchorMin = clrt.anchorMax = new Vector2(0.5f, 0);
-        clrt.pivot = new Vector2(0.5f, 0);
-        clrt.anchoredPosition = new Vector2(0, 10);
-        clrt.sizeDelta = new Vector2(210, 32);
-        var cbtn = closeGo.AddComponent<Button>();
-        cbtn.targetGraphic = closeGo.GetComponent<Image>();
-        var ctxt = CreateText(closeGo.transform, UILocale.T("btn_ok"), 14,
-            UiTheme.ContrastOn(C_BtnActive), FontStyles.Bold);
-        StretchFull(ctxt.rectTransform, 4, 3, 4, 3);
-        ctxt.alignment = TextAlignmentOptions.Center;
-        cbtn.onClick.AddListener(HideLandingResult);
+            resultMetricVals[i] = CreateText(chip.transform, "—", 15, C_Text, FontStyles.Bold);
+            var vrt = resultMetricVals[i].rectTransform;
+            vrt.anchorMin = new Vector2(0f, 0f);
+            vrt.anchorMax = new Vector2(1f, 1f);
+            vrt.offsetMin = new Vector2(6f, 8f);
+            vrt.offsetMax = new Vector2(-6f, -24f);
+            resultMetricVals[i].alignment = TextAlignmentOptions.Center;
+        }
+
+        // Single action row — three equal buttons, flush under metrics
+        float btnH = 32f;
+        float btnY = 12f;
+        float btnGap = 8f;
+        float btnW = 140f;
+        float btnsW = btnW * 3f + btnGap * 2f;
+        float btnX0 = (480f - btnsW) * 0.5f;
+
+        void MakeResultBtn(string name, string label, Color bg, float x, System.Action onClick)
+        {
+            var go = CreatePanel(name, card.transform, bg);
+            var br = go.GetComponent<RectTransform>();
+            br.anchorMin = br.anchorMax = new Vector2(0f, 0f);
+            br.pivot = new Vector2(0f, 0f);
+            br.anchoredPosition = new Vector2(x, btnY);
+            br.sizeDelta = new Vector2(btnW, btnH);
+            var btn = go.AddComponent<Button>();
+            btn.targetGraphic = go.GetComponent<Image>();
+            var t = CreateText(go.transform, label, 12, UiTheme.ContrastOn(bg), FontStyles.Bold);
+            StretchFull(t.rectTransform, 4, 2, 4, 2);
+            t.alignment = TextAlignmentOptions.Center;
+            btn.onClick.AddListener(() => onClick());
+        }
+
+        MakeResultBtn("ShowTraj", UILocale.T("btn_show_traj"), C_Btn, btnX0,
+            () => { HideLandingResult(); OnFullTrajectoryView(); });
+        MakeResultBtn("ExportResult", UILocale.T("btn_export_short"), C_Btn, btnX0 + btnW + btnGap,
+            OnExportResults);
+        MakeResultBtn("CloseResult", UILocale.T("btn_ok"), C_BtnActive, btnX0 + (btnW + btnGap) * 2f,
+            HideLandingResult);
 
         resultRoot.SetActive(false);
     }

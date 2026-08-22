@@ -44,84 +44,89 @@ public static class RocketVisualBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(root, false);
 
-        // ── Palette (restrained) — skins are expensive; yield after each ──
-        var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.055f, seed: 11);
+        // ── Palette — clean Falcon-class presentation ──
+        var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.042f, seed: 11);
         yield return null;
-        var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.32f, panelContrast: 0.06f, seed: 29);
+        var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.22f, panelContrast: 0.048f, seed: 29);
         yield return null;
-        var black = VisualMaterials.Lit(new Color(0.045f, 0.048f, 0.055f), 0.55f, 0.32f);
-        var metal = VisualMaterials.Lit(new Color(0.74f, 0.76f, 0.80f), 0.94f, 0.82f);
-        var titanium = VisualMaterials.Lit(new Color(0.60f, 0.62f, 0.66f), 0.90f, 0.70f);
-        var carbon = VisualMaterials.Lit(new Color(0.07f, 0.075f, 0.08f), 0.42f, 0.42f);
-        var silver = VisualMaterials.Lit(new Color(0.88f, 0.90f, 0.93f), 0.93f, 0.78f);
+        var black = VisualMaterials.Lit(new Color(0.035f, 0.037f, 0.042f), 0.62f, 0.38f);
+        var metal = VisualMaterials.Lit(new Color(0.78f, 0.80f, 0.84f), 0.95f, 0.86f);
+        var titanium = VisualMaterials.Lit(new Color(0.66f, 0.68f, 0.72f), 0.92f, 0.74f);
+        var carbon = VisualMaterials.Lit(new Color(0.055f, 0.058f, 0.062f), 0.48f, 0.48f);
+        var silver = VisualMaterials.Lit(new Color(0.90f, 0.92f, 0.95f), 0.94f, 0.84f);
         var heat = MakeNozzleSkin("NozzleHeat", seed: 7);
         yield return null;
-        var copper = VisualMaterials.Lit(new Color(0.58f, 0.42f, 0.30f), 0.92f, 0.55f);
-        var darkMetal = VisualMaterials.Lit(new Color(0.16f, 0.17f, 0.19f), 0.88f, 0.48f);
-        var stripe = VisualMaterials.Lit(new Color(0.055f, 0.055f, 0.06f), 0.40f, 0.28f);
-        var hydra = VisualMaterials.Lit(new Color(0.82f, 0.84f, 0.88f), 0.85f, 0.55f);
+        var copper = VisualMaterials.Lit(new Color(0.62f, 0.44f, 0.32f), 0.93f, 0.58f);
+        var darkMetal = VisualMaterials.Lit(new Color(0.14f, 0.15f, 0.17f), 0.90f, 0.52f);
+        var stripe = VisualMaterials.Lit(new Color(0.04f, 0.04f, 0.045f), 0.45f, 0.32f);
+        var accent = VisualMaterials.Lit(new Color(0.12f, 0.42f, 0.78f), 0.35f, 0.55f); // quiet brand blue
+        var hydra = VisualMaterials.Lit(new Color(0.86f, 0.88f, 0.92f), 0.88f, 0.62f);
+        var whitePaint = VisualMaterials.Lit(new Color(0.96f, 0.97f, 0.985f), 0.08f, 0.78f);
         var interstageMat = MakeInterstageSkin("InterstageCFRP", seed: 41);
         yield return null;
 
-        // ── Aft (octaweb + short skirt — no stringers / ribs clutter) ──
-        SmoothCyl("Octaweb", visual.transform, 0.85f, Radius * 2.38f, 0.90f, black);
-        SmoothCyl("OctawebLip", visual.transform, 0.28f, Radius * 2.44f, 0.04f, titanium);
-        SmoothCyl("AftSkirt", visual.transform, 2.70f, Radius * 2.12f, 0.72f, carbon);
-        SmoothCyl("AftJoin", visual.transform, 3.55f, Radius * 2.04f, 0.08f, darkMetal);
+        // ── Aft (octaweb + TPS skirt) ──
+        SmoothCyl("Octaweb", visual.transform, 0.82f, Radius * 2.40f, 0.88f, black);
+        SmoothCyl("OctawebLip", visual.transform, 0.26f, Radius * 2.48f, 0.035f, titanium);
+        SmoothCyl("AftSkirt", visual.transform, 2.65f, Radius * 2.14f, 0.78f, carbon);
+        SmoothCyl("AftSkirtRim", visual.transform, 3.48f, Radius * 2.16f, 0.04f, darkMetal);
+        SmoothCyl("AftJoin", visual.transform, 3.62f, Radius * 2.05f, 0.07f, silver);
 
-        // ── Body stack (halfHeight = half of full height; pieces butt-join) ──
-        // LowerTank top = 8.40+4.70 = 13.10
+        // ── Body stack ──
         SmoothCyl("LowerTank", visual.transform, 8.40f, Radius * 2.0f, 4.70f, whiteLower);
-        SmoothCyl("CommonDome", visual.transform, 13.25f, Radius * 2.04f, 0.15f, silver); // 13.10..13.40
-        SmoothCyl("Stripe1", visual.transform, 13.50f, Radius * 2.07f, 0.10f, stripe);   // 13.40..13.60
-        // Mid 13.60..28.80 → center 21.20, half 7.60
+        SmoothCyl("CommonDome", visual.transform, 13.25f, Radius * 2.05f, 0.14f, silver);
+        SmoothCyl("Stripe1", visual.transform, 13.50f, Radius * 2.08f, 0.09f, stripe);
         SmoothCyl("MidTank", visual.transform, 21.20f, Radius * 2.0f, 7.60f, white);
-        SmoothCyl("Stripe2", visual.transform, 28.95f, Radius * 2.07f, 0.15f, stripe);   // 28.80..29.10
-        // Upper 29.10..36.50 → center 32.80, half 3.70
+        SmoothCyl("Stripe2", visual.transform, 28.95f, Radius * 2.08f, 0.12f, stripe);
         SmoothCyl("UpperTank", visual.transform, 32.80f, Radius * 2.0f, 3.70f, white);
 
-        float[] ringYs = { 6.2f, 10.5f, 17.5f, 24.5f, 31.5f };
+        // Thin bright weld rings — catch light on the white stack
+        float[] ringYs = { 5.9f, 10.2f, 17.2f, 24.2f, 31.2f, 35.6f };
         for (int i = 0; i < ringYs.Length; i++)
-            SmoothCyl($"Ring_{i}", visual.transform, ringYs[i], Radius * 2.03f, 0.012f, silver);
+            SmoothCyl($"Ring_{i}", visual.transform, ringYs[i], Radius * 2.035f, 0.010f, silver);
 
-        SmoothCyl("SootBand", visual.transform, 5.15f, Radius * 2.02f, 0.70f,
-            VisualMaterials.Lit(new Color(0.12f, 0.11f, 0.105f), 0.38f, 0.20f));
+        // Soft residual soot only at very bottom of white stack
+        SmoothCyl("SootBand", visual.transform, 4.95f, Radius * 2.015f, 0.55f,
+            VisualMaterials.Lit(new Color(0.18f, 0.175f, 0.17f), 0.42f, 0.28f));
 
-        // ── Head: Falcon-class 1st stage — black CFRP interstage + rounded metal cap ──
-        // (no tall payload fairing — landing booster look)
+        // ── Head: black CFRP interstage + closed booster nose ──
         float top = 36.50f;
 
-        float crownH = 0.10f;
-        SmoothCyl("UpperCrown", visual.transform, top + crownH * 0.5f, Radius * 2.01f, crownH * 0.5f, silver);
-        top += crownH;
+        SmoothCyl("UpperCrown", visual.transform, top + 0.05f, Radius * 2.02f, 0.05f, silver);
+        top += 0.10f;
 
         float interH = 1.55f;
         SmoothCyl("Interstage", visual.transform, top + interH * 0.5f, Radius * 2.0f, interH * 0.5f, interstageMat);
+        // Thin bright lip at base of interstage
+        SmoothCyl("InterLip", visual.transform, top + 0.04f, Radius * 2.04f, 0.04f, titanium);
         float interstageMidY = top + interH * 0.5f;
         top += interH;
 
-        // Closed nose: full-diameter plug + short blunt ogive (no cavity / hole)
-        SmoothCyl("SepRing", visual.transform, top + 0.025f, Radius * 2.04f, 0.025f, titanium);
+        SmoothCyl("SepRing", visual.transform, top + 0.025f, Radius * 2.05f, 0.025f, silver);
         top += 0.05f;
-        // Solid bulkhead disc fills the tube completely
         SmoothCyl("Bulkhead", visual.transform, top + 0.10f, Radius * 2.0f, 0.10f, darkMetal);
         top += 0.20f;
-        // Short frustum taper then blunt ogive tip — continuous solid silhouette
         SmoothMesh.MakeFrustum("NoseShoulder", visual.transform,
-            new Vector3(0f, top + 0.28f, 0f),
-            Radius * 2.0f, 0.28f, topRatio: 0.55f, titanium);
-        top += 0.56f;
+            new Vector3(0f, top + 0.30f, 0f),
+            Radius * 2.0f, 0.30f, topRatio: 0.52f, titanium);
+        top += 0.60f;
         SmoothMesh.MakeOgive("NoseTip", visual.transform,
-            new Vector3(0f, top + 0.42f, 0f),
-            Radius * 1.12f, 0.42f, metal, tipBlunt: 0.22f);
+            new Vector3(0f, top + 0.40f, 0f),
+            Radius * 1.05f, 0.40f, metal, tipBlunt: 0.18f);
 
-        // Single thin raceway (no clips / conduits / COPV clutter)
+        // Raceway + thin conduit accent
         SmoothCylAt("Raceway", visual.transform,
-            new Vector3(Radius + 0.10f, 20.5f, 0f), 0.20f, 14.0f, carbon);
+            new Vector3(Radius + 0.11f, 20.5f, 0f), 0.18f, 14.2f, carbon);
+        SmoothCylAt("RacewayEdge", visual.transform,
+            new Vector3(Radius + 0.20f, 20.5f, 0f), 0.05f, 14.0f, darkMetal);
 
-        // Quiet black logo panel (no gold dots / cyan lines)
-        Prim(PrimitiveType.Cube, "LogoPanel", visual.transform,
-            new Vector3(0f, 24.2f, Radius + 0.03f), new Vector3(1.6f, 2.4f, 0.028f), black);
+        // Brand panel: black plate + white field + blue accent bar
+        Prim(PrimitiveType.Cube, "LogoBack", visual.transform,
+            new Vector3(0f, 24.2f, Radius + 0.025f), new Vector3(1.85f, 2.70f, 0.022f), black);
+        Prim(PrimitiveType.Cube, "LogoField", visual.transform,
+            new Vector3(0f, 24.25f, Radius + 0.040f), new Vector3(1.45f, 1.85f, 0.018f), whitePaint);
+        Prim(PrimitiveType.Cube, "LogoBar", visual.transform,
+            new Vector3(0f, 23.25f, Radius + 0.048f), new Vector3(1.20f, 0.12f, 0.016f), accent);
 
         yield return null;
         BuildGridFins(visual.transform, titanium, silver, darkMetal, carbon, interstageMidY);
@@ -184,63 +189,60 @@ public static class RocketVisualBuilder
                 float u = x / (float)tw;
                 int idx = y * tw + x;
 
-                // Base cool white / light gray
-                float g = 0.94f;
-                g += HashNoise(u * 48f + ox, v * 96f + oy) * 0.012f;
-                g += HashNoise(u * 120f - ox, v * 200f + oy) * 0.006f;
+                // Clean presentation white — minimal noise, crisp panels
+                float g = 0.965f;
+                g += HashNoise(u * 36f + ox, v * 72f + oy) * 0.006f;
+                g += HashNoise(u * 90f - ox, v * 140f + oy) * 0.003f;
 
-                // Horizontal panel seams (thin, sharp, cylindrical-correct)
+                // Horizontal bay seams
                 float hCell = v * nHoriz;
                 float hEdge = Mathf.Abs(hCell - Mathf.Round(hCell));
-                float hSeam = 1f - Mathf.SmoothStep(0f, 0.045f, hEdge);
-                g -= hSeam * panelContrast * 0.85f;
+                float hSeam = 1f - Mathf.SmoothStep(0f, 0.038f, hEdge);
+                g -= hSeam * panelContrast * 0.70f;
 
-                // Vertical stringers
+                // Vertical stringers (narrow)
                 float vCell = u * nVert;
                 float vEdge = Mathf.Abs(vCell - Mathf.Round(vCell));
-                float vSeam = 1f - Mathf.SmoothStep(0f, 0.018f, vEdge);
-                g -= vSeam * panelContrast * 0.55f;
+                float vSeam = 1f - Mathf.SmoothStep(0f, 0.014f, vEdge);
+                g -= vSeam * panelContrast * 0.42f;
 
-                // Rivet dots along seams
-                if (hSeam > 0.35f || vSeam > 0.35f)
+                // Sparse rivets — only on seams, tiny
+                if (hSeam > 0.45f || vSeam > 0.45f)
                 {
-                    float rivU = u * nVert * 8f;
-                    float rivV = v * nHoriz * 4f;
+                    float rivU = u * nVert * 6f;
+                    float rivV = v * nHoriz * 3f;
                     float rd = Mathf.Min(
                         Mathf.Abs(rivU - Mathf.Round(rivU)),
                         Mathf.Abs(rivV - Mathf.Round(rivV)));
-                    if (rd < 0.08f)
-                        g -= (1f - rd / 0.08f) * 0.04f;
+                    if (rd < 0.06f)
+                        g -= (1f - rd / 0.06f) * 0.025f;
                 }
 
-                // Soft soot / heat wash from bottom (only lower tanks)
+                // Soft soot wash (lower tanks only) — cool charcoal, not brown
                 if (sootAmount > 0.01f)
                 {
-                    float sootV = Mathf.Clamp01(1f - v * 1.35f);
-                    sootV = sootV * sootV;
-                    float blot = 0.55f + 0.45f * HashNoise(u * 6f + 3f, v * 10f - 2f);
-                    // asymmetric circumferential wash
-                    float side = 0.65f + 0.35f * Mathf.Sin(u * Mathf.PI * 2f * 1.0f + 0.7f);
-                    g -= sootAmount * sootV * blot * side * 0.55f;
-                    // slight warm-to-cool keep neutral-dark (avoid brown body)
-                    // (g only — applied as gray)
+                    float sootV = Mathf.Clamp01(1f - v * 1.55f);
+                    sootV = sootV * sootV * sootV;
+                    float blot = 0.60f + 0.40f * HashNoise(u * 5f + 3f, v * 8f - 2f);
+                    float side = 0.70f + 0.30f * Mathf.Sin(u * Mathf.PI * 2f + 0.7f);
+                    g -= sootAmount * sootV * blot * side * 0.48f;
                 }
 
-                // Micro orange-peel
-                g += HashNoise(u * 400f, v * 800f) * 0.008f;
-                g = Mathf.Clamp01(g);
+                // Very light micro grain
+                g += HashNoise(u * 280f, v * 520f) * 0.004f;
+                g = Mathf.Clamp(g, 0.55f, 0.995f);
 
-                // Cool white (slight blue, not cream)
-                float rC = Mathf.Clamp01(g * 0.995f);
-                float gC = Mathf.Clamp01(g);
-                float bC = Mathf.Clamp01(g * 1.01f);
+                // Cool pure white (slight blue, premium paint)
+                float rC = Mathf.Clamp01(g * 0.992f);
+                float gC = Mathf.Clamp01(g * 0.998f);
+                float bC = Mathf.Clamp01(g * 1.012f);
                 cols[idx] = new Color(rC, gC, bC, 1f);
 
-                // Tangent-space normal from panel grooves (U→tangent, V→bitangent)
+                // Soft panel normals
                 float du = (SampleGray(u + 1f / tw, v, nVert, nHoriz, sootAmount, panelContrast, ox, oy)
-                          - SampleGray(u - 1f / tw, v, nVert, nHoriz, sootAmount, panelContrast, ox, oy)) * 6f;
+                          - SampleGray(u - 1f / tw, v, nVert, nHoriz, sootAmount, panelContrast, ox, oy)) * 4.2f;
                 float dv = (SampleGray(u, v + 1f / th, nVert, nHoriz, sootAmount, panelContrast, ox, oy)
-                          - SampleGray(u, v - 1f / th, nVert, nHoriz, sootAmount, panelContrast, ox, oy)) * 6f;
+                          - SampleGray(u, v - 1f / th, nVert, nHoriz, sootAmount, panelContrast, ox, oy)) * 4.2f;
                 Vector3 tn = new Vector3(-du, -dv, 1f).normalized;
                 nrmCols[idx] = new Color(tn.x * 0.5f + 0.5f, tn.y * 0.5f + 0.5f, tn.z * 0.5f + 0.5f, 1f);
             }
@@ -255,8 +257,9 @@ public static class RocketVisualBuilder
         mat.name = name;
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
         if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.06f);
-        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", sootAmount > 0.2f ? 0.42f : 0.72f);
+        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.04f);
+        // Glossy aerospace paint on clean tanks; matte where sooted
+        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", sootAmount > 0.15f ? 0.48f : 0.82f);
         if (mat.HasProperty("_BaseMap"))
         {
             mat.SetTexture("_BaseMap", tex);
@@ -268,7 +271,7 @@ public static class RocketVisualBuilder
         {
             mat.SetTexture("_BumpMap", nrm);
             mat.EnableKeyword("_NORMALMAP");
-            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.55f);
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.38f);
         }
         return mat;
     }
@@ -277,19 +280,19 @@ public static class RocketVisualBuilder
     {
         u = u - Mathf.Floor(u);
         v = Mathf.Clamp01(v);
-        float g = 0.94f;
-        g += HashNoise(u * 48f + ox, v * 96f + oy) * 0.012f;
+        float g = 0.965f;
+        g += HashNoise(u * 36f + ox, v * 72f + oy) * 0.006f;
         float hCell = v * nHoriz;
         float hEdge = Mathf.Abs(hCell - Mathf.Round(hCell));
-        g -= (1f - Mathf.SmoothStep(0f, 0.045f, hEdge)) * panelContrast * 0.85f;
+        g -= (1f - Mathf.SmoothStep(0f, 0.038f, hEdge)) * panelContrast * 0.70f;
         float vCell = u * nVert;
         float vEdge = Mathf.Abs(vCell - Mathf.Round(vCell));
-        g -= (1f - Mathf.SmoothStep(0f, 0.018f, vEdge)) * panelContrast * 0.55f;
+        g -= (1f - Mathf.SmoothStep(0f, 0.014f, vEdge)) * panelContrast * 0.42f;
         if (sootAmount > 0.01f)
         {
-            float sootV = Mathf.Clamp01(1f - v * 1.35f);
-            sootV *= sootV;
-            g -= sootAmount * sootV * 0.35f;
+            float sootV = Mathf.Clamp01(1f - v * 1.55f);
+            sootV = sootV * sootV * sootV;
+            g -= sootAmount * sootV * 0.32f;
         }
         return g;
     }
@@ -315,18 +318,19 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Carbon fiber weave (dark)
-                float g = 0.07f;
-                float weaveU = Mathf.Abs((u * 32f) - Mathf.Round(u * 32f));
-                float weaveV = Mathf.Abs((v * 18f) - Mathf.Round(v * 18f));
-                g += (1f - Mathf.SmoothStep(0f, 0.15f, weaveU)) * 0.025f;
-                g += (1f - Mathf.SmoothStep(0f, 0.15f, weaveV)) * 0.02f;
-                g += HashNoise(u * 40f + ox, v * 40f) * 0.015f;
-                // Horizontal stiffener bands
-                float band = Mathf.Abs((v * 6f) - Mathf.Round(v * 6f));
-                g += (1f - Mathf.SmoothStep(0f, 0.08f, band)) * 0.04f;
+                // Deep CFRP weave with subtle sheen bands
+                float g = 0.055f;
+                float weaveU = Mathf.Abs((u * 40f) - Mathf.Round(u * 40f));
+                float weaveV = Mathf.Abs((v * 22f) - Mathf.Round(v * 22f));
+                g += (1f - Mathf.SmoothStep(0f, 0.12f, weaveU)) * 0.028f;
+                g += (1f - Mathf.SmoothStep(0f, 0.12f, weaveV)) * 0.022f;
+                g += HashNoise(u * 48f + ox, v * 48f) * 0.012f;
+                float band = Mathf.Abs((v * 5f) - Mathf.Round(v * 5f));
+                g += (1f - Mathf.SmoothStep(0f, 0.07f, band)) * 0.045f;
+                // Slight vertical gloss gradient
+                g += (0.5f - Mathf.Abs(v - 0.5f)) * 0.02f;
                 g = Mathf.Clamp01(g);
-                cols[y * tw + x] = new Color(g * 0.95f, g * 0.97f, g * 1.05f, 1f);
+                cols[y * tw + x] = new Color(g * 0.92f, g * 0.95f, g * 1.08f, 1f);
             }
         }
         tex.SetPixels(cols);
@@ -335,8 +339,8 @@ public static class RocketVisualBuilder
         var mat = new Material(VisualMaterials.LitShader);
         mat.name = name;
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
-        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.35f);
-        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.38f);
+        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.42f);
+        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.52f);
         if (mat.HasProperty("_BaseMap"))
         {
             mat.SetTexture("_BaseMap", tex);
@@ -441,31 +445,34 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Niobium / carbon-carbon heat gradient: dark throat → glowing mid → dark exit soot
-                float body = Mathf.Lerp(0.10f, 0.22f, Mathf.Sin(v * Mathf.PI));
-                // Cooling tube rings (circumferential) — crisp on cylindrical UV
-                float ring = Mathf.Abs((v * 22f) - Mathf.Round(v * 22f));
-                float ringLine = 1f - Mathf.SmoothStep(0f, 0.12f, ring);
-                body += ringLine * 0.07f;
-                // Longitudinal regen channels
-                float ch = Mathf.Abs((u * 48f) - Mathf.Round(u * 48f));
-                body += (1f - Mathf.SmoothStep(0f, 0.08f, ch)) * 0.035f;
-                // Heat iridescence-ish noise (subtle)
-                body += HashNoise(u * 20f + ox, v * 30f) * 0.03f;
+                // Regen-cooled niobium bell: dark exit → bronze mid → steel throat
+                float mid = Mathf.Sin(v * Mathf.PI);
+                float body = Mathf.Lerp(0.12f, 0.28f, mid);
+                float ring = Mathf.Abs((v * 26f) - Mathf.Round(v * 26f));
+                body += (1f - Mathf.SmoothStep(0f, 0.10f, ring)) * 0.08f;
+                float ch = Mathf.Abs((u * 56f) - Mathf.Round(u * 56f));
+                body += (1f - Mathf.SmoothStep(0f, 0.07f, ch)) * 0.04f;
+                body += HashNoise(u * 18f + ox, v * 28f) * 0.025f;
                 body = Mathf.Clamp01(body);
 
-                // Slight copper/bronze at mid-bell, charcoal at ends
-                float mid = Mathf.Sin(v * Mathf.PI);
-                float rC = body * (0.55f + 0.35f * mid);
-                float gC = body * (0.38f + 0.15f * mid);
-                float bC = body * (0.30f + 0.05f * mid);
-                // throat brighter metallic
-                if (v > 0.82f)
+                float rC = body * (0.48f + 0.42f * mid);
+                float gC = body * (0.34f + 0.22f * mid);
+                float bC = body * (0.28f + 0.10f * mid);
+                // Sooted exit lip
+                if (v < 0.12f)
                 {
-                    float t = (v - 0.82f) / 0.18f;
-                    rC = Mathf.Lerp(rC, 0.45f, t);
-                    gC = Mathf.Lerp(gC, 0.42f, t);
-                    bC = Mathf.Lerp(bC, 0.40f, t);
+                    float t = 1f - v / 0.12f;
+                    rC = Mathf.Lerp(rC, 0.08f, t * 0.7f);
+                    gC = Mathf.Lerp(gC, 0.08f, t * 0.7f);
+                    bC = Mathf.Lerp(bC, 0.09f, t * 0.7f);
+                }
+                // Bright metallic throat
+                if (v > 0.80f)
+                {
+                    float t = (v - 0.80f) / 0.20f;
+                    rC = Mathf.Lerp(rC, 0.52f, t);
+                    gC = Mathf.Lerp(gC, 0.50f, t);
+                    bC = Mathf.Lerp(bC, 0.48f, t);
                 }
                 cols[y * tw + x] = new Color(rC, gC, bC, 1f);
             }
@@ -476,8 +483,8 @@ public static class RocketVisualBuilder
         var mat = new Material(VisualMaterials.LitShader);
         mat.name = name;
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
-        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.82f);
-        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.28f);
+        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.88f);
+        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.34f);
         if (mat.HasProperty("_BaseMap"))
         {
             mat.SetTexture("_BaseMap", tex);
@@ -523,35 +530,36 @@ public static class RocketVisualBuilder
         for (int i = 0; i < 4; i++)
         {
             float a = i * 90f * Mathf.Deg2Rad;
-            float r = Radius + 1.35f;
+            float r = Radius + 1.42f;
             var fin = new GameObject($"GridFin_{i}");
             fin.transform.SetParent(visual, false);
             fin.transform.localPosition = new Vector3(Mathf.Sin(a) * r, mountY, Mathf.Cos(a) * r);
-            fin.transform.localRotation = Quaternion.Euler(0f, i * 90f, 3f);
+            fin.transform.localRotation = Quaternion.Euler(0f, i * 90f, 2f);
 
-            // Outer frame only + sparse grid (readable, not busy)
+            // Titanium frame + denser titanium lattice (readable from camera)
             Prim(PrimitiveType.Cube, "Plate", fin.transform, Vector3.zero,
-                new Vector3(0.04f, 2.30f, 3.10f), frame);
-            Prim(PrimitiveType.Cube, "RimT", fin.transform, new Vector3(0.03f, 1.12f, 0f),
-                new Vector3(0.08f, 0.05f, 3.05f), lattice);
-            Prim(PrimitiveType.Cube, "RimB", fin.transform, new Vector3(0.03f, -1.12f, 0f),
-                new Vector3(0.08f, 0.05f, 3.05f), frame);
-            Prim(PrimitiveType.Cube, "RimL", fin.transform, new Vector3(0.03f, 0f, 1.50f),
-                new Vector3(0.08f, 2.15f, 0.05f), frame);
-            Prim(PrimitiveType.Cube, "RimR", fin.transform, new Vector3(0.03f, 0f, -1.50f),
-                new Vector3(0.08f, 2.15f, 0.05f), frame);
+                new Vector3(0.035f, 2.40f, 3.20f), carbon);
+            Prim(PrimitiveType.Cube, "RimT", fin.transform, new Vector3(0.04f, 1.18f, 0f),
+                new Vector3(0.09f, 0.055f, 3.15f), lattice);
+            Prim(PrimitiveType.Cube, "RimB", fin.transform, new Vector3(0.04f, -1.18f, 0f),
+                new Vector3(0.09f, 0.055f, 3.15f), frame);
+            Prim(PrimitiveType.Cube, "RimL", fin.transform, new Vector3(0.04f, 0f, 1.55f),
+                new Vector3(0.09f, 2.28f, 0.055f), frame);
+            Prim(PrimitiveType.Cube, "RimR", fin.transform, new Vector3(0.04f, 0f, -1.55f),
+                new Vector3(0.09f, 2.28f, 0.055f), frame);
 
-            for (int g = 0; g < 4; g++)
-                Prim(PrimitiveType.Cube, $"H_{g}", fin.transform,
-                    new Vector3(0.05f, -0.75f + g * 0.50f, 0f),
-                    new Vector3(0.016f, 0.02f, 2.90f), lattice);
             for (int g = 0; g < 5; g++)
+                Prim(PrimitiveType.Cube, $"H_{g}", fin.transform,
+                    new Vector3(0.055f, -0.90f + g * 0.45f, 0f),
+                    new Vector3(0.014f, 0.018f, 3.00f), lattice);
+            for (int g = 0; g < 6; g++)
                 Prim(PrimitiveType.Cube, $"V_{g}", fin.transform,
-                    new Vector3(0.05f, 0f, -1.20f + g * 0.60f),
-                    new Vector3(0.016f, 2.10f, 0.02f), lattice);
+                    new Vector3(0.055f, 0f, -1.30f + g * 0.52f),
+                    new Vector3(0.014f, 2.20f, 0.018f), lattice);
 
-            SmoothSphere("Hub", fin.transform, new Vector3(-0.26f, 0f, 0f), Vector3.one * 0.42f, hub);
-            SmoothCylAt("Actuator", fin.transform, new Vector3(-0.48f, 0f, 0f), 0.16f, 0.22f, carbon);
+            SmoothSphere("Hub", fin.transform, new Vector3(-0.28f, 0f, 0f), Vector3.one * 0.44f, hub);
+            SmoothCylAt("Actuator", fin.transform, new Vector3(-0.52f, 0f, 0f), 0.15f, 0.24f, carbon);
+            SmoothCylAt("Mount", fin.transform, new Vector3(-0.72f, 0f, 0f), 0.22f, 0.10f, frame);
         }
     }
 
@@ -565,22 +573,31 @@ public static class RocketVisualBuilder
             legRoot.transform.SetParent(visual, false);
 
             Vector3 hinge = new Vector3(
-                Mathf.Sin(a) * (Radius + 0.28f), 9.10f, Mathf.Cos(a) * (Radius + 0.28f));
+                Mathf.Sin(a) * (Radius + 0.30f), 9.20f, Mathf.Cos(a) * (Radius + 0.30f));
             Vector3 foot = new Vector3(
-                Mathf.Sin(a) * (Radius + 6.0f), 0.10f, Mathf.Cos(a) * (Radius + 6.0f));
+                Mathf.Sin(a) * (Radius + 6.2f), 0.08f, Mathf.Cos(a) * (Radius + 6.2f));
 
-            SmoothSphere("Hinge", legRoot.transform, hinge, Vector3.one * 0.48f, titanium);
-            Strut(legRoot.transform, "Boom", hinge, foot, 0.36f, black);
+            // Hinge fairing + primary boom
+            SmoothSphere("Hinge", legRoot.transform, hinge, Vector3.one * 0.52f, titanium);
+            SmoothCylAt("HingeCap", legRoot.transform, hinge + Vector3.up * 0.15f, 0.55f, 0.08f, darkMetal);
+            Strut(legRoot.transform, "Boom", hinge, foot, 0.34f, black);
+            // Light metal edge strip along boom (reads structure)
+            Strut(legRoot.transform, "BoomEdge",
+                hinge + Vector3.up * 0.12f,
+                foot + Vector3.up * 0.12f, 0.10f, titanium);
 
             Vector3 bodyAnchor = new Vector3(
-                Mathf.Sin(a) * (Radius + 0.08f), 5.90f, Mathf.Cos(a) * (Radius + 0.08f));
-            Vector3 boomMid = Vector3.Lerp(hinge, foot, 0.40f);
-            Strut(legRoot.transform, "Hydraulics", bodyAnchor, boomMid, 0.13f, hydra);
-            SmoothSphere("HydJoint", legRoot.transform, bodyAnchor, Vector3.one * 0.22f, metal);
+                Mathf.Sin(a) * (Radius + 0.08f), 5.85f, Mathf.Cos(a) * (Radius + 0.08f));
+            Vector3 boomMid = Vector3.Lerp(hinge, foot, 0.42f);
+            Strut(legRoot.transform, "Hydraulics", bodyAnchor, boomMid, 0.12f, hydra);
+            SmoothSphere("HydJoint", legRoot.transform, bodyAnchor, Vector3.one * 0.24f, metal);
+            SmoothSphere("HydKnee", legRoot.transform, boomMid, Vector3.one * 0.18f, titanium);
 
-            SmoothCylAt("Crush", legRoot.transform, foot + Vector3.up * 0.32f, 0.70f, 0.24f, carbon);
-            SmoothCylAt("Foot", legRoot.transform, foot + Vector3.up * 0.10f, 1.70f, 0.08f, metal);
-            SmoothCylAt("FootPad", legRoot.transform, foot, 2.15f, 0.035f, black);
+            // Landing foot stack
+            SmoothCylAt("Crush", legRoot.transform, foot + Vector3.up * 0.38f, 0.72f, 0.26f, carbon);
+            SmoothCylAt("Foot", legRoot.transform, foot + Vector3.up * 0.12f, 1.85f, 0.07f, metal);
+            SmoothCylAt("FootPad", legRoot.transform, foot, 2.25f, 0.032f, black);
+            SmoothCylAt("FootRing", legRoot.transform, foot + Vector3.up * 0.05f, 2.05f, 0.02f, titanium);
         }
     }
 
@@ -617,19 +634,24 @@ public static class RocketVisualBuilder
     static void Nozzle(Transform parent, Vector3 xz, Material heat, Material metal, Material copper,
         Material titanium, Material darkMetal, float s, bool center)
     {
-        // Bell + exit + throat only (cooling rings live in heat texture)
         SmoothMesh.MakeBell("Bell", parent,
-            new Vector3(xz.x, 0.50f * s, xz.z),
-            1.30f * s, 0.76f * s, heat);
+            new Vector3(xz.x, 0.52f * s, xz.z),
+            1.34f * s, 0.78f * s, heat);
         SmoothCylAt("Exit", parent,
-            new Vector3(xz.x, 0.02f * s, xz.z), 1.36f * s, 0.045f * s, metal);
+            new Vector3(xz.x, 0.02f * s, xz.z), 1.40f * s, 0.04f * s, metal);
+        SmoothCylAt("ExitInner", parent,
+            new Vector3(xz.x, 0.06f * s, xz.z), 1.22f * s, 0.02f * s, darkMetal);
         SmoothCylAt("Throat", parent,
-            new Vector3(xz.x, 1.38f * s, xz.z), 0.34f * s, 0.10f * s, copper);
+            new Vector3(xz.x, 1.42f * s, xz.z), 0.36f * s, 0.11f * s, copper);
         SmoothSphere("Gimbal", parent,
-            new Vector3(xz.x, 1.58f * s, xz.z), Vector3.one * ((center ? 0.36f : 0.26f) * s), metal);
+            new Vector3(xz.x, 1.62f * s, xz.z), Vector3.one * ((center ? 0.38f : 0.28f) * s), metal);
         if (center)
+        {
             SmoothCylAt("Turbopump", parent,
-                new Vector3(xz.x, 1.80f * s, xz.z), 0.62f * s, 0.14f * s, titanium);
+                new Vector3(xz.x, 1.86f * s, xz.z), 0.64f * s, 0.15f * s, titanium);
+            SmoothCylAt("PumpLip", parent,
+                new Vector3(xz.x, 2.05f * s, xz.z), 0.70f * s, 0.04f * s, metal);
+        }
     }
 
     static void BuildEngineFX(Transform visual)

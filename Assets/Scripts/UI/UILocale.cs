@@ -254,6 +254,15 @@ public static class UILocale
         ["res_fail"] = new("ПОСАДКА НЕВДАЛА", "LANDING FAILED"),
         ["res_footer"] = new("\nТраєкторія · Експорт звіту · START — ще раз",
             "\nTrajectory · Export report · START — again"),
+        ["res_m_v"] = new("Швидкість", "Velocity"),
+        ["res_m_tilt"] = new("Нахил", "Tilt"),
+        ["res_m_miss"] = new("Промах", "Miss"),
+        ["res_m_hv"] = new("Бічна V", "Lateral V"),
+        ["res_m_score"] = new("Оцінка", "Score"),
+        ["res_ok_sub"] = new("Усі критерії soft-landing виконано · t={0:F0} с · паливо {1:F0} кг",
+            "All soft-landing criteria met · t={0:F0} s · fuel {1:F0} kg"),
+        ["res_fail_sub"] = new("Порушені критерії — див. картки нижче",
+            "Criteria failed — see cards below"),
 
         // Insights
         ["ins_wait"] = new("Оберіть алгоритм (D — гібрид) і натисніть «ЗАПУСТИТИ ПОСАДКУ».",
