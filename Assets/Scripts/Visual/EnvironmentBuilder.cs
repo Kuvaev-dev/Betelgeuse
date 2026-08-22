@@ -106,7 +106,6 @@ public static class EnvironmentBuilder
 
         // Premium LZ palette — cool steel, crisp paint, restrained glow
         Color white = new Color(0.98f, 0.985f, 1f);
-        Color amber = new Color(1f, 0.72f, 0.28f);
         Color cyan = new Color(0.45f, 0.88f, 1f);
 
         var deckMat = MakePadDeckMaterial("PadDeckSkin");
@@ -120,7 +119,6 @@ public static class EnvironmentBuilder
         var regLite = VisualMaterials.Lit(new Color(0.46f, 0.465f, 0.48f), 0f, 0.06f);
         var grate = VisualMaterials.Lit(new Color(0.14f, 0.145f, 0.16f), 0.88f, 0.28f);
         var whiteMat = VisualMaterials.Unlit(white, white * 0.85f);
-        var amberMat = VisualMaterials.Unlit(amber, amber);
         var markMat = VisualMaterials.Unlit(new Color(0.94f, 0.95f, 0.98f), white * 0.7f);
         var ledMat = VisualMaterials.Unlit(cyan, cyan * 0.9f);
         var poleMat = VisualMaterials.Lit(new Color(0.55f, 0.57f, 0.61f), 0.85f, 0.55f);
@@ -173,25 +171,21 @@ public static class EnvironmentBuilder
         SmoothMesh.MakeRing("GrateRim", pad.transform,
             new Vector3(0f, deckY + 0.03f, 0f), 15.5f, 0.90f, dark);
 
-        // Markings: one rim, one TDZ, cross, bullseye, 4 leg pads
+        // Markings: concentric rings + cross + center target (no floating orange blobs)
         float my = deckY + 0.07f;
         SmoothMesh.MakeRing("EdgeStripe", pad.transform,
             new Vector3(0f, my, 0f), 98.6f, 0.978f, markMat);
         SmoothMesh.MakeRing("TDZ", pad.transform,
-            new Vector3(0f, my + 0.008f, 0f), 58f, 0.96f, markMat);
-        MakeBox(pad.transform, "CrossX", new Vector3(0f, my + 0.03f, 0f),
-            new Vector3(64f, 0.028f, 1.2f), whiteMat);
-        MakeBox(pad.transform, "CrossZ", new Vector3(0f, my + 0.03f, 0f),
-            new Vector3(1.2f, 0.028f, 64f), whiteMat);
-        for (int i = 0; i < 4; i++)
-        {
-            float a = (i * 90f + 45f) * Mathf.Deg2Rad;
-            Vector3 p = new Vector3(Mathf.Sin(a) * 26f, my + 0.04f, Mathf.Cos(a) * 26f);
-            SmoothMesh.MakeDisc($"Leg_{i}", pad.transform, p, 4.6f, 0.016f, dark);
-            SmoothMesh.MakeRing($"LegR_{i}", pad.transform, p + Vector3.up * 0.012f, 5.0f, 0.88f, amberMat);
-        }
-        SmoothMesh.MakeDisc("Bull", pad.transform, new Vector3(0f, my + 0.05f, 0f), 7.5f, 0.016f, amberMat);
-        SmoothMesh.MakeRing("BullR", pad.transform, new Vector3(0f, my + 0.06f, 0f), 9.5f, 0.85f, whiteMat);
+            new Vector3(0f, my + 0.006f, 0f), 58f, 0.972f, markMat);
+        SmoothMesh.MakeRing("InnerRing", pad.transform,
+            new Vector3(0f, my + 0.010f, 0f), 28f, 0.955f, markMat);
+        MakeBox(pad.transform, "CrossX", new Vector3(0f, my + 0.02f, 0f),
+            new Vector3(72f, 0.022f, 1.05f), whiteMat);
+        MakeBox(pad.transform, "CrossZ", new Vector3(0f, my + 0.02f, 0f),
+            new Vector3(1.05f, 0.022f, 72f), whiteMat);
+        // Center target: dark disc + thin white ring (flat, concentric)
+        SmoothMesh.MakeDisc("Bull", pad.transform, new Vector3(0f, my + 0.028f, 0f), 6.0f, 0.012f, dark);
+        SmoothMesh.MakeRing("BullR", pad.transform, new Vector3(0f, my + 0.036f, 0f), 8.5f, 0.82f, whiteMat);
         SmoothMesh.MakeRing("LedOuter", pad.transform,
             new Vector3(0f, 0.50f, 0f), 104.0f, 0.986f, ledMat);
 
