@@ -32,9 +32,9 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text txtTrajBtn, txtTitle, txtHow, txtGraphHint;
     TMP_Text txtHdrTelem, txtHdrLive, txtHdrCrit, txtHdrInsight, txtHdrGraphs;
     TMP_Text txtStep;
-    Button trajToggleBtn, viewToggleBtn;
-    Image trajToggleImg, hideBtnImg, viewToggleImg;
-    TMP_Text txtViewBtn;
+    Button trajToggleBtn, viewToggleBtn, pauseBtn;
+    Image trajToggleImg, hideBtnImg, viewToggleImg, pauseBtnImg;
+    TMP_Text txtViewBtn, txtPauseBtn;
 
     // Metric label texts (for language refresh)
     readonly List<TMP_Text> metricLabels = new();
@@ -423,7 +423,7 @@ public class MissionControlUI : MonoBehaviour
         img.preserveAspect = false;
     }
 
-    enum MenuBtnKind { Normal, Start, Stop }
+    enum MenuBtnKind { Normal, Start, Stop, Pause }
 
     /// <summary>
     /// Єдиний top chrome: identity + flight state | actions | settings.
@@ -533,6 +533,9 @@ public class MissionControlUI : MonoBehaviour
 
         MenuBtn(row2.transform, (UILocale.T("top_start") + "  SP").ToUpperInvariant(), OnStartLanding, MenuBtnKind.Start, chipW);
         MenuBtn(row2.transform, (UILocale.T("top_stop") + "  ESC").ToUpperInvariant(), OnStop, MenuBtnKind.Stop, chipW);
+        pauseBtn = MenuBtn(row2.transform, PauseButtonLabel(), OnPause, MenuBtnKind.Pause, chipW, out txtPauseBtn);
+        pauseBtnImg = pauseBtn != null ? pauseBtn.targetGraphic as Image : null;
+        UpdatePauseButtonVisual();
         MenuBtn(row2.transform, (UILocale.T("top_ideal") + "  I").ToUpperInvariant(), OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
         trajToggleBtn = MenuBtn(row2.transform, PathButtonLabel(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
         trajToggleImg = trajToggleBtn != null ? trajToggleBtn.targetGraphic as Image : null;
@@ -831,6 +834,13 @@ public class MissionControlUI : MonoBehaviour
                     : new Color(0.48f, 0.16f, 0.16f, 1f);
                 txtCol = UiTheme.TextOnDark;
                 break;
+            case MenuBtnKind.Pause:
+                // Same muted depth as Start/Stop — navy, not bright blue
+                bg = UiTheme.IsLightBackground
+                    ? new Color(0.16f, 0.34f, 0.58f, 1f)
+                    : new Color(0.14f, 0.28f, 0.48f, 1f);
+                txtCol = UiTheme.TextOnDark;
+                break;
             default:
                 bg = UiTheme.IsLightBackground
                     ? new Color(0.88f, 0.9f, 0.93f, 1f)
@@ -883,6 +893,7 @@ public class MissionControlUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.H) && !ctrl) TogglePanels();
         if (Input.GetKeyDown(KeyCode.Space)) OnStartLanding();
         if (Input.GetKeyDown(KeyCode.I)) OnApplyIdealPresets();
+        if (Input.GetKeyDown(KeyCode.U)) OnPause();
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             if (resultShown) HideLandingResult();
@@ -1373,6 +1384,7 @@ public class MissionControlUI : MonoBehaviour
         ApplySettings();
         rocket.batchDrivenTicks = false; // ensure FixedUpdate + trajectory run
         rocket.ResetSimulation();
+        UpdatePauseButtonVisual();
         var tv = EnsureTrajectoryVisualizer();
         tv?.Clear();
         tv?.SetVisible(trajVisible);
@@ -1506,6 +1518,56 @@ public class MissionControlUI : MonoBehaviour
         HideLandingResult();
         NotifyInfo(UILocale.T("msg_stopped"));
         SetStatusVisual("st_stop", C_Amber);
+        UpdatePauseButtonVisual();
+    }
+
+    string PauseButtonLabel()
+    {
+        bool paused = rocket != null && rocket.simulationPaused;
+        return (UILocale.T(paused ? "top_resume" : "top_pause") + "  U").ToUpperInvariant();
+    }
+
+    void UpdatePauseButtonVisual()
+    {
+        if (txtPauseBtn != null)
+            txtPauseBtn.text = PauseButtonLabel();
+        if (pauseBtnImg == null) return;
+        bool paused = rocket != null && rocket.simulationPaused;
+        // Match MenuBtnKind.Pause base; slightly lifted when actively paused
+        pauseBtnImg.color = UiTheme.IsLightBackground
+            ? (paused ? new Color(0.20f, 0.40f, 0.66f, 1f) : new Color(0.16f, 0.34f, 0.58f, 1f))
+            : (paused ? new Color(0.18f, 0.34f, 0.56f, 1f) : new Color(0.14f, 0.28f, 0.48f, 1f));
+    }
+
+    void OnPause()
+    {
+        if (rocket == null) return;
+        if (sim != null && sim.IsExperimentRunning)
+        {
+            NotifyInfo(UILocale.T("msg_cancel_first"));
+            return;
+        }
+        if (!rocket.simulationArmed || rocket.state.simulationFinished || rocket.state.isLanded)
+        {
+            NotifyInfo(UILocale.IsUK
+                ? "Немає активного польоту для паузи."
+                : "No active flight to pause.");
+            return;
+        }
+
+        rocket.simulationPaused = !rocket.simulationPaused;
+        UpdatePauseButtonVisual();
+        if (rocket.simulationPaused)
+        {
+            NotifyInfo(UILocale.T("msg_paused"));
+            SetStatusVisual("st_pause", new Color(0.35f, 0.55f, 0.95f, 1f));
+        }
+        else
+        {
+            NotifyInfo(UILocale.T("msg_resumed"));
+            SetStatusVisual(rocket.state.time > 0.05f ? "st_descent" : "st_start",
+                rocket.state.time > 0.05f ? C_Cyan : C_Amber);
+        }
     }
 
     void OnToggleTrajectoryView() => OnFullTrajectoryView();
@@ -2173,6 +2235,8 @@ public class MissionControlUI : MonoBehaviour
         {
             if (exp)
                 SetStatusVisual("st_batch", C_Amber);
+            else if (rocket.simulationPaused && rocket.simulationArmed && !s.simulationFinished)
+                SetStatusVisual("st_pause", new Color(0.35f, 0.55f, 0.95f, 1f));
             else if (s.simulationFinished && rocket.simulationArmed == false && rocket.metrics != null
                      && (rocket.metrics.totalFlightTime > 0.1f || rocket.metrics.isSuccessfulLanding || rocket.metrics.timedOut))
             {

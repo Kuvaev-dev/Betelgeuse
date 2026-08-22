@@ -182,8 +182,8 @@ public static class UiTypography
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" +
             "0123456789.,;:!?%/+-*=()[]{}<>|@#_'\" " +
             "м/с кг кН % с т /100 " +
-            "ГОТОВООЧІК.СТАРТСПУСКУСПІХЗБІЙСТОПТЕСТСХОВАТИПОКАЗАТИ" +
-            "READYWAITSTARTDOWNOKFAILSTOPTESTHIDEUISHOWUI" +
+            "ГОТОВООЧІК.СТАРТСПУСКУСПІХЗБІЙСТОПТЕСТСХОВАТИПОКАЗАТИПАУЗАДАЛІ" +
+            "READYWAITSTARTDOWNOKFAILSTOPTESTHIDEUISHOWUIPAUSERESUMEPAUSED" +
             "КритеріїКлавішінахилпромахПідказкаАлгоритм";
         fa.TryAddCharacters(sample, out _);
     }

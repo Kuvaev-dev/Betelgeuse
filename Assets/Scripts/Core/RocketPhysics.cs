@@ -21,6 +21,8 @@ public class RocketPhysics : MonoBehaviour
     [Header("Запуск")]
     [Tooltip("false = ракета чекає кнопки «Запустити посадку»")]
     public bool simulationArmed = false;
+    /// <summary>Пауза польоту (кнопка ПАУЗА) — тик фізики пропускається, стан зберігається.</summary>
+    public bool simulationPaused = false;
 
     [Header("Зовнішні збурення")]
     public Vector3 windVelocity = Vector3.zero;
@@ -131,6 +133,7 @@ public class RocketPhysics : MonoBehaviour
     public void SimulationTick()
     {
         if (!simulationArmed) return;
+        if (simulationPaused) return;
         if (state.isLanded || state.simulationFinished) return;
         if (parameters == null) return;
 
@@ -388,6 +391,7 @@ public class RocketPhysics : MonoBehaviour
         windVelocity = Vector3.zero;
         applyContinuousWind = true;
         simulationArmed = true;
+        simulationPaused = false;
 
         controllerResolver?.ResetAll();
         pidStrategy.ResetSession();
@@ -462,6 +466,7 @@ public class RocketPhysics : MonoBehaviour
         metrics = new LandingMetrics();
         windVelocity = Vector3.zero;
         simulationArmed = false;
+        simulationPaused = false;
 
         controllerResolver?.ResetAll();
         pidStrategy.ResetSession();
@@ -491,6 +496,7 @@ public class RocketPhysics : MonoBehaviour
     public void StopSimulation(bool keepPosition = true)
     {
         simulationArmed = false;
+        simulationPaused = false;
         state.simulationFinished = true;
         state.isLanded = true;
         state.currentThrust = 0f;

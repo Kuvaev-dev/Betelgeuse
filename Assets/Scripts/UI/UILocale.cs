@@ -94,6 +94,8 @@ public static class UILocale
         ["top_path_off"] = new("ШЛЯХ", "PATH"),
         ["top_start"] = new("СТАРТ", "START"),
         ["top_stop"] = new("СТОП", "STOP"),
+        ["top_pause"] = new("ПАУЗА", "PAUSE"),
+        ["top_resume"] = new("ДАЛІ", "RESUME"),
         ["top_ideal"] = new("ІДЕАЛ", "IDEAL"),
         ["top_view"] = new("ОГЛЯД", "VIEW"),
         ["top_export"] = new("ЕКСПОРТ", "EXPORT"),
@@ -111,6 +113,7 @@ public static class UILocale
         ["st_success"] = new("ПОСАДКА УСПІШНА", "LANDING SUCCESSFUL"),
         ["st_fail"] = new("ПОСАДКА НЕВДАЛА", "LANDING FAILED"),
         ["st_stop"] = new("ЗУПИНЕНО", "STOPPED"),
+        ["st_pause"] = new("ПАУЗА", "PAUSED"),
         ["st_batch"] = new("АВТО-ТЕСТ", "AUTO-TEST"),
 
         // Modes
@@ -294,6 +297,8 @@ public static class UILocale
         ["msg_cancel_first"] = new("Спочатку скасуйте авто-тест.", "Cancel auto-test first."),
         ["msg_started"] = new("Посадка: {0}. LMB — оберт навколо ракети.", "Landing: {0}. LMB — orbit around rocket."),
         ["msg_stopped"] = new("Політ зупинено. ЗАПУСТИТИ — знову.", "Flight stopped. START — again."),
+        ["msg_paused"] = new("Пауза. ПАУЗА / ДАЛІ — продовжити.", "Paused. PAUSE / RESUME — continue."),
+        ["msg_resumed"] = new("Політ продовжено.", "Flight resumed."),
         ["msg_ideal"] = new("{0}", "{0}"),
         ["msg_ideal_ok"] = new("Ідеальні параметри виставлено. ЗАПУСТИТИ — м’яка посадка.",
             "Ideal presets applied. START — soft landing."),
