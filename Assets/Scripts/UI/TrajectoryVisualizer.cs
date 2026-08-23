@@ -2,32 +2,36 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Smooth landing trajectory: dense samples → Catmull-Rom + Chaikin → LineRenderer.
+/// Trajectory ribbon. During flight the past is immutable (append-only) so the line
+/// never rebuilds/flickers; only the tip tracks the rocket each frame.
 /// </summary>
 public class TrajectoryVisualizer : MonoBehaviour
 {
     public RocketPhysics rocketPhysics;
     public LineRenderer lineRenderer;
-    public int maxRawPoints = 5000;
-    public float baseLineWidth = 3.5f;
-    public float minPointDistance = 0.85f;
+    public int maxPoints = 12000;
+    public float baseLineWidth = 3.2f;
+    public float minPointDistance = 1.25f;
     public float groundY = 0.5f;
-    public int splineSamplesPerSeg = 8;
-    public int chaikinPasses = 2;
 
     public Color goodColor = new(0.35f, 0.95f, 0.65f, 1f);
     public Color badColor = new(1f, 0.4f, 0.42f, 1f);
     public Color normalColor = new(0.45f, 0.9f, 1f, 1f);
 
-    readonly List<Vector3> raw = new();
-    readonly List<Vector3> display = new();
-    Vector3 lastPoint;
-    bool hasLast;
+    readonly List<Vector3> pts = new();
+    Vector3 lastCommitted;
+    bool hasCommitted;
     bool finished;
     bool visible = true;
+    float smoothWidth;
+    Vector3 tipSmoothed;
+    bool hasTip;
 
-    public int PointCount => raw.Count;
-    public IReadOnlyList<Vector3> Points => raw;
+    // Reused buffer — no per-frame alloc
+    Vector3[] uploadBuf = new Vector3[64];
+
+    public int PointCount => pts.Count;
+    public IReadOnlyList<Vector3> Points => pts;
     public bool IsVisible => visible;
 
     void Awake()
@@ -35,6 +39,7 @@ public class TrajectoryVisualizer : MonoBehaviour
         EnsureLine();
         if (rocketPhysics == null)
             rocketPhysics = FindAnyObjectByType<RocketPhysics>();
+        smoothWidth = baseLineWidth;
     }
 
     void Start()
@@ -52,8 +57,8 @@ public class TrajectoryVisualizer : MonoBehaviour
 
         lineRenderer.useWorldSpace = true;
         lineRenderer.loop = false;
-        lineRenderer.numCapVertices = 12;
-        lineRenderer.numCornerVertices = 12;
+        lineRenderer.numCapVertices = 2;
+        lineRenderer.numCornerVertices = 2;
         lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         lineRenderer.receiveShadows = false;
         lineRenderer.allowOcclusionWhenDynamic = false;
@@ -62,33 +67,34 @@ public class TrajectoryVisualizer : MonoBehaviour
         lineRenderer.generateLightingData = false;
         lineRenderer.textureMode = LineTextureMode.Stretch;
         lineRenderer.alignment = LineAlignment.View;
+        lineRenderer.positionCount = 0;
 
-        Shader shader = Shader.Find("Sprites/Default")
-                        ?? Shader.Find("Unlit/Color")
-                        ?? Shader.Find("Universal Render Pipeline/Unlit")
-                        ?? Shader.Find("Hidden/Internal-Colored");
-        if (shader != null)
+        if (lineRenderer.sharedMaterial == null)
         {
-            var mat = new Material(shader);
-            mat.color = Color.white;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-            if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
-            mat.renderQueue = 3000;
-            lineRenderer.sharedMaterial = mat;
+            Shader shader = Shader.Find("Sprites/Default")
+                            ?? Shader.Find("Unlit/Color")
+                            ?? Shader.Find("Universal Render Pipeline/Unlit")
+                            ?? Shader.Find("Hidden/Internal-Colored");
+            if (shader != null)
+            {
+                var mat = new Material(shader) { color = Color.white, renderQueue = 3000 };
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+                if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
+                if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
+                lineRenderer.sharedMaterial = mat;
+            }
         }
 
         ApplyColor(normalColor);
-        SetWidth(baseLineWidth);
-        lineRenderer.enabled = visible;
+        ApplyWidth(baseLineWidth);
     }
 
-    void SetWidth(float w)
+    void ApplyWidth(float w)
     {
         if (lineRenderer == null) return;
-        float ww = Mathf.Clamp(w, 1.2f, 14f);
+        float ww = Mathf.Clamp(w, 1.2f, 12f);
         lineRenderer.startWidth = ww;
-        lineRenderer.endWidth = ww * 0.65f;
+        lineRenderer.endWidth = ww * 0.7f;
     }
 
     public void SetVisible(bool on)
@@ -102,32 +108,56 @@ public class TrajectoryVisualizer : MonoBehaviour
     void ApplyVisibility()
     {
         if (lineRenderer != null)
-            lineRenderer.enabled = visible;
+            lineRenderer.enabled = visible && pts.Count >= 2;
     }
 
-    void FixedUpdate() => SampleFlight(false);
+    void FixedUpdate()
+    {
+        if (!InFlight()) return;
+        SampleCommit(rocketPhysics.state.position);
+    }
 
     void LateUpdate()
     {
         if (rocketPhysics == null)
             rocketPhysics = FindAnyObjectByType<RocketPhysics>();
+        if (rocketPhysics != null && rocketPhysics.batchDrivenTicks) return;
+        if (!visible || lineRenderer == null) return;
 
         if (InFlight())
         {
-            SampleFlight(false);
-            RebuildSmooth(liveTip: rocketPhysics.state.position);
+            // Tip follows rocket every frame (smooth), history stays fixed
+            Vector3 tip = rocketPhysics.state.position;
+            if (tip.y < groundY + 0.12f) tip.y = groundY + 0.12f;
+
+            if (!hasTip)
+            {
+                tipSmoothed = tip;
+                hasTip = true;
+            }
+            else
+            {
+                // Fast but stable tip tracking (no overshoot)
+                float k = 1f - Mathf.Exp(-18f * Time.deltaTime);
+                tipSmoothed = Vector3.Lerp(tipSmoothed, tip, k);
+            }
+
+            SampleCommit(tip); // may append a committed knot
+            PushLive(tipSmoothed);
         }
-        else if (display.Count >= 2 && lineRenderer != null
-                 && lineRenderer.positionCount != display.Count)
+        else if (pts.Count >= 2 && lineRenderer.positionCount != pts.Count)
         {
-            PushDisplay();
+            PushCommittedOnly();
         }
 
-        if (visible && lineRenderer != null && Camera.main != null && display.Count > 0)
+        // Slow width adaptation — never snap (snapping caused flicker)
+        if (pts.Count > 1 && Camera.main != null)
         {
-            Vector3 mid = display[display.Count / 2];
+            Vector3 mid = pts[pts.Count / 2];
             float d = Vector3.Distance(Camera.main.transform.position, mid);
-            SetWidth(baseLineWidth + d * 0.007f);
+            float want = baseLineWidth + d * 0.0055f;
+            smoothWidth = Mathf.Lerp(smoothWidth, want, 1f - Mathf.Exp(-3f * Time.deltaTime));
+            ApplyWidth(smoothWidth);
         }
     }
 
@@ -136,180 +166,124 @@ public class TrajectoryVisualizer : MonoBehaviour
         return !finished
                && rocketPhysics != null
                && rocketPhysics.simulationArmed
+               && !rocketPhysics.batchDrivenTicks
                && !rocketPhysics.state.simulationFinished
                && !rocketPhysics.state.isLanded;
     }
 
     public void SampleFlight(bool force = false)
     {
-        if (finished) return;
-        if (rocketPhysics == null)
-        {
-            rocketPhysics = FindAnyObjectByType<RocketPhysics>();
-            if (rocketPhysics == null) return;
-        }
-        if (!rocketPhysics.simulationArmed) return;
-        if (rocketPhysics.state.simulationFinished || rocketPhysics.state.isLanded) return;
-        AddRaw(rocketPhysics.state.position, force);
+        if (!InFlight() && !force) return;
+        if (rocketPhysics == null) return;
+        SampleCommit(rocketPhysics.state.position, force);
     }
 
-    void AddRaw(Vector3 p, bool force)
+    /// <summary>Append a stable history knot when the rocket moved far enough.</summary>
+    void SampleCommit(Vector3 p, bool force = false)
     {
-        if (p.y < groundY) p.y = groundY;
+        if (finished && !force) return;
+        if (p.y < groundY) p.y = groundY + 0.12f;
 
         float minDist = minPointDistance;
-        if (p.y < 200f) minDist = 0.7f;
-        if (p.y < 60f) minDist = 0.4f;
-        if (p.y < 15f) minDist = 0.2f;
+        if (p.y < 200f) minDist = 1.0f;
+        if (p.y < 60f) minDist = 0.65f;
+        if (p.y < 15f) minDist = 0.35f;
 
-        if (!force && hasLast && (p - lastPoint).sqrMagnitude < minDist * minDist)
+        // Near capacity: thin NEW samples only — never chop the start of the path
+        if (!force && pts.Count > maxPoints * 3 / 4)
+        {
+            float fill = pts.Count / (float)maxPoints;
+            minDist *= Mathf.Lerp(1.5f, 4f, Mathf.InverseLerp(0.75f, 1f, fill));
+        }
+
+        if (!force && hasCommitted && (p - lastCommitted).sqrMagnitude < minDist * minDist)
             return;
 
-        // Light EMA to kill RK4 jitter before spline
-        if (hasLast && !force)
-            p = Vector3.Lerp(lastPoint, p, 0.78f);
+        // Hard cap: keep full history; skip further commits (tip still tracks in PushLive)
+        if (!force && pts.Count >= maxPoints)
+            return;
 
-        if (raw.Count >= maxRawPoints)
-            raw.RemoveAt(0);
+        // Light one-step smooth on NEW knot only (never rewrite past knots)
+        if (hasCommitted && !force)
+            p = Vector3.Lerp(lastCommitted, p, 0.82f);
 
-        raw.Add(p);
-        lastPoint = p;
-        hasLast = true;
+        pts.Add(p);
+        lastCommitted = p;
+        hasCommitted = true;
     }
 
-    void RebuildSmooth(Vector3? liveTip)
-    {
-        if (raw.Count == 0 && !liveTip.HasValue)
-        {
-            display.Clear();
-            PushDisplay();
-            return;
-        }
-
-        // 1) Control points (decimated for stable spline)
-        var ctrl = Decimate(raw, 0.55f);
-        if (liveTip.HasValue)
-        {
-            Vector3 tip = liveTip.Value;
-            if (tip.y < groundY) tip.y = groundY;
-            if (ctrl.Count == 0 || (ctrl[ctrl.Count - 1] - tip).sqrMagnitude > 0.01f)
-                ctrl.Add(tip);
-            else
-                ctrl[ctrl.Count - 1] = tip;
-        }
-
-        if (ctrl.Count == 1)
-        {
-            display.Clear();
-            display.Add(ctrl[0]);
-            display.Add(ctrl[0] + Vector3.up * 0.4f);
-            PushDisplay();
-            return;
-        }
-
-        // 2) Catmull-Rom densify
-        var spline = CatmullRom(ctrl, splineSamplesPerSeg);
-
-        // 3) Chaikin corner-cutting → smooth ribbon
-        display.Clear();
-        display.AddRange(Chaikin(spline, chaikinPasses));
-
-        for (int i = 0; i < display.Count; i++)
-        {
-            var p = display[i];
-            if (p.y < groundY + 0.12f) p.y = groundY + 0.12f;
-            display[i] = p;
-        }
-
-        PushDisplay();
-    }
-
-    void PushDisplay()
+    /// <summary>History + live tip (tip not committed until SampleCommit).</summary>
+    void PushLive(Vector3 tip)
     {
         EnsureLine();
-        if (lineRenderer == null) return;
-        int n = display.Count;
-        lineRenderer.positionCount = n;
-        for (int i = 0; i < n; i++)
-            lineRenderer.SetPosition(i, display[i]);
+        int nHist = pts.Count;
+        if (nHist == 0)
+        {
+            // Bootstrap with two points so LineRenderer can draw
+            EnsureBuf(2);
+            uploadBuf[0] = tip;
+            uploadBuf[1] = tip + Vector3.up * 0.25f;
+            lineRenderer.positionCount = 2;
+            lineRenderer.SetPositions(uploadBuf);
+            lineRenderer.enabled = visible;
+            return;
+        }
+
+        // tip replaces last committed visually if very close; else append as ephemeral end
+        bool tipIsNew = (tip - pts[nHist - 1]).sqrMagnitude > 0.0004f;
+        int n = tipIsNew ? nHist + 1 : nHist;
+        EnsureBuf(n);
+        for (int i = 0; i < nHist; i++)
+            uploadBuf[i] = pts[i];
+        if (tipIsNew)
+            uploadBuf[nHist] = tip;
+        else
+            uploadBuf[nHist - 1] = tip; // slide last knot to tip without changing count
+
+        // Only grow positionCount; shrinking causes flicker
+        if (lineRenderer.positionCount < n)
+            lineRenderer.positionCount = n;
+        else if (lineRenderer.positionCount > n + 2)
+            lineRenderer.positionCount = n; // rare shrink when tip merges
+
+        // Upload only used prefix
+        if (lineRenderer.positionCount != n)
+            lineRenderer.positionCount = n;
+        lineRenderer.SetPositions(Slice(n));
         lineRenderer.enabled = visible && n >= 2;
     }
 
-    static List<Vector3> Decimate(List<Vector3> src, float minSeg)
+    void PushCommittedOnly()
     {
-        if (src.Count <= 2) return new List<Vector3>(src);
-        float minSq = minSeg * minSeg;
-        var dst = new List<Vector3>(src.Count) { src[0] };
-        Vector3 last = src[0];
-        for (int i = 1; i < src.Count - 1; i++)
+        EnsureLine();
+        int n = pts.Count;
+        if (n < 2)
         {
-            if ((src[i] - last).sqrMagnitude >= minSq)
-            {
-                dst.Add(src[i]);
-                last = src[i];
-            }
+            lineRenderer.positionCount = 0;
+            lineRenderer.enabled = false;
+            return;
         }
-        dst.Add(src[src.Count - 1]);
-        return dst;
+        EnsureBuf(n);
+        for (int i = 0; i < n; i++)
+            uploadBuf[i] = pts[i];
+        lineRenderer.positionCount = n;
+        lineRenderer.SetPositions(Slice(n));
+        lineRenderer.enabled = visible;
     }
 
-    static List<Vector3> CatmullRom(List<Vector3> pts, int samplesPerSeg)
+    void EnsureBuf(int n)
     {
-        if (pts.Count < 2) return new List<Vector3>(pts);
-        if (pts.Count == 2 || samplesPerSeg <= 1)
-            return new List<Vector3>(pts);
-
-        samplesPerSeg = Mathf.Clamp(samplesPerSeg, 2, 16);
-        var dst = new List<Vector3>(pts.Count * samplesPerSeg);
-
-        for (int i = 0; i < pts.Count - 1; i++)
-        {
-            Vector3 p0 = pts[Mathf.Max(i - 1, 0)];
-            Vector3 p1 = pts[i];
-            Vector3 p2 = pts[i + 1];
-            Vector3 p3 = pts[Mathf.Min(i + 2, pts.Count - 1)];
-
-            for (int s = 0; s < samplesPerSeg; s++)
-            {
-                float t = s / (float)samplesPerSeg;
-                dst.Add(CatmullPoint(p0, p1, p2, p3, t));
-            }
-        }
-        dst.Add(pts[pts.Count - 1]);
-        return dst;
+        if (uploadBuf.Length < n)
+            uploadBuf = new Vector3[Mathf.NextPowerOfTwo(n)];
     }
 
-    static Vector3 CatmullPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+    Vector3[] Slice(int n)
     {
-        float t2 = t * t;
-        float t3 = t2 * t;
-        return 0.5f * (
-            (2f * p1) +
-            (-p0 + p2) * t +
-            (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
-            (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
-    }
-
-    static List<Vector3> Chaikin(List<Vector3> src, int passes)
-    {
-        if (src.Count < 3 || passes <= 0) return new List<Vector3>(src);
-        var cur = src;
-        for (int p = 0; p < passes; p++)
-        {
-            var next = new List<Vector3>(cur.Count * 2);
-            next.Add(cur[0]);
-            for (int i = 0; i < cur.Count - 1; i++)
-            {
-                Vector3 a = cur[i];
-                Vector3 b = cur[i + 1];
-                next.Add(Vector3.Lerp(a, b, 0.25f));
-                next.Add(Vector3.Lerp(a, b, 0.75f));
-            }
-            next.Add(cur[cur.Count - 1]);
-            // Cap density
-            cur = next.Count > 12000 ? Decimate(next, 0.35f) : next;
-        }
-        return cur;
+        // SetPositions needs exact length array on some Unity versions
+        if (uploadBuf.Length == n) return uploadBuf;
+        var exact = new Vector3[n];
+        System.Array.Copy(uploadBuf, exact, n);
+        return exact;
     }
 
     public void OnSimulationFinished(bool successful)
@@ -319,50 +293,47 @@ public class TrajectoryVisualizer : MonoBehaviour
         {
             Vector3 touch = rocketPhysics.state.position;
             touch.y = groundY + 0.2f;
-            // Smooth descent to pad if last sample was still high
-            if (hasLast && lastPoint.y > groundY + 2f)
+            if (hasCommitted && lastCommitted.y > groundY + 2f)
             {
-                int steps = Mathf.Clamp(Mathf.CeilToInt((lastPoint.y - groundY) / 5f), 4, 16);
-                Vector3 from = lastPoint;
+                int steps = Mathf.Clamp(Mathf.CeilToInt((lastCommitted.y - groundY) / 10f), 3, 8);
+                Vector3 from = lastCommitted;
                 for (int i = 1; i <= steps; i++)
                 {
                     float t = i / (float)steps;
                     t = t * t * (3f - 2f * t);
-                    Vector3 p = Vector3.Lerp(from, touch, t);
-                    raw.Add(p);
+                    pts.Add(Vector3.Lerp(from, touch, t));
                 }
-                lastPoint = touch;
-                hasLast = true;
+                lastCommitted = touch;
             }
             else
-                AddRaw(touch, force: true);
+                SampleCommit(touch, force: true);
         }
-        RebuildSmooth(null);
+        hasTip = false;
+        PushCommittedOnly();
         ApplyColor(successful ? goodColor : badColor);
-        if (lineRenderer != null)
-            lineRenderer.enabled = visible;
     }
 
     public void Clear()
     {
-        raw.Clear();
-        display.Clear();
-        hasLast = false;
+        pts.Clear();
+        hasCommitted = false;
         finished = false;
+        hasTip = false;
         EnsureLine();
         if (lineRenderer != null)
         {
             lineRenderer.positionCount = 0;
-            lineRenderer.enabled = visible;
+            lineRenderer.enabled = false;
             ApplyColor(normalColor);
         }
+        smoothWidth = baseLineWidth;
     }
 
     public bool TryGetOverview(out Vector3 center, out float radius)
     {
         center = Vector3.zero;
         radius = 100f;
-        if (raw.Count == 0 && rocketPhysics == null) return false;
+        if (pts.Count == 0 && rocketPhysics == null) return false;
 
         Vector3 min = Vector3.zero, max = Vector3.zero;
         bool any = false;
@@ -378,7 +349,8 @@ public class TrajectoryVisualizer : MonoBehaviour
             if (rocketPhysics.parameters != null)
                 Enc(rocketPhysics.parameters.startPosition);
         }
-        foreach (var p in raw) Enc(p);
+        int step = Mathf.Max(1, pts.Count / 200);
+        for (int i = 0; i < pts.Count; i += step) Enc(pts[i]);
         if (!any) return false;
         center = (min + max) * 0.5f;
         radius = Mathf.Min(1500f, Mathf.Max(80f, (max - min).magnitude * 0.5f, max.y * 0.45f + 50f));
@@ -395,14 +367,14 @@ public class TrajectoryVisualizer : MonoBehaviour
             new[]
             {
                 new GradientColorKey(c, 0f),
-                new GradientColorKey(Color.Lerp(c, Color.white, 0.12f), 0.5f),
+                new GradientColorKey(Color.Lerp(c, Color.white, 0.1f), 0.5f),
                 new GradientColorKey(c, 1f)
             },
             new[]
             {
-                new GradientAlphaKey(0.65f, 0f),
-                new GradientAlphaKey(1f, 0.25f),
-                new GradientAlphaKey(0.92f, 1f)
+                new GradientAlphaKey(0.7f, 0f),
+                new GradientAlphaKey(1f, 0.2f),
+                new GradientAlphaKey(0.95f, 1f)
             });
         lineRenderer.colorGradient = g;
         if (lineRenderer.sharedMaterial != null)

@@ -157,12 +157,14 @@ public class RocketPhysics : MonoBehaviour
 
         ClampToTerrainDisk();
         SyncTransformWithState();
-        if (logger != null) logger.Log(state);
-
-        // Keep trajectory sampling in sync with physics (esp. batch-driven ticks)
-        if (cachedVisualizer == null)
-            cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
-        cachedVisualizer?.SampleFlight(force: false);
+        // Batch Monte-Carlo: skip logger/trajectory — they dominate CPU and used to stall trials into timeout → 0%
+        if (!batchDrivenTicks)
+        {
+            if (logger != null) logger.Log(state);
+            if (cachedVisualizer == null)
+                cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
+            cachedVisualizer?.SampleFlight(force: false);
+        }
 
         if (state.position.y <= 0.05f)
             FinishLanding(timeout: false);
@@ -207,7 +209,7 @@ public class RocketPhysics : MonoBehaviour
         state.thrustDirection = (Quaternion.Euler(gCmd) * Vector3.up).normalized;
 
         // Бічне наведення — scale from strategy (PID weak … Hybrid strong)
-        if (tilt < 12f && h < 1000f)
+        if (tilt < 18f)
             ApplyLateralGuidance(cmd.LateralScale);
 
         state.currentThrust = Mathf.Clamp(thrustCmd, 0f, state.maxThrust);
@@ -219,33 +221,43 @@ public class RocketPhysics : MonoBehaviour
     /// td = R(gx,0,gz)·up ⇒ td.x≈−sin(gz), td.z≈sin(gx).
     /// Щоб тягнути до −x (коли x&gt;0): td.x&lt;0 ⇒ gz&gt;0.
     /// Щоб тягнути до −z (коли z&gt;0): td.z&lt;0 ⇒ gx&lt;0.
+    /// gainScale (PID weak … Hybrid strong) — головна різниця A–D у Monte-Carlo.
     /// </summary>
     void ApplyLateralGuidance(float gainScale = 1f)
     {
         float h = Mathf.Max(0f, state.position.y);
-        if (h > 900f || h < 8f) return;
+        // Keep correcting until near touchdown; start as soon as descent begins.
+        if (h > 2200f || h < 2.5f) return;
 
         float tilt = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
-        if (tilt > 12f) return;
+        if (tilt > 18f) return;
 
-        float fade = Mathf.SmoothStep(0f, 1f, 1f - h / 900f) * Mathf.Clamp(gainScale, 0.2f, 1.4f);
-        float kPos = 0.014f * fade;
-        float kVel = 0.06f * fade;
-        if (h < 120f)
+        float scale = Mathf.Clamp(gainScale, 0.25f, 1.6f);
+        // Stronger base gains so wind/jitter is recoverable; scale differentiates A–D.
+        float fade = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(h / 1800f)) * scale;
+        float kPos = 0.055f * fade;
+        float kVel = 0.14f * fade;
+        if (h < 200f)
         {
-            kPos *= 0.85f;
-            kVel *= 1.1f;
+            kPos *= 1.25f;
+            kVel *= 1.35f;
+        }
+        if (h < 60f)
+        {
+            // Terminal: kill residual Vh and miss before soft-landing gate
+            kPos *= 1.15f;
+            kVel *= 1.45f;
         }
 
-        float lim = 5f * Mathf.Clamp(gainScale, 0.4f, 1.3f);
+        float lim = 9f * Mathf.Clamp(scale, 0.45f, 1.45f);
         float gx = Mathf.Clamp(-(kPos * state.position.z + kVel * state.velocity.z), -lim, lim);
         float gz = Mathf.Clamp(+(kPos * state.position.x + kVel * state.velocity.x), -lim, lim);
 
         Vector3 td = state.thrustDirection.normalized;
         float curX = Mathf.Atan2(td.z, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
         float curZ = Mathf.Atan2(-td.x, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
-        float nx = Mathf.Clamp(curX + gx, -14f, 14f);
-        float nz = Mathf.Clamp(curZ + gz, -14f, 14f);
+        float nx = Mathf.Clamp(curX + gx, -15f, 15f);
+        float nz = Mathf.Clamp(curZ + gz, -15f, 15f);
         state.thrustDirection = (Quaternion.Euler(nx, 0f, nz) * Vector3.up).normalized;
     }
 
@@ -336,39 +348,39 @@ public class RocketPhysics : MonoBehaviour
         state.velocity = Vector3.zero;
         state.angularVelocity = Vector3.zero;
 
-        if (logger != null) logger.Save();
+        bool batch = batchDrivenTicks
+            || FindAnyObjectByType<SimulationManager>() is { IsExperimentRunning: true };
 
-        string algorithm = controlMode switch
-        {
-            ControlMode.Fuzzy => "Fuzzy Logic (Sugeno-0)",
-            ControlMode.Neural => "Neural Network (ES 1+λ)",
-            ControlMode.Hybrid => "Hybrid Neuro-Fuzzy",
-            _ => "PID"
-        };
-        metrics.PrintResults(algorithm);
-
-        if (cachedVisualizer == null)
-            cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
-        // Лінія траєкторії лишається видимою після посадки (Clear лише на новий старт)
-        cachedVisualizer?.OnSimulationFinished(metrics.isSuccessfulLanding);
-        if (cachedVisualizer != null)
-            cachedVisualizer.SetVisible(true);
-
-        // Don't train during batch Monte-Carlo (SimulationManager sets timeScale high)
-        bool batch = FindAnyObjectByType<SimulationManager>() is { IsExperimentRunning: true };
-        if (!batch && (controlMode == ControlMode.Neural || controlMode == ControlMode.Hybrid)
-            && neuralController != null)
-        {
-            neuralController.Train(
-                metrics.touchdownVelocity,
-                metrics.landingAngleError,
-                metrics.fuelRemaining,
-                metrics.horizontalMiss);
-        }
-
-        // Notify UI (single flights only — batch suppresses popup)
         if (!batch)
         {
+            if (logger != null) logger.Save();
+
+            string algorithm = controlMode switch
+            {
+                ControlMode.Fuzzy => "Fuzzy Logic (Sugeno-0)",
+                ControlMode.Neural => "Neural Network (ES 1+λ)",
+                ControlMode.Hybrid => "Hybrid Neuro-Fuzzy",
+                _ => "PID"
+            };
+            metrics.PrintResults(algorithm);
+
+            if (cachedVisualizer == null)
+                cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
+            // Лінія траєкторії лишається видимою після посадки (Clear лише на новий старт)
+            cachedVisualizer?.OnSimulationFinished(metrics.isSuccessfulLanding);
+            if (cachedVisualizer != null)
+                cachedVisualizer.SetVisible(true);
+
+            if ((controlMode == ControlMode.Neural || controlMode == ControlMode.Hybrid)
+                && neuralController != null)
+            {
+                neuralController.Train(
+                    metrics.touchdownVelocity,
+                    metrics.landingAngleError,
+                    metrics.fuelRemaining,
+                    metrics.horizontalMiss);
+            }
+
             MissionControlUI.Instance?.ShowLandingResult(metrics);
         }
     }
@@ -398,12 +410,20 @@ public class RocketPhysics : MonoBehaviour
 
         SyncFixedTimestep();
         InitializeSimulation();
-        if (logger != null) logger.Initialize();
-        if (cachedVisualizer == null)
-            cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
-        cachedVisualizer?.Clear();
-        MissionControlUI.Instance?.HideLandingResult();
-        SnapCamera();
+        if (!batchDrivenTicks)
+        {
+            if (logger != null) logger.Initialize();
+            if (cachedVisualizer == null)
+                cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
+            cachedVisualizer?.Clear();
+            MissionControlUI.Instance?.HideLandingResult();
+            SnapCamera();
+        }
+        else
+        {
+            // Light reset for Monte-Carlo trials
+            if (logger != null) logger.Initialize();
+        }
     }
 
     /// <summary>
@@ -423,11 +443,11 @@ public class RocketPhysics : MonoBehaviour
 
         if (windStrength > 0.05f)
         {
-            // Постійний вітер + початковий kick
+            // Постійний вітер + початковий kick (seeded via SimRng)
             Vector3 kick = new Vector3(
-                Random.Range(-windStrength, windStrength),
+                SimRng.Range(-windStrength, windStrength),
                 0f,
-                Random.Range(-windStrength * 0.55f, windStrength * 0.55f));
+                SimRng.Range(-windStrength * 0.55f, windStrength * 0.55f));
             windVelocity = kick * 0.45f;
             state.velocity += kick * 0.75f;
         }
@@ -438,17 +458,17 @@ public class RocketPhysics : MonoBehaviour
 
         if (randomize)
         {
-            float massNoise = 1f + Random.Range(-massVariationPercent, massVariationPercent) / 100f;
+            float massNoise = 1f + SimRng.Range(-massVariationPercent, massVariationPercent) / 100f;
             state.currentFuelMass = Mathf.Max(500f, state.currentFuelMass * massNoise);
 
-            float ax = Random.Range(-angleVariationDegrees, angleVariationDegrees);
-            float az = Random.Range(-angleVariationDegrees, angleVariationDegrees);
+            float ax = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
+            float az = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
             state.rotation = Quaternion.Normalize(state.rotation * Quaternion.Euler(ax, 0f, az));
 
             if (positionJitterMeters > 0.1f)
             {
-                state.position.x += Random.Range(-positionJitterMeters, positionJitterMeters);
-                state.position.z += Random.Range(-positionJitterMeters, positionJitterMeters);
+                state.position.x += SimRng.Range(-positionJitterMeters, positionJitterMeters);
+                state.position.z += SimRng.Range(-positionJitterMeters, positionJitterMeters);
             }
         }
 

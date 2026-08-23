@@ -1,6 +1,6 @@
 # Betelgeuse — Intelligent Autonomous Rocket Landing
 
-**v1.1.0** · Diploma GNC simulator (Unity URP)
+**v1.2.0** · Diploma GNC simulator (Unity URP)
 
 **Тема:** Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання.
 
@@ -11,6 +11,7 @@
 | [`DOCS.md`](DOCS.md) | Повна специфікація (GNC, UI, візуал, експорт, тести) |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Шари, SOLID, патерни, як додати контролер |
 | [`RELEASE.md`](RELEASE.md) | Нотатки релізу / демо для захисту |
+| [`HOW_TO_RUN.md`](HOW_TO_RUN.md) | Запуск для комісії + baseline seed |
 
 ## Швидкий старт
 
@@ -18,7 +19,7 @@
 2. Справа: алгоритм **4 Hybrid** (рекомендовано)
 3. Опційно **Ідеал** `[I]` — номінал без вітру/шуму
 4. **Старт** `[Space]` — посадка
-5. **Порівняти** `[P]` — Monte-Carlo A–D
+5. **Порівняти** `P` — Monte-Carlo A–D (DefenseBaseline, paired seeds)
 6. **Експорт** `[E]` → `SimulationLogs/`
 
 ## Режими керування
@@ -44,9 +45,12 @@
 | **F / T / C / R** | Follow / Overview / Manual / Reset cam |
 | **L** | Траєкторія on/off |
 | **E / O** | Експорт / папка звітів |
+| **F1 / ?** | Довідка (кнопка після Експорт у топ-барі) |
+| **D** | Демо захисту (Hybrid → Ideal → Start) |
 | **G** | Мова UA ↔ EN |
 | **Y** | Тема UI (8 тем) |
 | **P / X** | Порівняти всі / скасувати |
+| Слайдер **прискорення** | Швидкість Play / Monte-Carlo (права панель) |
 
 ## Камера
 

@@ -30,8 +30,7 @@ public class BootstrapRunner : MonoBehaviour
                 splash.SetProgress(t, UILocale.IsUK ? uk : en);
         }
 
-        // Let splash paint + spin for a couple of frames before heavy work
-        yield return null;
+        // One frame so splash paints before heavy work
         yield return null;
 
         // Lightweight defaults
@@ -44,19 +43,19 @@ public class BootstrapRunner : MonoBehaviour
             QualitySettings.shadowDistance = Mathf.Min(QualitySettings.shadowDistance, 400f);
 
         Prog(0.08f, "Пошук ракети…", "Finding rocket…");
-        yield return Breath();
+        yield return null;
 
         var rocket = Object.FindAnyObjectByType<RocketPhysics>();
         if (rocket == null)
         {
             Prog(1f, "Сцена без RocketPhysics", "No RocketPhysics in scene");
-            splash?.FadeOutAndDestroy(0.4f);
+            splash?.FadeOutAndDestroy(0.25f);
             Destroy(gameObject);
             yield break;
         }
 
         Prog(0.18f, "Контролери GNC…", "GNC controllers…");
-        yield return Breath();
+        yield return null;
         EnsureControllers(rocket);
 
         IdealLandingPresets.ApplyDefaultControllerTuning(
@@ -66,17 +65,15 @@ public class BootstrapRunner : MonoBehaviour
             rocket.GetComponent<HybridController>());
 
         Prog(0.35f, "Модель ракетоносія…", "Building rocket…");
-        yield return Breath();
+        yield return null;
         yield return RocketVisualBuilder.BuildRoutine(rocket);
-        yield return Breath();
 
         Prog(0.55f, "Місяць і посадковий майданчик…", "Moon & landing pad…");
-        yield return Breath();
+        yield return null;
         yield return EnvironmentBuilder.BuildRoutine();
-        yield return Breath();
 
-        Prog(0.72f, "Стан симуляції…", "Simulation state…");
-        yield return Breath();
+        Prog(0.78f, "Стан симуляції…", "Simulation state…");
+        yield return null;
 
         rocket.simulationArmed = false;
         if (rocket.parameters != null)
@@ -102,8 +99,8 @@ public class BootstrapRunner : MonoBehaviour
             sm.rocketPhysics = rocket;
         }
 
-        Prog(0.82f, "Камера…", "Camera…");
-        yield return Breath();
+        Prog(0.88f, "Камера…", "Camera…");
+        yield return null;
         SetupCamera(rocket);
 
         if (Object.FindAnyObjectByType<TrajectoryVisualizer>() == null)
@@ -117,30 +114,14 @@ public class BootstrapRunner : MonoBehaviour
         foreach (var theme in Object.FindObjectsByType<MissionControlTheme>())
             theme.styleOnAwake = false;
 
-        Prog(0.92f, "Mission Control HUD…", "Mission Control HUD…");
-        yield return Breath();
-        // MissionControlUI auto-creates via its own RuntimeInitialize — give it a frame
-        yield return Breath();
+        Prog(0.96f, "Mission Control HUD…", "Mission Control HUD…");
+        yield return null;
 
         Prog(1f, "Готово", "Ready");
-        yield return Breath();
+        yield return null;
 
-        splash?.FadeOutAndDestroy(0.6f);
+        splash?.FadeOutAndDestroy(0.35f);
         Destroy(gameObject);
-    }
-
-    /// <summary>Yield a few frames so splash spinner/progress can animate between stalls.</summary>
-    static IEnumerator Breath()
-    {
-        yield return null;
-        yield return null;
-        // Short realtime pause keeps the arc spinning even when next step is heavy
-        float t = 0f;
-        while (t < 0.05f)
-        {
-            t += Time.unscaledDeltaTime;
-            yield return null;
-        }
     }
 
     static void EnsureControllers(RocketPhysics rocket)

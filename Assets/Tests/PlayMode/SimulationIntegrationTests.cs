@@ -232,4 +232,59 @@ public class SimulationIntegrationTests
         Object.Destroy(go);
         Object.Destroy(p);
     }
+
+    /// <summary>Golden: Ideal Hybrid soft-lands under seeded zero-disturbance.</summary>
+    [UnityTest]
+    public IEnumerator IdealHybrid_SoftLands()
+    {
+        var p = CreateParams();
+        p.startPosition = new Vector3(0f, IdealLandingPresets.StartHeight, 0f);
+        p.startVelocity = new Vector3(0f, IdealLandingPresets.StartVy, 0f);
+        p.startEulerAngles = new Vector3(0f, 0f, IdealLandingPresets.StartTiltDeg);
+        p.dryMass = IdealLandingPresets.DryMass;
+        p.fuelMass = IdealLandingPresets.FuelMass;
+        p.maxThrust = IdealLandingPresets.MaxThrust;
+        p.fixedTimeStep = 0.01f;
+        p.maxSimulationTime = 300f;
+
+        var go = BuildRocket(p, RocketPhysics.ControlMode.Hybrid);
+        var rp = go.GetComponent<RocketPhysics>();
+        yield return null;
+
+        IdealLandingPresets.ApplyDefaultControllerTuning(
+            rp, rp.fuzzyController, rp.neuralController, rp.hybridController);
+        if (rp.hybridController != null)
+            rp.hybridController.useNeuralResidual = true;
+        if (rp.neuralController != null)
+        {
+            rp.neuralController.InstallIdealWeights();
+            rp.neuralController.enableTraining = false;
+        }
+
+        SimRng.Reseed(DefenseBaseline.Seed);
+        rp.ResetSimulation();
+        rp.ApplyFlightDisturbances(0f, false);
+
+        // Burst ticks (no FixedUpdate wait) for speed
+        rp.batchDrivenTicks = true;
+        int guard = 0;
+        int maxSteps = Mathf.CeilToInt(p.maxSimulationTime / p.fixedTimeStep) + 64;
+        while (!rp.state.simulationFinished && guard < maxSteps)
+        {
+            for (int i = 0; i < 40 && !rp.state.simulationFinished && guard < maxSteps; i++)
+            {
+                rp.SimulationTick();
+                guard++;
+            }
+            yield return null;
+        }
+
+        Assert.IsTrue(rp.state.simulationFinished, "Ideal Hybrid should finish");
+        Assert.IsFalse(rp.metrics.timedOut, "should not timeout");
+        Assert.IsTrue(rp.metrics.isSuccessfulLanding,
+            $"Ideal Hybrid fail: V={rp.metrics.touchdownVelocity:F2} tilt={rp.metrics.landingAngleError:F2} miss={rp.metrics.horizontalMiss:F1}");
+
+        Object.Destroy(go);
+        Object.Destroy(p);
+    }
 }

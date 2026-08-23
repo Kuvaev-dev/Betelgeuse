@@ -102,13 +102,14 @@ public class ExperimentDashboard : MonoBehaviour
     void RunFullExperiment()
     {
         if (simulationManager == null) return;
-        if (testsCountInput && int.TryParse(testsCountInput.text, out int count))
-            simulationManager.testsPerAlgorithm = Mathf.Clamp(count, 1, 200);
-
-        simulationManager.enableNoise = noiseToggle == null || noiseToggle.isOn;
-        simulationManager.windStrength = windSlider != null ? windSlider.value : 10f;
+        // DefenseBaseline is re-applied inside SimulationManager; keep dashboard path consistent
+        DefenseBaseline.ApplyTo(simulationManager);
+        if (testsCountInput)
+            testsCountInput.text = DefenseBaseline.TestsPerAlgorithm.ToString();
+        if (noiseToggle) noiseToggle.isOn = DefenseBaseline.EnableNoise;
+        if (windSlider) windSlider.value = DefenseBaseline.WindStrength;
         simulationManager.RequestFullExperiment();
-        Debug.Log("▶ Full Monte-Carlo: PID · Fuzzy · Neural · Hybrid");
+        Debug.Log("▶ Full Monte-Carlo (DefenseBaseline paired): PID · Fuzzy · Neural · Hybrid");
     }
 
     void ResetSimulation()

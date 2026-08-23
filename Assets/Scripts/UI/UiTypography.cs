@@ -181,7 +181,8 @@ public static class UiTypography
             "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя" +
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" +
             "0123456789.,;:!?%/+-*=()[]{}<>|@#_'\" " +
-            "м/с кг кН % с т /100 " +
+            "\u2007" + // figure space for tabular slider values
+            "м/с кг кН % с т /100 зап. x # " +
             "ГОТОВООЧІК.СТАРТСПУСКУСПІХЗБІЙСТОПТЕСТСХОВАТИПОКАЗАТИПАУЗАДАЛІ" +
             "READYWAITSTARTDOWNOKFAILSTOPTESTHIDEUISHOWUIPAUSERESUMEPAUSED" +
             "КритеріїКлавішінахилпромахПідказкаАлгоритм";

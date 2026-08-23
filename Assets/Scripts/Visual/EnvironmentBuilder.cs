@@ -15,7 +15,6 @@ public static class EnvironmentBuilder
     public static IEnumerator BuildRoutine()
     {
         SetupLighting(out Light sun);
-        yield return null;
         SetupSkyAndFog();
         yield return null;
 
@@ -26,15 +25,11 @@ public static class EnvironmentBuilder
         var root = new GameObject("EnvironmentRoot");
 
         yield return BuildLunarSurfaceRoutine(root.transform);
-        yield return null;
         BuildLandingPad(root.transform);
         yield return null;
         var starPs = BuildStarField(root.transform);
-        yield return null;
         BuildSunDisc(root.transform);
-        yield return null;
         BuildApproachLights(root.transform);
-        yield return null;
 
         var amb = SpaceAmbience.Ensure();
         amb.Bind(root.transform, starPs, sun);
@@ -51,8 +46,8 @@ public static class EnvironmentBuilder
             smooth: 0.028f);
 
         float R = LunarTerrainMesh.TerrainRadius;
-        // Higher mesh res → smooth circular crater rims (low res looked ragged)
-        int res = QualitySettings.GetQualityLevel() <= 1 ? 320 : 420;
+        // Balanced mesh: smooth enough rims, fast cold start
+        int res = QualitySettings.GetQualityLevel() <= 1 ? 160 : 224;
         yield return LunarTerrainMesh.CreateRoutine(surface.transform, regolith, null, res, R);
 
         // Horizon ring uses the same NASA LROC albedo (darker, no normal — cheap far field)
@@ -70,7 +65,7 @@ public static class EnvironmentBuilder
         var rng = new System.Random(17);
         float clear = LunarTerrainMesh.PadClearRadius + 25f;
         var rockMat = MakeRockMaterial();
-        int nRocks = QualitySettings.GetQualityLevel() <= 1 ? 14 : 22;
+        int nRocks = QualitySettings.GetQualityLevel() <= 1 ? 10 : 16;
         for (int i = 0; i < nRocks; i++)
         {
             float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
@@ -204,8 +199,8 @@ public static class EnvironmentBuilder
     /// <summary>Premium planar deck: cool steel plates, soft wear, crisp seams.</summary>
     static Material MakePadDeckMaterial(string name)
     {
-        // Compact 512 atlas — enough detail, faster load on weak PCs
-        const int n = 512;
+        // Compact atlas — enough pad detail without bloating cold start
+        const int n = 256;
         var tex = new Texture2D(n, n, TextureFormat.RGB24, true, false);
         tex.name = name;
         tex.wrapMode = TextureWrapMode.Clamp;
@@ -252,7 +247,7 @@ public static class EnvironmentBuilder
 
     static Material MakePadScorchMaterial(string name)
     {
-        const int n = 512;
+        const int n = 256;
         var tex = new Texture2D(n, n, TextureFormat.RGB24, true, false);
         tex.name = name;
         tex.wrapMode = TextureWrapMode.Clamp;

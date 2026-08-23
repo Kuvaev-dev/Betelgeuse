@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -22,12 +22,19 @@ public class SimulationManager : MonoBehaviour
 
     [Header("ÐÐµÐ²Ð¸Ð·Ð½Ð°Ñ‡ÐµÐ½Ñ–ÑÑ‚ÑŒ (Monte-Carlo)")]
     public bool enableNoise = true;
-    // Defaults hard enough that Aâ€“D diverge (100% all modes is not realistic)
-    [Range(0f, 25f)] public float windStrength = 14f;
-    [Range(0f, 20f)] public float massVariationPercent = 10f;
-    [Range(0f, 15f)] public float angleVariationDegrees = 11f;
-    [Range(0f, 80f)] public float positionJitterMeters = 35f;
+    // Differentiated A–D rates (too harsh → universal timeout/0%; too soft → all 100%)
+    [Range(0f, 25f)] public float windStrength = 10f;
+    [Range(0f, 20f)] public float massVariationPercent = 8f;
+    [Range(0f, 15f)] public float angleVariationDegrees = 8f;
+    [Range(0f, 80f)] public float positionJitterMeters = 22f;
     public bool continuousWind = true;
+    /// <summary>Fixed seed → identical Comparison packs (defense reproducibility).</summary>
+    public int experimentSeed = 42;
+
+    [Header("Initial conditions (from UI)")]
+    public float startHeight = 1800f;
+    public float startDescentSpeed = 72f;
+    public float startTiltDeg = 3.5f;
 
     // Internal flag â€” never leave true in inspector permanently
     [HideInInspector] public bool runFullExperiment;
@@ -107,7 +114,22 @@ public class SimulationManager : MonoBehaviour
         float prevFixed = Time.fixedDeltaTime;
         rocketPhysics.batchDrivenTicks = true;
 
-        // Monte-Carlo must use HARD nominal IC (not leftover Ideal [I] gentleness â†’ fake 100%)
+        // Fair paired Monte-Carlo protocol (seeded, same IC/disturbances for A–D)
+        DefenseBaseline.ApplyTo(this);
+        if (rocketPhysics.hybridController != null)
+            rocketPhysics.hybridController.useNeuralResidual = DefenseBaseline.HybridResidualOn;
+
+        // Clamp disturbance into a workable band (saved prefs can be extreme → universal 0%)
+        windStrength = Mathf.Clamp(windStrength, 0f, 18f);
+        massVariationPercent = Mathf.Clamp(massVariationPercent, 0f, 12f);
+        angleVariationDegrees = Mathf.Clamp(angleVariationDegrees, 0f, 12f);
+        positionJitterMeters = Mathf.Clamp(positionJitterMeters, 0f, 40f);
+        experimentTimeScale = Mathf.Clamp(experimentTimeScale, 4f, 50f);
+        testsPerAlgorithm = Mathf.Clamp(testsPerAlgorithm, 5, 40);
+
+        SimRng.Reseed(experimentSeed);
+
+        // Monte-Carlo must use HARD nominal IC (not leftover Ideal [I] gentleness → fake 100%)
         RestoreHardInitialConditions();
         IdealLandingPresets.ApplyDefaultControllerTuning(
             rocketPhysics,
@@ -115,15 +137,28 @@ public class SimulationManager : MonoBehaviour
             rocketPhysics.neuralController,
             rocketPhysics.hybridController);
 
+        // Stable NN weights for fair A–D comparison (no ES drift mid-pack)
+        if (rocketPhysics.neuralController != null)
+        {
+            rocketPhysics.neuralController.enableTraining = false;
+            // Always pin deterministic weights for reproducible Comparison packs
+            rocketPhysics.neuralController.InstallIdealWeights();
+        }
+
         // Keep realtime clock; speed comes from SimulationTick burst (not timeScale).
         float step = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
+        step = Mathf.Clamp(step, 0.002f, 0.02f);
         Time.timeScale = 1f;
         Time.fixedDeltaTime = step;
 
         // Hide landing result popups during batch
+        // Path line must stay off/cleared during batch — enabling it mid-pack freezes
+        visualizer?.Clear();
+        visualizer?.SetVisible(false);
+
         MissionControlUI.Instance?.SetBatchMode(true);
         OnExperimentStarted?.Invoke();
-        SetProgress("Ð¡Ñ‚Ð°Ñ€Ñ‚ Ð°Ð²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚Ñƒâ€¦", 0f);
+        SetProgress(UILocale.T("prog_start"), 0f);
 
         int algos = includeHybrid ? 4 : 3;
         int doneAlgos = 0;
@@ -132,17 +167,17 @@ public class SimulationManager : MonoBehaviour
         doneAlgos++;
         if (cancelRequested) goto cleanup;
 
-        yield return RunAlgoBlock(RocketPhysics.ControlMode.Fuzzy, "ÐÐµÑ‡Ñ–Ñ‚ÐºÐ° Ð»Ð¾Ð³Ñ–ÐºÐ°", fuzzyResults, doneAlgos, algos);
+        yield return RunAlgoBlock(RocketPhysics.ControlMode.Fuzzy, "Fuzzy", fuzzyResults, doneAlgos, algos);
         doneAlgos++;
         if (cancelRequested) goto cleanup;
 
-        yield return RunAlgoBlock(RocketPhysics.ControlMode.Neural, "ÐÐµÐ¹Ñ€Ð¾Ð¼ÐµÑ€ÐµÐ¶Ð°", neuralResults, doneAlgos, algos);
+        yield return RunAlgoBlock(RocketPhysics.ControlMode.Neural, "Neural", neuralResults, doneAlgos, algos);
         doneAlgos++;
         if (cancelRequested) goto cleanup;
 
         if (includeHybrid)
         {
-            yield return RunAlgoBlock(RocketPhysics.ControlMode.Hybrid, "Ð“Ñ–Ð±Ñ€Ð¸Ð´", hybridResults, doneAlgos, algos);
+            yield return RunAlgoBlock(RocketPhysics.ControlMode.Hybrid, "Hybrid", hybridResults, doneAlgos, algos);
             doneAlgos++;
         }
 
@@ -157,14 +192,14 @@ public class SimulationManager : MonoBehaviour
             dashboard?.UpdateStatistics(pid, fuzzy, neural, hybrid);
             MissionControlUI.Instance?.UpdateStatistics(pid, fuzzy, neural, hybrid);
             string exportDir = SaveComparisonReports();
-            SetProgress("ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¾", 1f);
+            SetProgress(UILocale.T("prog_done"), 1f);
             MissionControlUI.Instance?.NotifyInfo(
-                $"âœ“ ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¾. Ð—Ð²Ñ–Ñ‚Ð¸ CSV/JSON/MD Ð·Ð±ÐµÑ€ÐµÐ¶ÐµÐ½Ð¾:\n{exportDir}");
+                string.Format(UILocale.T("msg_compare_export"), exportDir));
         }
         else
         {
-            SetProgress("ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ ÑÐºÐ°ÑÐ¾Ð²Ð°Ð½Ð¾", Progress01);
-            MissionControlUI.Instance?.NotifyInfo("ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚ Ð·ÑƒÐ¿Ð¸Ð½ÐµÐ½Ð¾ ÐºÐ¾Ñ€Ð¸ÑÑ‚ÑƒÐ²Ð°Ñ‡ÐµÐ¼.");
+            SetProgress(UILocale.T("prog_cancel"), Progress01);
+            MissionControlUI.Instance?.NotifyInfo(UILocale.T("msg_compare_stopped"));
         }
 
         cleanup:
@@ -174,25 +209,28 @@ public class SimulationManager : MonoBehaviour
         if (rocketPhysics != null)
             rocketPhysics.controlMode = modeBeforeExperiment;
         rocketPhysics?.StopSimulation(keepPosition: false);
+        visualizer?.Clear();
         Time.timeScale = prevScale > 0.01f ? prevScale : 1f;
         Time.fixedDeltaTime = prevFixed;
         IsExperimentRunning = false;
         running = null;
         MissionControlUI.Instance?.SetBatchMode(false);
         OnExperimentFinished?.Invoke();
-        Debug.Log(cancelRequested ? "â•â• Ð•ÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚ ÑÐºÐ°ÑÐ¾Ð²Ð°Ð½Ð¾ â•â•" : "â•â• Ð•ÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¾ â•â•");
+        Debug.Log(cancelRequested ? "[MC] cancelled" : "[MC] finished");
     }
 
     IEnumerator RunAlgoBlock(RocketPhysics.ControlMode mode, string label,
         List<LandingMetrics> results, int algoIndex, int algoTotal)
     {
         rocketPhysics.controlMode = mode;
+        rocketPhysics.batchDrivenTicks = true;
+        rocketPhysics.simulationPaused = false;
         results.Clear();
-        Debug.Log($"â–¶ {label}: {testsPerAlgorithm} ÑÐ¸Ð¼ÑƒÐ»ÑÑ†Ñ–Ð¹...");
+        Debug.Log($"[MC] {label}: {testsPerAlgorithm} runs, seed={experimentSeed}, paired=true, protocol=v{DefenseBaseline.ProtocolVersion}");
 
         float maxT = rocketPhysics.parameters != null
-            ? rocketPhysics.parameters.maxSimulationTime + 5f
-            : 420f;
+            ? Mathf.Max(120f, rocketPhysics.parameters.maxSimulationTime)
+            : 400f;
 
         for (int i = 0; i < testsPerAlgorithm; i++)
         {
@@ -200,42 +238,56 @@ public class SimulationManager : MonoBehaviour
 
             float local = (i + 1f) / testsPerAlgorithm;
             float global = (algoIndex + local) / algoTotal;
-            SetProgress($"ÐÐ²Ñ‚Ð¾-Ñ‚ÐµÑÑ‚: {label}  Â·  Ð·Ð°Ð¿ÑƒÑÐº {i + 1}/{testsPerAlgorithm}", global);
+            SetProgress(string.Format(UILocale.T("prog_run"), label, i + 1, testsPerAlgorithm), global);
 
             if (rocketPhysics.parameters != null)
+            {
                 rocketPhysics.parameters.fuelMass = originalFuelMass;
+                // Keep step stable for RK4 burst
+                if (rocketPhysics.parameters.fixedTimeStep < 0.001f
+                    || rocketPhysics.parameters.fixedTimeStep > 0.02f)
+                    rocketPhysics.parameters.fixedTimeStep = 0.005f;
+            }
+
+            // Paired seed: trial i uses the SAME disturbances for every algorithm
+            SimRng.Reseed(SimRng.DeriveSeed(experimentSeed, i));
 
             rocketPhysics.ResetSimulation();
-            visualizer?.Clear();
+            rocketPhysics.controlMode = mode;
+            rocketPhysics.batchDrivenTicks = true;
+            rocketPhysics.simulationArmed = true;
+            rocketPhysics.simulationPaused = false;
 
-            // Always disturb: wind from slider + (if noise ON) mass/angle/offset
+            // Wind + mass/angle/offset (identical across A–D for this trial index)
             ApplyRandomNoiseToState();
 
-            // Burst RK4 ticks per frame â€” reliable speed independent of timeScale budget
             float dt = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
-            int maxSteps = Mathf.CeilToInt(maxT / Mathf.Max(1e-4f, dt)) + 64;
-            // experimentTimeScale â‰ˆ how many ticks per rendered frame (clamped)
-            int burst = Mathf.Clamp(Mathf.RoundToInt(experimentTimeScale * 4f), 20, 200);
+            dt = Mathf.Clamp(dt, 0.002f, 0.02f);
+            int maxSteps = Mathf.CeilToInt(maxT / dt) + 128;
+            // Large burst — finish each trial in few frames (logger disabled in batch)
+            int burst = Mathf.Clamp(Mathf.RoundToInt(experimentTimeScale * 8f), 40, 400);
             int steps = 0;
             while (!rocketPhysics.state.simulationFinished && steps < maxSteps)
             {
                 if (cancelRequested) yield break;
-                int n = burst;
-                for (int b = 0; b < n && !rocketPhysics.state.simulationFinished && steps < maxSteps; b++)
+                for (int b = 0; b < burst && !rocketPhysics.state.simulationFinished && steps < maxSteps; b++)
                 {
                     rocketPhysics.SimulationTick();
                     steps++;
                 }
-                yield return null;
+                // Yield occasionally so UI progress updates (not every micro-burst)
+                if ((steps / burst) % 2 == 0)
+                    yield return null;
             }
 
             if (!rocketPhysics.state.simulationFinished)
-                rocketPhysics.ForceFinish(asTimeout: true);
+            {
+                // Near ground without finish flag → count as touchdown, not timeout
+                bool nearPad = rocketPhysics.state.position.y < 2f;
+                rocketPhysics.ForceFinish(asTimeout: !nearPad);
+            }
 
             results.Add(CloneMetrics(rocketPhysics.metrics));
-
-            if (delayBetweenTests > 0f)
-                yield return new WaitForSecondsRealtime(Mathf.Min(delayBetweenTests, 0.05f));
         }
     }
 
@@ -268,14 +320,17 @@ public class SimulationManager : MonoBehaviour
         };
     }
 
-    /// <summary>Default descent IC (harder than Ideal) so modes can fail under noise.</summary>
+    /// <summary>IC from UI sliders (flexible experiment setup).</summary>
     void RestoreHardInitialConditions()
     {
         if (rocketPhysics?.parameters == null) return;
         var p = rocketPhysics.parameters;
-        p.startPosition = new Vector3(0f, 1800f, 0f);
-        p.startVelocity = new Vector3(0f, -72f, 0f);
-        p.startEulerAngles = new Vector3(0f, 0f, 3.5f);
+        float h0 = Mathf.Clamp(startHeight, 800f, 3000f);
+        float vy = Mathf.Clamp(startDescentSpeed, 30f, 120f);
+        float tilt = Mathf.Clamp(startTiltDeg, 0f, 12f);
+        p.startPosition = new Vector3(0f, h0, 0f);
+        p.startVelocity = new Vector3(0f, -vy, 0f);
+        p.startEulerAngles = new Vector3(0f, 0f, tilt);
         p.dryMass = 25600f;
         p.fuelMass = 14000f;
         p.maxThrust = 845000f;
@@ -286,31 +341,33 @@ public class SimulationManager : MonoBehaviour
     {
         if (rocketPhysics?.state == null) return;
 
-        // Always apply slider wind (even if "noise" toggle only covers mass/angle)
+        // Wind always part of MC protocol when strength > 0 (not gated by noise toggle)
         float w = Mathf.Max(windStrength, 0f);
         Vector3 windKick = new Vector3(
-            Random.Range(-w, w),
+            SimRng.Range(-w, w),
             0f,
-            Random.Range(-w * 0.55f, w * 0.55f));
-        rocketPhysics.state.velocity += windKick * 0.9f;
-        rocketPhysics.windVelocity = continuousWind && w > 0.05f ? windKick * 0.4f : Vector3.zero;
+            SimRng.Range(-w * 0.55f, w * 0.55f));
+        // Milder continuous wind so lateral GNC can still recover (still stresses PID)
+        rocketPhysics.state.velocity += windKick * 0.75f;
+        rocketPhysics.windVelocity = continuousWind && w > 0.05f ? windKick * 0.28f : Vector3.zero;
+        rocketPhysics.applyContinuousWind = continuousWind && w > 0.05f;
 
         if (enableNoise)
         {
-            float massNoise = 1f + Random.Range(-massVariationPercent, massVariationPercent) / 100f;
+            float massNoise = 1f + SimRng.Range(-massVariationPercent, massVariationPercent) / 100f;
             rocketPhysics.state.currentFuelMass = Mathf.Max(800f, rocketPhysics.state.currentFuelMass * massNoise);
 
-            float ax = Random.Range(-angleVariationDegrees, angleVariationDegrees);
-            float az = Random.Range(-angleVariationDegrees, angleVariationDegrees);
+            float ax = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
+            float az = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
             rocketPhysics.state.rotation = Quaternion.Normalize(
                 rocketPhysics.state.rotation * Quaternion.Euler(ax, 0f, az));
 
-            // Lateral offset â€” main reason PID fails while Hybrid holds
+            // Lateral offset — main differentiator (PID weak / Hybrid strong lateral)
             float jit = Mathf.Max(0f, positionJitterMeters);
             if (jit > 0.1f)
             {
-                rocketPhysics.state.position.x += Random.Range(-jit, jit);
-                rocketPhysics.state.position.z += Random.Range(-jit, jit);
+                rocketPhysics.state.position.x += SimRng.Range(-jit, jit);
+                rocketPhysics.state.position.z += SimRng.Range(-jit, jit);
             }
         }
 
@@ -362,7 +419,18 @@ public class SimulationManager : MonoBehaviour
             enableNoise = enableNoise,
             windStrength = windStrength,
             massVariationPercent = massVariationPercent,
-            angleVariationDegrees = angleVariationDegrees
+            angleVariationDegrees = angleVariationDegrees,
+            positionJitterMeters = positionJitterMeters,
+            continuousWind = continuousWind,
+            experimentSeed = experimentSeed,
+            protocolVersion = DefenseBaseline.ProtocolVersion,
+            pairedSeeds = true,
+            hybridResidual = rocketPhysics != null
+                && rocketPhysics.hybridController != null
+                && rocketPhysics.hybridController.useNeuralResidual,
+            startHeight = startHeight,
+            startDescentSpeed = startDescentSpeed,
+            startTiltDeg = startTiltDeg
         };
         data.algorithms.Add(ResearchExporter.ComputeStats("PID", pidResults));
         data.algorithms.Add(ResearchExporter.ComputeStats("Fuzzy Sugeno", fuzzyResults));

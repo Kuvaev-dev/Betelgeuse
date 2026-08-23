@@ -5,7 +5,7 @@
 
 **Платформа:** Unity 6000.x (URP) · C#  
 **Тип:** симулятор GNC (Guidance, Navigation & Control) першого ступеня  
-**Версія:** **v1.1.0** · див. [`RELEASE.md`](RELEASE.md) · архітектура [`ARCHITECTURE.md`](ARCHITECTURE.md)
+**Версія:** **v1.2.0** · див. [`RELEASE.md`](RELEASE.md) · [`HOW_TO_RUN.md`](HOW_TO_RUN.md) · архітектура [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ---
 
@@ -40,15 +40,14 @@
 ## 3. Інтерфейс
 
 ```
-┌── BETELGEUSE · mode · t     [Start|Stop|Ideal|Path|View|Export]  Theme Lang ─┐
-│                                                         Status Hide          │
+┌── BETELGEUSE · mode · t  [Start|Stop|…|Export|Help]  Theme Lang Hide ───────┐
+│                                                                              │
 ├──────────────┬────────────────────────┬──────────────────────────────────────┤
 │ ЛІВО:        │  ЦЕНТР 3D              │ ПРАВО:                               │
-│ GATE 2×2     │  Місяць + LZ pad       │ Швидкий старт                        │
-│ Підказка     │  ракета ~42 м          │ Алгоритм 2×2 (1–4)                   │
-│ Головне/dyn  │  траєкторія            │ Порівняти [P] / Скасувати [X]        │
-│ Графіки      │  orbit / zoom          │ Камера · Умови (вітер/шум/N/x)       │
-│              │                        │ Success % + winner                   │
+│ GATE 2×2     │  Місяць + LZ pad       │ Алгоритм 2×2 (1–4)                   │
+│ Підказка     │  ракета ~42 м          │ Порівняти [P] / Скасувати [X]        │
+│ Головне/dyn  │  траєкторія            │ Демо [D] · Камера · Seed/вітер/шум   │
+│ Графіки      │  orbit / zoom          │ Residual · Success % + winner        │
 ├──────────────┴────────────────────────┴──────────────────────────────────────┤
 │              Крок: Hybrid | термінал / гальмування / …                       │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -172,7 +171,14 @@ SimulationLogs/Landing_<Algorithm>_<yyyyMMdd_HHmmss>/
     side_Xh.svg
 ```
 
-### Monte-Carlo порівняння (`[P]` → експорт)
+### Monte-Carlo порівняння (`P` → експорт)
+
+Протокол **DefenseBaseline v2** (автоматично при старті порівняння):
+
+- paired seeds — trial `i` однаковий для PID/Fuzzy/Neural/Hybrid  
+- seed 42 · N=15 · wind 8 · jitter ±18 м · mass/angle noise ON  
+- фіксовані NN-ваги, training OFF  
+- критерій перемоги: max success % → tie-break SuccessScore  
 
 ```
 SimulationLogs/Comparison_<yyyyMMdd_HHmmss>/

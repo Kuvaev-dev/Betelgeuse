@@ -99,6 +99,7 @@ public static class UILocale
         ["top_ideal"] = new("ІДЕАЛ", "IDEAL"),
         ["top_view"] = new("ОГЛЯД", "VIEW"),
         ["top_export"] = new("ЕКСПОРТ", "EXPORT"),
+        ["top_help"] = new("ДОВІДКА", "HELP"),
         ["top_hide"] = new("СХОВАТИ", "HIDE"),
         ["top_exit"] = new("ВИХІД", "EXIT"),
         ["top_fs"] = new("□", "□"),
@@ -148,7 +149,8 @@ public static class UILocale
         ["h_step2"] = new("ПОРІВНЯННЯ", "COMPARE"),
         ["h_cam"] = new("КАМЕРА", "CAMERA"),
         ["h_export"] = new("ЕКСПОРТ", "EXPORT"),
-        ["h_step3"] = new("УМОВИ ТЕСТУ", "TEST SETUP"),
+        ["h_step3"] = new("ЗАГАЛЬНІ УМОВИ", "GENERAL CONDITIONS"),
+        ["h_mc"] = new("УМОВИ ПОРІВНЯННЯ", "COMPARE CONDITIONS"),
         ["h_results"] = new("РЕЗУЛЬТАТИ %", "SUCCESS %"),
         ["h_lang"] = new("МОВА / LANGUAGE", "LANGUAGE / МОВА"),
         ["h_how"] = new("ШВИДКИЙ СТАРТ", "QUICK START"),
@@ -193,8 +195,9 @@ public static class UILocale
         ["btn_start"] = new("ЗАПУСТИТИ ПОСАДКУ", "START LANDING"),
         ["btn_stop"] = new("СТОП / ПАУЗА", "STOP / PAUSE"),
         ["btn_ideal"] = new("ІДЕАЛЬНІ ПАРАМЕТРИ (100%)", "IDEAL PRESETS (100%)"),
-        ["btn_compare"] = new("ПОРІВНЯТИ  [P]", "COMPARE  [P]"),
-        ["btn_cancel"] = new("СКАСУВАТИ  [X]", "CANCEL  [X]"),
+        ["btn_compare"] = new("ПОРІВНЯТИ  P", "COMPARE  P"),
+        ["btn_cancel"] = new("СКАСУВАТИ  X", "CANCEL  X"),
+        ["btn_demo"] = new("ДЕМО ЗАХИСТУ  D", "DEFENSE DEMO  D"),
         ["btn_follow"] = new("СЛІДКУВАТИ ЗА РАКЕТОЮ", "FOLLOW ROCKET"),
         ["btn_traj_view"] = new("ПОВНА ТРАЄКТОРІЯ", "FULL TRAJECTORY"),
         ["btn_manual"] = new("РУЧНЕ КЕРУВАННЯ", "MANUAL CONTROL"),
@@ -218,23 +221,75 @@ public static class UILocale
             "LMB/RMB — orbit (look under OK) · WASD · scroll — smooth zoom\nF follow · T full path · C manual · R reset"),
 
         // How-to
-        ["how"] = new("1-4: режим   Space: старт   Esc: стоп   H: панелі   G: мова   Y: тема",
-            "1-4: mode   Space: start   Esc: stop   H: panels   G: lang   Y: theme"),
-        ["hint"] = new("Підказка: оберіть Hybrid [4], потім Start [Space]",
-            "Hint: pick Hybrid [4], then Start [Space]"),
-        ["tip"] = new("1-4 mode | I ideal | Space start | Esc stop | P compare | E export | H hide | G lang | Y theme",
-            "1-4 mode | I ideal | Space start | Esc stop | P compare | E export | H hide | G lang | Y theme"),
-        ["cam_keys"] = new("F follow | T огляд | C ручне | R скинути | L шлях",
-            "F follow | T overview | C manual | R reset | L path"),
+        ["how"] = new("D: демо захисту   F1: довідка   1-4: режим   Space: старт   P: порівняти",
+            "D: defense demo   F1: help   1-4: mode   Space: start   P: compare"),
+        ["hint"] = new("Підказка: D — демо захисту · або Hybrid 4 + Ideal I + Start",
+            "Hint: D — defense demo · or Hybrid 4 + Ideal I + Start"),
+        ["tip"] = new("1-4 mode | D demo | I ideal | Space start | P compare | F1 help | E export | H hide",
+            "1-4 mode | D demo | I ideal | Space start | P compare | F1 help | E export | H hide"),
+        ["cam_keys"] = new("ЛКМ/ПКМ оберт · WASD · колесо зум · F follow · T огляд · C ручне · R скинути",
+            "LMB/RMB orbit · WASD · scroll zoom · F follow · T overview · C manual · R reset"),
         // Sliders — what changes + unit in value column
         ["sl_tests"] = new("Запусків на алгоритм", "Runs per algorithm"),
         ["sl_wind"] = new("Швидкість вітру", "Wind speed"),
-        ["sl_time"] = new("Прискорення часу", "Time scale"),
+        ["sl_time"] = new("Прискорення MC", "MC speed"),
+        ["sl_live"] = new("Швидкість симуляції", "Simulation speed"),
+        ["sl_seed"] = new("Seed (відтворюваність)", "Seed (reproducible)"),
+        ["sl_h0"] = new("Початкова висота h₀", "Start altitude h₀"),
+        ["sl_vy0"] = new("Початкова |Vy|", "Start |Vy|"),
+        ["sl_tilt0"] = new("Початковий нахил", "Start tilt"),
+        ["sl_massn"] = new("Шум маси ±", "Mass noise ±"),
+        ["sl_angn"] = new("Шум кута ±", "Angle noise ±"),
         ["sl_tests_u"] = new("зап.", "runs"),
         ["sl_wind_u"] = new("м/с", "m/s"),
         ["sl_time_u"] = new("x", "x"),
+        ["sl_live_u"] = new("x", "x"),
+        ["sl_seed_u"] = new("#", "#"),
+        ["sl_h0_u"] = new("м", "m"),
+        ["sl_vy0_u"] = new("м/с", "m/s"),
+        ["sl_tilt0_u"] = new("°", "°"),
+        ["sl_massn_u"] = new("%", "%"),
+        ["sl_angn_u"] = new("°", "°"),
         ["tg_noise"] = new("Шум маси/кута", "Mass/angle noise"),
         ["tg_train"] = new("Навчання NN", "Train NN"),
+        ["tg_residual"] = new("Hybrid residual NN (ablation)", "Hybrid residual NN (ablation)"),
+        ["msg_residual_on"] = new("Hybrid: Sugeno + MLP residual ON", "Hybrid: Sugeno + MLP residual ON"),
+        ["msg_residual_off"] = new("Ablation: Hybrid = Fuzzy-only (residual OFF)",
+            "Ablation: Hybrid = Fuzzy-only (residual OFF)"),
+        ["msg_demo_start"] = new("Демо захисту: Hybrid → Ideal → Start…",
+            "Defense demo: Hybrid → Ideal → Start…"),
+        ["msg_demo_flight"] = new("Демо: політ Hybrid (Ideal). Після посадки — огляд траєкторії.",
+            "Demo: Hybrid Ideal flight. After touchdown — trajectory overview."),
+        ["msg_demo_done"] = new("Демо завершено. E — експорт · P — Monte-Carlo · F1 — довідка",
+            "Demo done. E — export · P — Monte-Carlo · F1 — help"),
+        ["help_title"] = new("ДОВІДКА · BETELGEUSE", "HELP · BETELGEUSE"),
+        ["help_body"] = new(
+            "КЕРУВАННЯ\n" +
+            "  1–4  PID / Fuzzy / Neural / Hybrid\n" +
+            "  Space старт · Esc стоп · I ідеал · U пауза\n" +
+            "  D демо захисту · P порівняти · X скасувати\n" +
+            "  F/T/C/R камера · L шлях · E експорт · O папка\n" +
+            "  H панелі · G мова · Y тема · F1 довідка\n" +
+            "  «Швидкість симуляції» — Play · «Прискорення MC» — порівняння\n\n" +
+            "SOFT-LANDING\n" +
+            "  |Vy|<3.5 м/с · нахил<7° · промах<25 м · |Vh|<5 м/с\n\n" +
+            "ДОСЛІДЖЕННЯ\n" +
+            "  P — DefenseBaseline MC (paired seeds)\n" +
+            "  Residual OFF — ablation (Hybrid≈Fuzzy)\n" +
+            "  Train NN — ES · Експорт → SimulationLogs/",
+            "CONTROLS\n" +
+            "  1–4  PID / Fuzzy / Neural / Hybrid\n" +
+            "  Space start · Esc stop · I ideal · U pause\n" +
+            "  D defense demo · P compare · X cancel\n" +
+            "  F/T/C/R camera · L path · E export · O folder\n" +
+            "  H panels · G lang · Y theme · F1 help\n" +
+            "  «Simulation speed» — Play · «MC speed» — compare\n\n" +
+            "SOFT-LANDING\n" +
+            "  |Vy|<3.5 m/s · tilt<7° · miss<25 m · |Vh|<5 m/s\n\n" +
+            "RESEARCH\n" +
+            "  P — DefenseBaseline MC (paired seeds, seed 42)\n" +
+            "  Residual OFF — ablation (Hybrid≈Fuzzy)\n" +
+            "  Train NN — ES · Export → SimulationLogs/"),
 
         // Flight phase strip (bottom)
         ["step_ready"] = new("Крок: готовність | оберіть алгоритм і Start", "Step: ready | pick algorithm and Start"),
@@ -295,6 +350,12 @@ public static class UILocale
 
         // Messages
         ["msg_cancel_first"] = new("Спочатку скасуйте авто-тест.", "Cancel auto-test first."),
+        ["prog_start"] = new("Авто-тест: старт…", "Auto-test: starting…"),
+        ["prog_done"] = new("Авто-тест завершено", "Auto-test complete"),
+        ["prog_cancel"] = new("Авто-тест скасовано", "Auto-test cancelled"),
+        ["prog_run"] = new("Авто-тест: {0}  ·  {1}/{2}", "Auto-test: {0}  ·  {1}/{2}"),
+        ["msg_compare_export"] = new("Авто-тест завершено. Звіти: {0}", "Auto-test complete. Reports: {0}"),
+        ["msg_compare_stopped"] = new("Авто-тест зупинено користувачем.", "Auto-test stopped by user."),
         ["msg_started"] = new("Посадка: {0}. LMB — оберт навколо ракети.", "Landing: {0}. LMB — orbit around rocket."),
         ["msg_stopped"] = new("Політ зупинено. ЗАПУСТИТИ — знову.", "Flight stopped. START — again."),
         ["msg_paused"] = new("Пауза. ПАУЗА / ДАЛІ — продовжити.", "Paused. PAUSE / RESUME — continue."),
@@ -302,8 +363,8 @@ public static class UILocale
         ["msg_ideal"] = new("{0}", "{0}"),
         ["msg_ideal_ok"] = new("Ідеальні параметри виставлено. ЗАПУСТИТИ — м’яка посадка.",
             "Ideal presets applied. START — soft landing."),
-        ["ins_ideal_hint"] = new("Ідеал [I] — гарантований номінал. Без нього алгоритми різняться (вітер/шум).",
-            "Ideal [I] — guaranteed nominal. Without it algorithms differ (wind/noise)."),
+        ["ins_ideal_hint"] = new("Ідеал I — гарантований номінал. Без нього алгоритми різняться (вітер/шум).",
+            "Ideal I — guaranteed nominal. Without it algorithms differ (wind/noise)."),
         ["msg_traj_on"] = new("Лінію траєкторії увімкнено.", "Trajectory line enabled."),
         ["msg_traj_off"] = new("Лінію траєкторії вимкнено.", "Trajectory line disabled."),
         ["msg_export_ok"] = new("Звіт збережено:\n{0}", "Report saved:\n{0}"),
@@ -316,7 +377,9 @@ public static class UILocale
             "Trajectory overview. T or F — exit · LMB — orbit · scroll — zoom."),
         ["msg_cam_reset"] = new("Ракурс скинуто.", "View reset."),
         ["msg_selected"] = new("Обрано: {0}\nНатисніть ЗАПУСТИТИ ПОСАДКУ.", "Selected: {0}\nPress START LANDING."),
-        ["msg_compare"] = new("Авто-тест: PID->Fuzzy->NN->Hybrid. Прогрес зверху.", "Auto-test: PID->Fuzzy->NN->Hybrid. Progress on top."),
+        ["msg_compare"] = new(
+            "Порівняння (DefenseBaseline): paired seeds, PID→Fuzzy→NN→Hybrid. Прогрес зверху.",
+            "Compare (DefenseBaseline): paired seeds, PID→Fuzzy→NN→Hybrid. Progress on top."),
         ["msg_compare_zero"] = new(
             "Авто-тест: усі 0%. Зменш вітер/шум або повтори після оновлення симуляції.",
             "Auto-test: all 0%. Lower wind/noise or retry after the simulation fix."),

@@ -18,7 +18,7 @@ public class MissionControlUI : MonoBehaviour
     CameraFollow cameraFollow;
     DataLogger dataLogger;
 
-    TMP_Text txtAlt, txtVel, txtThr, txtTilt, txtFuel, txtMiss, txtMode, txtStatus, txtTime, txtScore, txtSpeed;
+    TMP_Text txtAlt, txtVel, txtThr, txtTilt, txtFuel, txtMiss, txtMode, txtStatus, txtTime, txtScore;
     TMP_Text txtHVel, txtMass, txtTwr, txtEta, txtAcc, txtRate;
     TMP_Text txtPeakVy, txtPeakTilt, txtMinH, txtDeltaStrip;
     TMP_Text txtCritV, txtCritA, txtCritM, txtCritH;
@@ -29,7 +29,7 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text[] resultMetricKeys;
     TMP_Text[] resultMetricVals;
     Image resultAccentBar, resultScoreBg;
-    TMP_Text txtTrajBtn, txtTitle, txtHow, txtGraphHint;
+    TMP_Text txtTrajBtn, txtTitle, txtGraphHint;
     TMP_Text txtHdrTelem, txtHdrLive, txtHdrCrit, txtHdrInsight, txtHdrGraphs;
     TMP_Text txtStep;
     Button trajToggleBtn, viewToggleBtn, pauseBtn;
@@ -39,13 +39,17 @@ public class MissionControlUI : MonoBehaviour
     // Metric label texts (for language refresh)
     readonly List<TMP_Text> metricLabels = new();
 
-    Slider windSlider, testsSlider, timeScaleSlider;
-    Toggle noiseToggle, trainToggle;
+    Slider windSlider, testsSlider, timeScaleSlider, liveSpeedSlider, seedSlider;
+    Slider heightSlider, descentSlider, tilt0Slider, massNoiseSlider, angleNoiseSlider;
+    Toggle noiseToggle, trainToggle, residualToggle;
     Image thrBarFill, fuelBarFill, tiltBarFill, statusDot, progressFill, resultPanelBg;
-    GameObject resultRoot, progressRoot, canvasRoot, stepBarGo;
+    GameObject resultRoot, progressRoot, canvasRoot, stepBarGo, helpRoot;
     GameObject leftPanelGo, rightPanelGo, topBarGo, topMenuGo;
     GameObject captionRoot; // separate canvas — no flicker on theme rebuild
     bool panelsHidden;
+    bool helpVisible;
+    Coroutine defenseDemoCo;
+    TMP_Text txtSeedVal;
     TMP_Text txtHideBtn;
     TMP_Text txtLangBtn;
     TMP_Text txtThemeBtn;
@@ -158,10 +162,19 @@ public class MissionControlUI : MonoBehaviour
         float[] snapThr = graphThr != null ? graphThr.GetSamples() : null;
         float windV = windSlider != null ? windSlider.value : 10f;
         float testsV = testsSlider != null ? testsSlider.value : 15f;
-        float timeV = timeScaleSlider != null ? timeScaleSlider.value : 20f;
+        float timeV = timeScaleSlider != null ? timeScaleSlider.value : 12f;
+        float liveV = liveSpeedSlider != null ? liveSpeedSlider.value : UserSettings.LiveTimeScale;
+        float seedV = seedSlider != null ? seedSlider.value : UserSettings.ExperimentSeed;
+        float h0V = heightSlider != null ? heightSlider.value : UserSettings.StartHeight;
+        float vy0V = descentSlider != null ? descentSlider.value : UserSettings.StartDescentSpeed;
+        float tilt0V = tilt0Slider != null ? tilt0Slider.value : UserSettings.StartTilt;
+        float massNV = massNoiseSlider != null ? massNoiseSlider.value : UserSettings.MassNoise;
+        float angNV = angleNoiseSlider != null ? angleNoiseSlider.value : UserSettings.AngleNoise;
         bool noiseOn = noiseToggle == null || noiseToggle.isOn;
         bool trainOn = trainToggle == null || trainToggle.isOn;
+        bool residualOn = residualToggle == null || residualToggle.isOn;
         bool hide = panelsHidden;
+        bool helpWas = helpVisible;
         bool hadResult = resultShown;
         string infoSnap = txtInfo != null ? txtInfo.text : null;
 
@@ -177,9 +190,18 @@ public class MissionControlUI : MonoBehaviour
         if (windSlider) windSlider.value = windV;
         if (testsSlider) testsSlider.value = testsV;
         if (timeScaleSlider) timeScaleSlider.value = timeV;
+        if (liveSpeedSlider) liveSpeedSlider.value = liveV;
+        if (seedSlider) seedSlider.value = seedV;
+        if (heightSlider) heightSlider.value = h0V;
+        if (descentSlider) descentSlider.value = vy0V;
+        if (tilt0Slider) tilt0Slider.value = tilt0V;
+        if (massNoiseSlider) massNoiseSlider.value = massNV;
+        if (angleNoiseSlider) angleNoiseSlider.value = angNV;
         if (noiseToggle) noiseToggle.isOn = noiseOn;
         if (trainToggle) trainToggle.isOn = trainOn;
+        if (residualToggle) residualToggle.isOn = residualOn;
         loadingSettings = false;
+        SetHelpVisible(helpWas);
         if (snapAlt != null && snapAlt.Length > 0) graphAlt?.RestoreSamples(snapAlt);
         if (snapVel != null && snapVel.Length > 0) graphVel?.RestoreSamples(snapVel);
         if (snapThr != null && snapThr.Length > 0) graphThr?.RestoreSamples(snapThr);
@@ -194,6 +216,7 @@ public class MissionControlUI : MonoBehaviour
         built = true;
         rebuilding = false;
         RefreshCamLabel();
+        RefreshSpeedLabel();
         UpdateTrajButtonLabel();
         if (rocket != null) UpdateFlightStep(rocket.state);
     }
@@ -204,6 +227,7 @@ public class MissionControlUI : MonoBehaviour
         if (windSlider != null) windSlider.value = UserSettings.Wind;
         if (testsSlider != null) testsSlider.value = UserSettings.Tests;
         if (timeScaleSlider != null) timeScaleSlider.value = UserSettings.TimeScale;
+        if (liveSpeedSlider != null) liveSpeedSlider.value = UserSettings.LiveTimeScale;
         if (noiseToggle != null) noiseToggle.isOn = UserSettings.Noise;
         if (trainToggle != null) trainToggle.isOn = UserSettings.Train;
 
@@ -222,9 +246,20 @@ public class MissionControlUI : MonoBehaviour
             SelectModeVisualOnly(mode);
         }
 
+        if (residualToggle != null) residualToggle.isOn = UserSettings.HybridResidual;
+        if (seedSlider != null) seedSlider.value = UserSettings.ExperimentSeed;
+        if (heightSlider != null) heightSlider.value = UserSettings.StartHeight;
+        if (descentSlider != null) descentSlider.value = UserSettings.StartDescentSpeed;
+        if (tilt0Slider != null) tilt0Slider.value = UserSettings.StartTilt;
+        if (massNoiseSlider != null) massNoiseSlider.value = UserSettings.MassNoise;
+        if (angleNoiseSlider != null) angleNoiseSlider.value = UserSettings.AngleNoise;
+        if (rocket?.hybridController != null)
+            rocket.hybridController.useNeuralResidual = UserSettings.HybridResidual;
+        if (sim != null) sim.experimentSeed = UserSettings.ExperimentSeed;
+
         ApplySettings();
-        // Live clock stays x1; TimeScale pref is for Monte-Carlo burst / slider
-        ApplyLiveTimeScale(1f);
+        // Restore last live speed; Monte-Carlo burst uses TimeScale slider separately
+        ApplyLiveTimeScale(UserSettings.LiveTimeScale);
         loadingSettings = false;
     }
 
@@ -261,6 +296,11 @@ public class MissionControlUI : MonoBehaviour
             timeScaleSlider.onValueChanged.RemoveListener(OnTimeScaleChangedPersist);
             timeScaleSlider.onValueChanged.AddListener(OnTimeScaleChangedPersist);
         }
+        if (liveSpeedSlider != null)
+        {
+            liveSpeedSlider.onValueChanged.RemoveListener(OnLiveSpeedChanged);
+            liveSpeedSlider.onValueChanged.AddListener(OnLiveSpeedChanged);
+        }
         if (noiseToggle != null)
         {
             noiseToggle.onValueChanged.RemoveListener(OnNoiseChanged);
@@ -271,6 +311,92 @@ public class MissionControlUI : MonoBehaviour
             trainToggle.onValueChanged.RemoveListener(OnTrainChanged);
             trainToggle.onValueChanged.AddListener(OnTrainChanged);
         }
+        if (residualToggle != null)
+        {
+            residualToggle.onValueChanged.RemoveListener(OnResidualChanged);
+            residualToggle.onValueChanged.AddListener(OnResidualChanged);
+        }
+        if (seedSlider != null)
+        {
+            seedSlider.onValueChanged.RemoveListener(OnSeedChanged);
+            seedSlider.onValueChanged.AddListener(OnSeedChanged);
+        }
+        WireSliderPersist(heightSlider, OnHeightChanged);
+        WireSliderPersist(descentSlider, OnDescentChanged);
+        WireSliderPersist(tilt0Slider, OnTilt0Changed);
+        WireSliderPersist(massNoiseSlider, OnMassNoiseChanged);
+        WireSliderPersist(angleNoiseSlider, OnAngleNoiseChanged);
+    }
+
+    void WireSliderPersist(Slider s, UnityEngine.Events.UnityAction<float> handler)
+    {
+        if (s == null) return;
+        s.onValueChanged.RemoveListener(handler);
+        s.onValueChanged.AddListener(handler);
+    }
+
+    void OnHeightChanged(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.StartHeight = v;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnDescentChanged(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.StartDescentSpeed = v;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnTilt0Changed(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.StartTilt = v;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnMassNoiseChanged(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.MassNoise = v;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnAngleNoiseChanged(float v)
+    {
+        if (loadingSettings) return;
+        UserSettings.AngleNoise = v;
+        UserSettings.Save();
+        ApplySettings();
+    }
+
+    void OnResidualChanged(bool on)
+    {
+        if (loadingSettings) return;
+        UserSettings.HybridResidual = on;
+        UserSettings.Save();
+        if (rocket?.hybridController != null)
+            rocket.hybridController.useNeuralResidual = on;
+        NotifyInfo(on
+            ? UILocale.T("msg_residual_on")
+            : UILocale.T("msg_residual_off"));
+    }
+
+    void OnSeedChanged(float v)
+    {
+        if (loadingSettings) return;
+        int s = Mathf.RoundToInt(v);
+        UserSettings.ExperimentSeed = s;
+        UserSettings.Save();
+        if (sim != null) sim.experimentSeed = s;
+        if (seedSlider != null && Mathf.Abs(seedSlider.value - s) > 0.01f)
+            seedSlider.SetValueWithoutNotify(s);
+        if (txtSeedVal != null) txtSeedVal.text = s.ToString();
     }
 
     void OnWindChanged(float v)
@@ -294,11 +420,18 @@ public class MissionControlUI : MonoBehaviour
         if (loadingSettings) return;
         UserSettings.TimeScale = v;
         UserSettings.Save();
-        if (sim != null && sim.IsExperimentRunning)
+        if (sim != null)
             sim.experimentTimeScale = v;
-        else
-            ApplyLiveTimeScale(Mathf.Clamp(v, 0.25f, 8f));
-        RefreshSpeedLabel();
+    }
+
+    void OnLiveSpeedChanged(float v)
+    {
+        if (loadingSettings) return;
+        // Slider stores 1..8 as integers; map 1→0.5 optional? Keep 1..8 as Time.timeScale
+        float s = Mathf.Clamp(v, 0.25f, 8f);
+        UserSettings.LiveTimeScale = s;
+        UserSettings.Save();
+        ApplyLiveTimeScale(s);
     }
 
     void OnNoiseChanged(bool on)
@@ -322,8 +455,16 @@ public class MissionControlUI : MonoBehaviour
         if (windSlider != null) UserSettings.Wind = windSlider.value;
         if (testsSlider != null) UserSettings.Tests = Mathf.RoundToInt(testsSlider.value);
         if (timeScaleSlider != null) UserSettings.TimeScale = timeScaleSlider.value;
+        if (liveSpeedSlider != null) UserSettings.LiveTimeScale = liveSpeedSlider.value;
+        if (seedSlider != null) UserSettings.ExperimentSeed = Mathf.RoundToInt(seedSlider.value);
+        if (heightSlider != null) UserSettings.StartHeight = heightSlider.value;
+        if (descentSlider != null) UserSettings.StartDescentSpeed = descentSlider.value;
+        if (tilt0Slider != null) UserSettings.StartTilt = tilt0Slider.value;
+        if (massNoiseSlider != null) UserSettings.MassNoise = massNoiseSlider.value;
+        if (angleNoiseSlider != null) UserSettings.AngleNoise = angleNoiseSlider.value;
         if (noiseToggle != null) UserSettings.Noise = noiseToggle.isOn;
         if (trainToggle != null) UserSettings.Train = trainToggle.isOn;
+        if (residualToggle != null) UserSettings.HybridResidual = residualToggle.isOn;
         UserSettings.TrajectoryVisible = trajVisible;
         UserSettings.PanelsHidden = panelsHidden;
         if (rocket != null)
@@ -401,6 +542,7 @@ public class MissionControlUI : MonoBehaviour
         BuildResultOverlay(canvasGo.transform);
         BuildProgressBar(canvasGo.transform);
         BuildStepBar(canvasGo.transform);
+        BuildHelpOverlay(canvasGo.transform);
         ApplyPanelsVisibility();
     }
 
@@ -500,7 +642,6 @@ public class MissionControlUI : MonoBehaviour
         txtTime.alignment = TextAlignmentOptions.MidlineLeft;
         txtTime.overflowMode = TextOverflowModes.Overflow;
         txtTime.raycastTarget = false;
-        txtSpeed = null;
 
         // Caption lives on its own canvas (not destroyed with theme RebuildUi → no flicker)
         EnsureCaptionBar();
@@ -511,7 +652,7 @@ public class MissionControlUI : MonoBehaviour
         const float themeW = 118f; // full theme name + " Y" without truncating
         const float gap = 5f;
         const float rightInset = 16f;
-        // Only theme is wider — flight row loses ~40px total, not a full chip
+        // Hide + Theme(wide) + Lang (Help lives after Export in flight row)
         float toolsW = chipW * 2f + themeW + gap * 2f;
 
         var row2 = CreatePanel("Row2", chrome.transform, new Color(0, 0, 0, 0));
@@ -536,6 +677,7 @@ public class MissionControlUI : MonoBehaviour
         pauseBtn = MenuBtn(row2.transform, PauseButtonLabel(), OnPause, MenuBtnKind.Pause, chipW, out txtPauseBtn);
         pauseBtnImg = pauseBtn != null ? pauseBtn.targetGraphic as Image : null;
         UpdatePauseButtonVisual();
+
         MenuBtn(row2.transform, (UILocale.T("top_ideal") + "  I").ToUpperInvariant(), OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
         trajToggleBtn = MenuBtn(row2.transform, PathButtonLabel(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
         trajToggleImg = trajToggleBtn != null ? trajToggleBtn.targetGraphic as Image : null;
@@ -546,6 +688,7 @@ public class MissionControlUI : MonoBehaviour
         viewToggleImg = viewToggleBtn != null ? viewToggleBtn.targetGraphic as Image : null;
         UpdateViewButtonVisual();
         MenuBtn(row2.transform, (UILocale.T("top_export") + "  E").ToUpperInvariant(), OnExportResults, MenuBtnKind.Normal, chipW);
+        MenuBtn(row2.transform, (UILocale.T("top_help") + "  F1").ToUpperInvariant(), ToggleHelp, MenuBtnKind.Normal, chipW);
 
         // Right→left: Lang [G], Theme [Y] (wider), Hide [H]
         float xR = -rightInset;
@@ -774,20 +917,6 @@ public class MissionControlUI : MonoBehaviour
 #endif
     }
 
-    void NudgeSimSpeed(float factor)
-    {
-        if (sim != null && sim.IsExperimentRunning)
-        {
-            // Monte-Carlo speed = burst multiplier via experimentTimeScale
-            sim.experimentTimeScale = Mathf.Clamp(sim.experimentTimeScale * factor, 1f, 40f);
-            if (timeScaleSlider) timeScaleSlider.SetValueWithoutNotify(sim.experimentTimeScale);
-            RefreshSpeedLabel();
-            return;
-        }
-        float s = Mathf.Clamp(Time.timeScale * factor, 0.25f, 8f);
-        ApplyLiveTimeScale(s);
-    }
-
     void ApplyLiveTimeScale(float s)
     {
         s = Mathf.Clamp(s, 0.25f, 8f);
@@ -797,17 +926,14 @@ public class MissionControlUI : MonoBehaviour
         float baseDt = rocket != null && rocket.parameters != null
             ? rocket.parameters.fixedTimeStep : 0.005f;
         Time.fixedDeltaTime = baseDt;
-        RefreshSpeedLabel();
+        if (!loadingSettings)
+        {
+            UserSettings.LiveTimeScale = s;
+            UserSettings.Save();
+        }
     }
 
-    void RefreshSpeedLabel()
-    {
-        if (txtSpeed == null) return;
-        float s = (sim != null && sim.IsExperimentRunning)
-            ? sim.experimentTimeScale
-            : Time.timeScale;
-        txtSpeed.text = $"x{s:0.#}";
-    }
+    void RefreshSpeedLabel() { /* speed chips removed — slider only */ }
 
     Button MenuBtn(Transform parent, string label, UnityEngine.Events.UnityAction action, MenuBtnKind kind,
         float width = 80f)
@@ -896,9 +1022,14 @@ public class MissionControlUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.U)) OnPause();
         if (Input.GetKeyDown(KeyCode.Escape))
         {
+            if (helpVisible) { SetHelpVisible(false); return; }
             if (resultShown) HideLandingResult();
             else OnStop();
         }
+        if (Input.GetKeyDown(KeyCode.F1) || Input.GetKeyDown(KeyCode.Slash) || Input.GetKeyDown(KeyCode.Question))
+            ToggleHelp();
+        if (Input.GetKeyDown(KeyCode.D) && !ctrl)
+            OnDefenseDemo();
         if (Input.GetKeyDown(KeyCode.L)) OnToggleTrajectoryLine();
         if (Input.GetKeyDown(KeyCode.F)) OnCamFollow();
         if (Input.GetKeyDown(KeyCode.T)) OnFullTrajectoryView();
@@ -922,11 +1053,6 @@ public class MissionControlUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.P)) OnStartCompare();
         if (Input.GetKeyDown(KeyCode.X)) OnCancelCompare();
 
-        // Sim speed: , .  or  - =
-        if (Input.GetKeyDown(KeyCode.Comma) || Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
-            NudgeSimSpeed(1f / 1.5f);
-        if (Input.GetKeyDown(KeyCode.Period) || Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.KeypadPlus))
-            NudgeSimSpeed(1.5f);
         if (Input.GetKeyDown(KeyCode.F11)) BorderlessWindow.ToggleFullscreen();
     }
 
@@ -1209,7 +1335,7 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildRightPanel(Transform parent)
     {
-        // Control column: pick mode → compare → setup → results (mirrors left scan style)
+        // Control column: mode → test conditions → compare → results
         const float W = 338f;
         const float pad = 12f;
         const float inner = W - pad * 2f; // 314
@@ -1248,24 +1374,13 @@ public class MissionControlUI : MonoBehaviour
         Transform root = content.transform;
         float y = -10f;
 
-        // ── Quick start strip (short, fully visible) ──
-        Header(root, UILocale.T("h_how"), ref y, pad, inner);
-        var howBg = CreatePanel("HowBg", root, C_PanelSoft);
-        howBg.GetComponent<Image>().raycastTarget = false;
-        PinTL(howBg.GetComponent<RectTransform>(), pad, y, inner, 36);
-        txtHow = CreateText(howBg.transform, UILocale.T("how"), 12, C_Accent, FontStyles.Bold);
-        txtHow.alignment = TextAlignmentOptions.Center;
-        txtHow.textWrappingMode = TextWrappingModes.Normal;
-        txtHow.overflowMode = TextOverflowModes.Ellipsis;
-        StretchFull(txtHow.rectTransform, 10, 5, 10, 5);
-        y -= 42f;
-
         // ── 1. Algorithm 2x2 ──
         Header(root, UILocale.T("h_step1"), ref y, pad, inner);
         modeButtons.Clear();
         modeButtonImages.Clear();
         float cellW = (inner - gap) * 0.5f;
         float cellH = 48f;
+        float halfW = (inner - gap) * 0.5f;
         float row0 = y;
         modeButtons.Add(ModeButtonAt(root, pad, row0, cellW, cellH,
             UILocale.T("mode_btn_a"), UILocale.T("mode_sub_a"), RocketPhysics.ControlMode.PID));
@@ -1279,56 +1394,53 @@ public class MissionControlUI : MonoBehaviour
             UILocale.T("mode_btn_d"), UILocale.T("mode_sub_d"), RocketPhysics.ControlMode.Hybrid));
         y -= cellH + 8f;
 
-        // ── 2. Compare (pair side-by-side) ──
+        // ── 2. General conditions (single Start + shared disturbances) ──
+        Header(root, UILocale.T("h_step3"), ref y, pad, inner);
+        SliderLine(root, UILocale.T("sl_h0"), UILocale.T("sl_h0_u"),
+            800, 3000, UserSettings.StartHeight, ref y, out heightSlider, pad, inner);
+        SliderLine(root, UILocale.T("sl_vy0"), UILocale.T("sl_vy0_u"),
+            30, 120, UserSettings.StartDescentSpeed, ref y, out descentSlider, pad, inner);
+        SliderLine(root, UILocale.T("sl_tilt0"), UILocale.T("sl_tilt0_u"),
+            0, 12, UserSettings.StartTilt, ref y, out tilt0Slider, pad, inner);
+        txtWindVal = SliderLine(root, UILocale.T("sl_wind"), UILocale.T("sl_wind_u"),
+            0, 25, UserSettings.Wind, ref y, out windSlider, pad, inner);
+        SliderLine(root, UILocale.T("sl_massn"), UILocale.T("sl_massn_u"),
+            0, 15, UserSettings.MassNoise, ref y, out massNoiseSlider, pad, inner);
+        SliderLine(root, UILocale.T("sl_angn"), UILocale.T("sl_angn_u"),
+            0, 15, UserSettings.AngleNoise, ref y, out angleNoiseSlider, pad, inner);
+        // Live Play speed — always visible at end of general block
+        SliderLine(root, UILocale.T("sl_live"), UILocale.T("sl_live_u"),
+            1, 8, UserSettings.LiveTimeScale, ref y, out liveSpeedSlider, pad, inner);
+        noiseToggle = ToggleAt(root, pad, y, halfW, 26f, UILocale.T("tg_noise"), UserSettings.Noise);
+        trainToggle = ToggleAt(root, pad + halfW + gap, y, halfW, 26f, UILocale.T("tg_train"), UserSettings.Train);
+        y -= 32f;
+
+        // ── 3. Compare-only conditions ──
+        Header(root, UILocale.T("h_mc"), ref y, pad, inner);
+        txtTestsVal = SliderLine(root, UILocale.T("sl_tests"), UILocale.T("sl_tests_u"),
+            5, 40, UserSettings.Tests, ref y, out testsSlider, pad, inner);
+        SliderLine(root, UILocale.T("sl_time"), UILocale.T("sl_time_u"),
+            1, 40, UserSettings.TimeScale, ref y, out timeScaleSlider, pad, inner);
+        txtSeedVal = SliderLine(root, UILocale.T("sl_seed"), UILocale.T("sl_seed_u"),
+            1, 999, UserSettings.ExperimentSeed, ref y, out seedSlider, pad, inner);
+        residualToggle = ToggleAt(root, pad, y, inner, 26f, UILocale.T("tg_residual"), UserSettings.HybridResidual);
+        y -= 32f;
+
+        // ── 4. Compare actions ──
         Header(root, UILocale.T("h_step2"), ref y, pad, inner);
         float btnH = 34f;
-        float halfW = (inner - gap) * 0.5f;
         ActionButtonAt(root, pad, y, halfW, btnH, UILocale.T("btn_compare"),
             UiTheme.IsLightBackground ? new Color(0.18f, 0.42f, 0.68f, 1f) : C_BtnActive, OnStartCompare);
         ActionButtonAt(root, pad + halfW + gap, y, halfW, btnH, UILocale.T("btn_cancel"),
             C_Btn, OnCancelCompare);
+        y -= btnH + gap;
+        ActionButtonAt(root, pad, y, inner, btnH, UILocale.T("btn_demo"),
+            UiTheme.IsLightBackground
+                ? new Color(0.82f, 0.58f, 0.10f, 1f)
+                : new Color(0.58f, 0.42f, 0.10f, 1f), OnDefenseDemo);
         y -= btnH + 10f;
 
-        // ── 3. Camera (status only — controls in top menu / hotkeys) ──
-        Header(root, UILocale.T("h_cam"), ref y, pad, inner);
-        var camBg = CreatePanel("CamBg", root, C_PanelSoft);
-        camBg.GetComponent<Image>().raycastTarget = false;
-        PinTL(camBg.GetComponent<RectTransform>(), pad, y, inner, 44);
-        txtCamMode = CreateText(camBg.transform, UILocale.T("cam_prefix") + UILocale.T("cam_follow"),
-            12, C_Accent, FontStyles.Bold);
-        var cmRt = txtCamMode.rectTransform;
-        cmRt.anchorMin = new Vector2(0, 0.45f);
-        cmRt.anchorMax = new Vector2(1, 1);
-        cmRt.offsetMin = new Vector2(8, 0);
-        cmRt.offsetMax = new Vector2(-8, -4);
-        txtCamMode.alignment = TextAlignmentOptions.BottomLeft;
-        txtCamMode.overflowMode = TextOverflowModes.Ellipsis;
-
-        txtCamHelp = CreateText(camBg.transform, UILocale.T("cam_keys"), 10, C_Muted);
-        var chRt = txtCamHelp.rectTransform;
-        chRt.anchorMin = new Vector2(0, 0);
-        chRt.anchorMax = new Vector2(1, 0.5f);
-        chRt.offsetMin = new Vector2(8, 4);
-        chRt.offsetMax = new Vector2(-8, 0);
-        txtCamHelp.alignment = TextAlignmentOptions.TopLeft;
-        txtCamHelp.overflowMode = TextOverflowModes.Ellipsis;
-        y -= 50f;
-
-        // ── 4. Test setup ──
-        Header(root, UILocale.T("h_step3"), ref y, pad, inner);
-        txtTestsVal = SliderLine(root, UILocale.T("sl_tests"), UILocale.T("sl_tests_u"),
-            5, 40, UserSettings.Tests, ref y, out testsSlider, pad, inner);
-        txtWindVal = SliderLine(root, UILocale.T("sl_wind"), UILocale.T("sl_wind_u"),
-            0, 25, UserSettings.Wind, ref y, out windSlider, pad, inner);
-        SliderLine(root, UILocale.T("sl_time"), UILocale.T("sl_time_u"),
-            1, 40, UserSettings.TimeScale, ref y, out timeScaleSlider, pad, inner);
-        // toggles side by side (defaults applied in LoadUserSettingsIntoUi)
-        float togY = y;
-        noiseToggle = ToggleAt(root, pad, togY, halfW, 26f, UILocale.T("tg_noise"), UserSettings.Noise);
-        trainToggle = ToggleAt(root, pad + halfW + gap, togY, halfW, 26f, UILocale.T("tg_train"), UserSettings.Train);
-        y -= 32f;
-
-        // ── 5. Comparison results 2x2 ──
+        // ── 4. Comparison results 2x2 ──
         y -= 4f;
         Header(root, UILocale.T("h_results"), ref y, pad, inner);
         float statH = 40f;
@@ -1349,6 +1461,32 @@ public class MissionControlUI : MonoBehaviour
         txtWinner.alignment = TextAlignmentOptions.Center;
         StretchFull(txtWinner.rectTransform, 6, 4, 6, 4);
         y -= 34f;
+
+        // ── 5. Camera (above messages) ──
+        Header(root, UILocale.T("h_cam"), ref y, pad, inner);
+        var camBg = CreatePanel("CamBg", root, C_PanelSoft);
+        camBg.GetComponent<Image>().raycastTarget = false;
+        PinTL(camBg.GetComponent<RectTransform>(), pad, y, inner, 48);
+        txtCamMode = CreateText(camBg.transform, UILocale.T("cam_prefix") + UILocale.T("cam_follow"),
+            12, C_Accent, FontStyles.Bold);
+        var cmRt = txtCamMode.rectTransform;
+        cmRt.anchorMin = new Vector2(0, 0.48f);
+        cmRt.anchorMax = new Vector2(1, 1);
+        cmRt.offsetMin = new Vector2(8, 0);
+        cmRt.offsetMax = new Vector2(-8, -4);
+        txtCamMode.alignment = TextAlignmentOptions.BottomLeft;
+        txtCamMode.overflowMode = TextOverflowModes.Ellipsis;
+
+        txtCamHelp = CreateText(camBg.transform, UILocale.T("cam_keys"), 10, C_Muted);
+        var chRt = txtCamHelp.rectTransform;
+        chRt.anchorMin = new Vector2(0, 0);
+        chRt.anchorMax = new Vector2(1, 0.52f);
+        chRt.offsetMin = new Vector2(8, 4);
+        chRt.offsetMax = new Vector2(-8, 0);
+        txtCamHelp.alignment = TextAlignmentOptions.TopLeft;
+        txtCamHelp.overflowMode = TextOverflowModes.Ellipsis;
+        txtCamHelp.textWrappingMode = TextWrappingModes.Normal;
+        y -= 54f;
 
         // ── 6. Status / tips ──
         Header(root, UILocale.T("h_msg"), ref y, pad, inner);
@@ -1382,6 +1520,9 @@ public class MissionControlUI : MonoBehaviour
         ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
         RefreshCamLabel();
         ApplySettings();
+        ApplyExperimentInitialConditions();
+        // Deterministic single-run disturbances from current seed
+        SimRng.Reseed(sim != null ? sim.experimentSeed : UserSettings.ExperimentSeed);
         rocket.batchDrivenTicks = false; // ensure FixedUpdate + trajectory run
         rocket.ResetSimulation();
         UpdatePauseButtonVisual();
@@ -1392,28 +1533,21 @@ public class MissionControlUI : MonoBehaviour
         // UI-вітер/шум → реальна одиночна посадка (не лише Monte-Carlo)
         float wind = windSlider != null ? windSlider.value : 0f;
         bool noise = noiseToggle != null && noiseToggle.isOn;
-        // Після Ideal massVar/angVar могли стати 0 — відновлюємо робочі default
-        float massVar = 6f;
-        float angVar = 7f;
+        float massVar = massNoiseSlider != null ? massNoiseSlider.value : UserSettings.MassNoise;
+        float angVar = angleNoiseSlider != null ? angleNoiseSlider.value : UserSettings.AngleNoise;
         if (sim != null)
         {
-            if (sim.massVariationPercent > 0.05f) massVar = sim.massVariationPercent;
-            if (sim.angleVariationDegrees > 0.05f) angVar = sim.angleVariationDegrees;
             sim.windStrength = wind;
             sim.enableNoise = noise;
-            if (noise)
-            {
-                sim.massVariationPercent = massVar;
-                sim.angleVariationDegrees = angVar;
-            }
+            sim.massVariationPercent = massVar;
+            sim.angleVariationDegrees = angVar;
         }
         rocket.ApplyFlightDisturbances(wind, noise, massVar, angVar);
 
-        string dist = wind < 0.05f && !noise
-            ? (UILocale.IsUK ? "без збурень" : "no disturbances")
-            : (UILocale.IsUK
-                ? $"вітер≈{wind:F0} · шум={(noise ? "ON" : "OFF")}"
-                : $"wind≈{wind:F0} · noise={(noise ? "ON" : "OFF")}");
+        float h0 = rocket.parameters != null ? rocket.parameters.startPosition.y : 0f;
+        string dist = UILocale.IsUK
+            ? $"h₀={h0:F0} м · вітер≈{wind:F0} · шум={(noise ? "ON" : "OFF")}"
+            : $"h₀={h0:F0} m · wind≈{wind:F0} · noise={(noise ? "ON" : "OFF")}";
         NotifyInfo(string.Format(UILocale.T("msg_started"), UILocale.ModeName(rocket.controlMode)) + "\n" + dist);
     }
 
@@ -1433,10 +1567,21 @@ public class MissionControlUI : MonoBehaviour
         IdealLandingPresets.Apply(rocket, sim, out string uk, out string en);
         string msg = UILocale.IsUK ? uk : en;
 
-        // Синхронізувати UI-слайдери з пресетом
+        // Синхронізувати UI-слайдери з пресетом Ideal
+        loadingSettings = true;
+        if (heightSlider) heightSlider.value = IdealLandingPresets.StartHeight;
+        if (descentSlider) descentSlider.value = IdealLandingPresets.StartDescentSpeed;
+        if (tilt0Slider) tilt0Slider.value = Mathf.Round(IdealLandingPresets.StartTiltDeg);
         if (windSlider) windSlider.value = 0f;
         if (noiseToggle) noiseToggle.isOn = false;
         if (trainToggle) trainToggle.isOn = false;
+        loadingSettings = false;
+        UserSettings.StartHeight = IdealLandingPresets.StartHeight;
+        UserSettings.StartDescentSpeed = IdealLandingPresets.StartDescentSpeed;
+        UserSettings.StartTilt = Mathf.Round(IdealLandingPresets.StartTiltDeg);
+        UserSettings.Wind = 0f;
+        UserSettings.Noise = false;
+        UserSettings.Save();
         ApplySettings();
 
         HideLandingResult();
@@ -1765,10 +1910,162 @@ public class MissionControlUI : MonoBehaviour
     {
         if (sim == null) { NotifyInfo("SimulationManager missing"); return; }
         if (sim.IsExperimentRunning) { NotifyInfo(UILocale.T("st_batch") + "…"); return; }
+        if (defenseDemoCo != null) { StopCoroutine(defenseDemoCo); defenseDemoCo = null; }
         HideLandingResult();
+        // Lock fair paired Monte-Carlo protocol (same IC + disturbances for A–D)
+        DefenseBaseline.ApplyTo(sim);
+        if (rocket?.hybridController != null)
+            rocket.hybridController.useNeuralResidual = DefenseBaseline.HybridResidualOn;
+        SyncUiFromDefenseBaseline();
         ApplySettings();
         sim.RequestFullExperiment();
         NotifyInfo(UILocale.T("msg_compare"));
+    }
+
+    /// <summary>Mirror DefenseBaseline constants onto sliders so export/UI match the run.</summary>
+    void SyncUiFromDefenseBaseline()
+    {
+        loadingSettings = true;
+        if (testsSlider) testsSlider.value = DefenseBaseline.TestsPerAlgorithm;
+        if (windSlider) windSlider.value = DefenseBaseline.WindStrength;
+        if (noiseToggle) noiseToggle.isOn = DefenseBaseline.EnableNoise;
+        if (seedSlider) seedSlider.value = DefenseBaseline.Seed;
+        if (massNoiseSlider) massNoiseSlider.value = DefenseBaseline.MassVariationPercent;
+        if (angleNoiseSlider) angleNoiseSlider.value = DefenseBaseline.AngleVariationDegrees;
+        if (heightSlider) heightSlider.value = DefenseBaseline.StartHeight;
+        if (descentSlider) descentSlider.value = DefenseBaseline.StartDescentSpeed;
+        if (tilt0Slider) tilt0Slider.value = DefenseBaseline.StartTiltDeg;
+        if (residualToggle) residualToggle.isOn = DefenseBaseline.HybridResidualOn;
+        if (trainToggle) trainToggle.isOn = false;
+        loadingSettings = false;
+
+        UserSettings.Tests = DefenseBaseline.TestsPerAlgorithm;
+        UserSettings.Wind = DefenseBaseline.WindStrength;
+        UserSettings.Noise = DefenseBaseline.EnableNoise;
+        UserSettings.ExperimentSeed = DefenseBaseline.Seed;
+        UserSettings.MassNoise = DefenseBaseline.MassVariationPercent;
+        UserSettings.AngleNoise = DefenseBaseline.AngleVariationDegrees;
+        UserSettings.StartHeight = DefenseBaseline.StartHeight;
+        UserSettings.StartDescentSpeed = DefenseBaseline.StartDescentSpeed;
+        UserSettings.StartTilt = DefenseBaseline.StartTiltDeg;
+        UserSettings.HybridResidual = DefenseBaseline.HybridResidualOn;
+        UserSettings.Train = false;
+        UserSettings.Save();
+        // Slider value labels refresh via onValueChanged (SetValue path)
+    }
+
+    void OnDefenseDemo()
+    {
+        if (rocket == null) return;
+        if (sim != null && sim.IsExperimentRunning)
+        {
+            NotifyInfo(UILocale.T("msg_cancel_first"));
+            return;
+        }
+        if (defenseDemoCo != null) StopCoroutine(defenseDemoCo);
+        defenseDemoCo = StartCoroutine(DefenseDemoRoutine());
+    }
+
+    System.Collections.IEnumerator DefenseDemoRoutine()
+    {
+        NotifyInfo(UILocale.T("msg_demo_start"));
+        SetHelpVisible(false);
+        HideLandingResult();
+
+        // Hybrid + Ideal + Follow + Start (scripted defense path)
+        SelectMode(RocketPhysics.ControlMode.Hybrid);
+        yield return null;
+        OnApplyIdealPresets();
+        yield return null;
+        ApplyLiveTimeScale(Mathf.Max(1f, Time.timeScale));
+        OnStartLanding();
+        NotifyInfo(UILocale.T("msg_demo_flight"));
+
+        // Wait until landing finishes or timeout (~3 min wall)
+        float wall = 0f;
+        while (rocket != null && rocket.simulationArmed && !rocket.state.simulationFinished && wall < 180f)
+        {
+            wall += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        // Brief pause on result, then trajectory overview
+        yield return new WaitForSecondsRealtime(1.2f);
+        if (rocket != null && rocket.state.simulationFinished)
+        {
+            OnFullTrajectoryView();
+            NotifyInfo(UILocale.T("msg_demo_done"));
+        }
+        defenseDemoCo = null;
+    }
+
+    void ToggleHelp() => SetHelpVisible(!helpVisible);
+
+    void SetHelpVisible(bool on)
+    {
+        helpVisible = on;
+        if (helpRoot != null) helpRoot.SetActive(on);
+    }
+
+    void BuildHelpOverlay(Transform parent)
+    {
+        helpRoot = CreatePanel("HelpOverlay", parent, new Color(0.02f, 0.03f, 0.05f, 0.72f));
+        var rt = helpRoot.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var dimBtn = helpRoot.AddComponent<Button>();
+        dimBtn.targetGraphic = helpRoot.GetComponent<Image>();
+        dimBtn.transition = Selectable.Transition.None;
+        dimBtn.onClick.AddListener(() => SetHelpVisible(false));
+
+        // Compact card: title + body + button with tight gaps
+        const float cardW = 540f;
+        const float cardH = 430f;
+        const float titleH = 28f;
+        const float titleTop = 14f;
+        const float bodyTop = titleTop + titleH + 8f; // gap under title
+        const float btnH = 34f;
+        const float btnBottom = 14f;
+        const float bodyBottom = btnBottom + btnH + 10f; // 10px between text and button
+
+        var card = CreatePanel("HelpCard", helpRoot.transform, C_Panel);
+        var crt = card.GetComponent<RectTransform>();
+        crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
+        crt.pivot = new Vector2(0.5f, 0.5f);
+        crt.sizeDelta = new Vector2(cardW, cardH);
+        Outline(card, 1.5f);
+
+        var title = CreateText(card.transform, UILocale.T("help_title"), 17, C_Accent, FontStyles.Bold);
+        var tr = title.rectTransform;
+        tr.anchorMin = new Vector2(0, 1);
+        tr.anchorMax = new Vector2(1, 1);
+        tr.pivot = new Vector2(0.5f, 1);
+        tr.anchoredPosition = new Vector2(0, -titleTop);
+        tr.sizeDelta = new Vector2(-28, titleH);
+        title.alignment = TextAlignmentOptions.Center;
+        title.raycastTarget = false;
+
+        var body = CreateText(card.transform, UILocale.T("help_body"), 12, C_Text);
+        var br = body.rectTransform;
+        br.anchorMin = new Vector2(0, 0);
+        br.anchorMax = new Vector2(1, 1);
+        br.offsetMin = new Vector2(20, bodyBottom);
+        br.offsetMax = new Vector2(-20, -bodyTop);
+        body.alignment = TextAlignmentOptions.TopLeft;
+        body.textWrappingMode = TextWrappingModes.Normal;
+        body.overflowMode = TextOverflowModes.Ellipsis;
+        body.raycastTarget = false;
+        body.lineSpacing = 2f;
+
+        float btnY = -(cardH - btnBottom - btnH);
+        float btnX = (cardW - 200f) * 0.5f;
+        ActionButtonAt(card.transform, btnX, btnY, 200f, btnH, UILocale.T("btn_ok"),
+            C_BtnActive, () => SetHelpVisible(false));
+
+        helpRoot.SetActive(false);
+        helpVisible = false;
     }
 
     void OnCancelCompare()
@@ -1786,8 +2083,31 @@ public class MissionControlUI : MonoBehaviour
     public void SetBatchMode(bool on)
     {
         batchMode = on;
-        if (on) HideLandingResult();
+        if (on)
+        {
+            HideLandingResult();
+            // Prevent PATH freezes during / right after Monte-Carlo
+            var tv = EnsureTrajectoryVisualizer();
+            tv?.Clear();
+            if (tv != null) tv.SetVisible(false);
+            trajVisible = false;
+            UpdateTrajButtonVisual();
+            // Wide overview while A–D batch runs (pad + descent corridor)
+            EnterOverviewForCompare();
+        }
         if (progressRoot != null) progressRoot.SetActive(on);
+        RefreshSpeedLabel();
+    }
+
+    /// <summary>Force full-trajectory overview (no toggle-off) for Monte-Carlo.</summary>
+    void EnterOverviewForCompare()
+    {
+        var cam = ResolveCamera();
+        if (cam == null) return;
+        overviewCam = true;
+        cam.SnapToFullTrajectoryView();
+        RefreshCamLabel();
+        UpdateViewButtonVisual();
     }
 
     public void SetExperimentProgress(string label, float p01)
@@ -2100,7 +2420,7 @@ public class MissionControlUI : MonoBehaviour
         rt.sizeDelta = new Vector2(560, 44);
         Outline(progressRoot);
 
-        txtProgress = CreateText(progressRoot.transform, "Авто-тест…", 13, UiTheme.ChromeText, FontStyles.Bold);
+        txtProgress = CreateText(progressRoot.transform, UILocale.T("prog_start"), 13, UiTheme.ChromeText, FontStyles.Bold);
         Pin(txtProgress.rectTransform, 0.5f, 1, 0.5f, 1, 0, -6, 540, 22);
         txtProgress.alignment = TextAlignmentOptions.Center;
 
@@ -2369,27 +2689,76 @@ public class MissionControlUI : MonoBehaviour
 
     void ApplySettings()
     {
-        if (sim == null) return;
-        if (testsSlider) sim.testsPerAlgorithm = Mathf.RoundToInt(testsSlider.value);
-        if (windSlider) sim.windStrength = windSlider.value;
-        if (noiseToggle) sim.enableNoise = noiseToggle.isOn;
-        if (timeScaleSlider) sim.experimentTimeScale = timeScaleSlider.value;
+        if (sim != null)
+        {
+            if (testsSlider) sim.testsPerAlgorithm = Mathf.RoundToInt(testsSlider.value);
+            if (windSlider) sim.windStrength = windSlider.value;
+            if (noiseToggle) sim.enableNoise = noiseToggle.isOn;
+            if (timeScaleSlider) sim.experimentTimeScale = timeScaleSlider.value;
+            else sim.experimentTimeScale = UserSettings.TimeScale;
+            if (seedSlider) sim.experimentSeed = Mathf.RoundToInt(seedSlider.value);
+            else sim.experimentSeed = UserSettings.ExperimentSeed;
+            if (massNoiseSlider) sim.massVariationPercent = massNoiseSlider.value;
+            else sim.massVariationPercent = UserSettings.MassNoise;
+            if (angleNoiseSlider) sim.angleVariationDegrees = angleNoiseSlider.value;
+            else sim.angleVariationDegrees = UserSettings.AngleNoise;
+            if (heightSlider) sim.startHeight = heightSlider.value;
+            else sim.startHeight = UserSettings.StartHeight;
+            if (descentSlider) sim.startDescentSpeed = descentSlider.value;
+            else sim.startDescentSpeed = UserSettings.StartDescentSpeed;
+            if (tilt0Slider) sim.startTiltDeg = tilt0Slider.value;
+            else sim.startTiltDeg = UserSettings.StartTilt;
+        }
         if (trainToggle && rocket?.neuralController != null)
             rocket.neuralController.enableTraining = trainToggle.isOn;
+        if (rocket?.hybridController != null)
+        {
+            bool res = residualToggle != null ? residualToggle.isOn : UserSettings.HybridResidual;
+            rocket.hybridController.useNeuralResidual = res;
+        }
+        // Keep rocket IC in sync when idle (preview on next Start / mode change)
+        if (rocket != null && !rocket.simulationArmed && (sim == null || !sim.IsExperimentRunning))
+            ApplyExperimentInitialConditions();
     }
 
-    /// <summary>Номінальні IC (складніші за Ideal). Слайдери вітру/шуму не чіпає.</summary>
-    void RestoreNominalInitialConditions()
+    /// <summary>Apply flexible IC from UI/settings into SimulationParameters.</summary>
+    void ApplyExperimentInitialConditions()
     {
         if (rocket?.parameters == null) return;
+        float h0 = heightSlider != null ? heightSlider.value : UserSettings.StartHeight;
+        float vy = descentSlider != null ? descentSlider.value : UserSettings.StartDescentSpeed;
+        float tilt = tilt0Slider != null ? tilt0Slider.value : UserSettings.StartTilt;
+        h0 = Mathf.Clamp(h0, 800f, 3000f);
+        vy = Mathf.Clamp(vy, 30f, 120f);
+        tilt = Mathf.Clamp(tilt, 0f, 12f);
+
         var p = rocket.parameters;
-        p.startPosition = new Vector3(0f, 1800f, 0f);
-        p.startVelocity = new Vector3(0f, -72f, 0f);
-        p.startEulerAngles = new Vector3(0f, 0f, 3.5f);
+        p.startPosition = new Vector3(0f, h0, 0f);
+        p.startVelocity = new Vector3(0f, -vy, 0f);
+        p.startEulerAngles = new Vector3(0f, 0f, tilt);
         p.dryMass = 25600f;
         p.fuelMass = 14000f;
         p.maxThrust = 845000f;
+
+        if (sim != null)
+        {
+            sim.startHeight = h0;
+            sim.startDescentSpeed = vy;
+            sim.startTiltDeg = tilt;
+        }
+
+        // Preview parked rocket at new IC when not flying
+        if (!rocket.simulationArmed && !rocket.state.simulationFinished)
+        {
+            rocket.state.position = p.startPosition;
+            rocket.state.velocity = p.startVelocity;
+            rocket.state.rotation = Quaternion.Euler(p.startEulerAngles);
+            rocket.SyncTransformWithState();
+        }
     }
+
+    /// <summary>Номінальні IC з поточних слайдерів експерименту.</summary>
+    void RestoreNominalInitialConditions() => ApplyExperimentInitialConditions();
 
     void ClearGraphs()
     {
@@ -2969,50 +3338,106 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text SliderLine(Transform parent, string label, string unit, float min, float max, float val,
         ref float y, out Slider slider, float pad = 12f, float width = 314f)
     {
-        // Fixed geometry — identical for every slider (label+value+track in one block)
-        const float blockH = 44f;
-        const float labelH = 16f;
+        // Fixed geometry — label + numeric input + unit + track
+        const float blockH = 48f;
+        const float labelH = 18f;
         const float trackH = 4f;
         const float knob = 12f;
         const float trackPadX = 6f;
+        const float inputW = 58f;
+        const float unitW = 36f;
 
         Color trackCol = Color.Lerp(C_Edge, C_PanelSoft, UiTheme.IsLightBackground ? 0.25f : 0.4f);
         trackCol.a = 1f;
         Color fillCol = C_Accent; fillCol.a = 1f;
         Color handleCol = C_Amber; handleCol.a = 1f;
         Color labelCol = C_Text; labelCol.a = 0.92f;
+        Color fieldBg = UiTheme.IsLightBackground
+            ? new Color(1f, 1f, 1f, 0.95f)
+            : new Color(0.08f, 0.09f, 0.12f, 1f);
 
-        string unitS = string.IsNullOrEmpty(unit) ? "" : (" " + unit);
+        string unitS = string.IsNullOrEmpty(unit) ? "" : unit;
+        val = Mathf.Clamp(val, min, max);
 
         // ── Block container ──
         var block = CreatePanel("SliderBlock", parent, C_PanelSoft);
         block.GetComponent<Image>().raycastTarget = false;
         PinTL(block.GetComponent<RectTransform>(), pad, y, width, blockH);
 
-        // Label (left) — inside block so it never "vanishes" under siblings
-        var k = CreateText(block.transform, label ?? "", 12, labelCol);
+        // Label (left)
+        var k = CreateText(block.transform, label ?? "", 12, labelCol, FontStyles.Normal);
         k.raycastTarget = false;
         k.overflowMode = TextOverflowModes.Ellipsis;
         k.textWrappingMode = TextWrappingModes.NoWrap;
+        k.fontWeight = FontWeight.Regular;
         var krt = k.rectTransform;
         krt.anchorMin = new Vector2(0f, 1f);
         krt.anchorMax = new Vector2(1f, 1f);
         krt.pivot = new Vector2(0f, 1f);
         krt.anchoredPosition = new Vector2(8f, -4f);
-        krt.sizeDelta = new Vector2(-100f, labelH); // leave room for value
+        krt.sizeDelta = new Vector2(-(inputW + unitW + 20f), labelH);
 
-        // Value (right)
-        var v = CreateText(block.transform, Mathf.RoundToInt(val) + unitS, 12, C_Accent, FontStyles.Bold);
-        v.raycastTarget = false;
-        v.alignment = TextAlignmentOptions.Right;
+        // Unit (far right)
+        var uLab = CreateText(block.transform, unitS, 11, C_Muted, FontStyles.Normal);
+        uLab.raycastTarget = false;
+        uLab.alignment = TextAlignmentOptions.MidlineLeft;
+        uLab.overflowMode = TextOverflowModes.Overflow;
+        var urt = uLab.rectTransform;
+        urt.anchorMin = urt.anchorMax = new Vector2(1f, 1f);
+        urt.pivot = new Vector2(1f, 1f);
+        urt.anchoredPosition = new Vector2(-6f, -4f);
+        urt.sizeDelta = new Vector2(unitW, labelH);
+
+        // Numeric input (digits only) — click to type
+        var fieldGo = new GameObject("NumField", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        fieldGo.transform.SetParent(block.transform, false);
+        var frtIn = fieldGo.GetComponent<RectTransform>();
+        frtIn.anchorMin = frtIn.anchorMax = new Vector2(1f, 1f);
+        frtIn.pivot = new Vector2(1f, 1f);
+        frtIn.anchoredPosition = new Vector2(-(unitW + 8f), -3f);
+        frtIn.sizeDelta = new Vector2(inputW, labelH + 2f);
+        var fieldImg = fieldGo.GetComponent<Image>();
+        StyleSimpleImage(fieldImg, fieldBg);
+        fieldImg.raycastTarget = true;
+
+        var textGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        textGo.transform.SetParent(fieldGo.transform, false);
+        var v = textGo.GetComponent<TextMeshProUGUI>();
+        UiTypography.Apply(v, 12, C_Text, FontStyles.Normal);
+        v.fontStyle = FontStyles.Normal;
+        v.fontWeight = FontWeight.Regular;
+        v.alignment = TextAlignmentOptions.MidlineRight;
         v.overflowMode = TextOverflowModes.Overflow;
         v.textWrappingMode = TextWrappingModes.NoWrap;
-        var vrt = v.rectTransform;
-        vrt.anchorMin = new Vector2(1f, 1f);
-        vrt.anchorMax = new Vector2(1f, 1f);
-        vrt.pivot = new Vector2(1f, 1f);
-        vrt.anchoredPosition = new Vector2(-8f, -4f);
-        vrt.sizeDelta = new Vector2(88f, labelH);
+        v.raycastTarget = true;
+        v.text = Mathf.RoundToInt(val).ToString();
+        StretchFull(v.rectTransform, 4, 1, 4, 1);
+
+        var phGo = new GameObject("Placeholder", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        phGo.transform.SetParent(fieldGo.transform, false);
+        var ph = phGo.GetComponent<TextMeshProUGUI>();
+        UiTypography.Apply(ph, 12, C_Muted, FontStyles.Normal);
+        ph.alignment = TextAlignmentOptions.MidlineRight;
+        ph.text = "";
+        ph.raycastTarget = false;
+        StretchFull(ph.rectTransform, 4, 1, 4, 1);
+
+        var input = fieldGo.AddComponent<TMP_InputField>();
+        input.textViewport = frtIn;
+        input.textComponent = v;
+        input.placeholder = ph;
+        input.contentType = TMP_InputField.ContentType.IntegerNumber;
+        input.characterValidation = TMP_InputField.CharacterValidation.Integer;
+        input.lineType = TMP_InputField.LineType.SingleLine;
+        input.characterLimit = 5;
+        input.caretWidth = 1;
+        input.customCaretColor = true;
+        input.caretColor = C_Accent;
+        input.selectionColor = new Color(C_Accent.r, C_Accent.g, C_Accent.b, 0.35f);
+        input.targetGraphic = fieldImg;
+        input.text = Mathf.RoundToInt(val).ToString();
+        // Keep display TMP_Text reference for legacy txtSeedVal updates
+        TMP_Text displayVal = v;
 
         // ── Slider hit area (lower half of block) ──
         var slideGo = new GameObject("Slider", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -3028,12 +3453,16 @@ public class MissionControlUI : MonoBehaviour
         slideImg.raycastTarget = true;
 
         slider = slideGo.AddComponent<Slider>();
-        slider.minValue = min;
-        slider.maxValue = max;
-        slider.wholeNumbers = true;
-        slider.direction = Slider.Direction.LeftToRight;
-        slider.transition = Selectable.Transition.None;
-        slider.navigation = new Navigation { mode = Navigation.Mode.None };
+        // Local capture — out param cannot be used inside lambdas (CS1628)
+        var sld = slider;
+        float minV = min;
+        float maxV = max;
+        sld.minValue = minV;
+        sld.maxValue = maxV;
+        sld.wholeNumbers = true;
+        sld.direction = Slider.Direction.LeftToRight;
+        sld.transition = Selectable.Transition.None;
+        sld.navigation = new Navigation { mode = Navigation.Mode.None };
         slideGo.AddComponent<SliderScrollLock>();
 
         // Background track (fixed height via center anchors + sizeDelta.y)
@@ -3090,32 +3519,103 @@ public class MissionControlUI : MonoBehaviour
         hr.pivot = new Vector2(0.5f, 0.5f);
         hr.sizeDelta = new Vector2(knob, knob);
 
-        slider.fillRect = fr;
-        slider.handleRect = hr;
-        slider.targetGraphic = hImg;
+        sld.fillRect = fr;
+        sld.handleRect = hr;
+        sld.targetGraphic = hImg;
 
         // Re-lock handle size after Slider mutates anchors on first Set
         void LockHandle()
         {
             if (hr == null) return;
-            // Unity sets handle anchors to (n,0)-(n,1); keep equal size via sizeDelta
             hr.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, knob);
             hr.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, knob);
         }
 
-        slider.onValueChanged.AddListener(x =>
+        bool syncing = false;
+        void SetNumText(float x)
         {
-            if (v != null) v.text = Mathf.RoundToInt(x) + unitS;
+            if (input == null) return;
+            string t = Mathf.RoundToInt(x).ToString();
+            if (input.text != t)
+            {
+                syncing = true;
+                input.SetTextWithoutNotify(t);
+                syncing = false;
+            }
+            if (displayVal != null && !input.isFocused)
+                displayVal.text = t;
+        }
+
+        sld.onValueChanged.AddListener(x =>
+        {
+            if (!input.isFocused)
+                SetNumText(x);
             LockHandle();
         });
-        slider.SetValueWithoutNotify(val);
-        slider.onValueChanged.Invoke(val); // refresh value text + lock
-        // Force correct fill/handle layout once
+
+        input.onValueChanged.AddListener(s =>
+        {
+            if (syncing || loadingSettings) return;
+            if (string.IsNullOrEmpty(s)) return;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (s[i] < '0' || s[i] > '9')
+                {
+                    syncing = true;
+                    input.SetTextWithoutNotify(FilterDigits(s));
+                    syncing = false;
+                    return;
+                }
+            }
+        });
+
+        input.onEndEdit.AddListener(s =>
+        {
+            if (loadingSettings) return;
+            if (!int.TryParse(FilterDigits(s), out int n))
+                n = Mathf.RoundToInt(sld.value);
+            n = Mathf.Clamp(n, Mathf.RoundToInt(minV), Mathf.RoundToInt(maxV));
+            syncing = true;
+            input.SetTextWithoutNotify(n.ToString());
+            syncing = false;
+            if (Mathf.Abs(sld.value - n) > 0.01f)
+                sld.value = n;
+            else
+                SetNumText(n);
+            LockHandle();
+        });
+
+        input.onSelect.AddListener(_ =>
+        {
+            input.selectionAnchorPosition = 0;
+            input.selectionFocusPosition = input.text.Length;
+        });
+
+        sld.SetValueWithoutNotify(val);
+        SetNumText(val);
+        LockHandle();
         Canvas.ForceUpdateCanvases();
         LockHandle();
 
         y -= blockH + 6f;
-        return v;
+        return displayVal;
+    }
+
+    static string FilterDigits(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var sb = new System.Text.StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++)
+            if (s[i] >= '0' && s[i] <= '9') sb.Append(s[i]);
+        return sb.ToString();
+    }
+
+    /// <summary>Numeric display helper (input field is primary).</summary>
+    static string FormatSliderValue(float val, string unitS)
+    {
+        int n = Mathf.RoundToInt(val);
+        string num = n.ToString();
+        return string.IsNullOrEmpty(unitS) ? num : (num + " " + unitS.Trim());
     }
 
     Toggle ToggleAt(Transform parent, float x, float y, float w, float h, string label, bool on)

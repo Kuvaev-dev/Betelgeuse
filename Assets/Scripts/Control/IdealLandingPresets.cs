@@ -11,6 +11,8 @@ public static class IdealLandingPresets
     // Спокійний номінал (не default сцени)
     public const float StartHeight = 1400f;
     public const float StartVy = -48f;
+    /// <summary>Positive magnitude of StartVy (for UI sliders).</summary>
+    public const float StartDescentSpeed = 48f;
     public const float StartTiltDeg = 0.4f;
     public const float DryMass = 25600f;
     public const float FuelMass = 14000f;

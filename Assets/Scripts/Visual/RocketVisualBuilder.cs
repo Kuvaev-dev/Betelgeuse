@@ -45,7 +45,6 @@ public static class RocketVisualBuilder
 
         // ── Palette — clean Falcon-class presentation ──
         var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.042f, seed: 11);
-        yield return null;
         var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.22f, panelContrast: 0.048f, seed: 29);
         yield return null;
         var black = VisualMaterials.Lit(new Color(0.035f, 0.037f, 0.042f), 0.62f, 0.38f);
@@ -54,7 +53,6 @@ public static class RocketVisualBuilder
         var carbon = VisualMaterials.Lit(new Color(0.055f, 0.058f, 0.062f), 0.48f, 0.48f);
         var silver = VisualMaterials.Lit(new Color(0.90f, 0.92f, 0.95f), 0.94f, 0.84f);
         var heat = MakeNozzleSkin("NozzleHeat", seed: 7);
-        yield return null;
         var copper = VisualMaterials.Lit(new Color(0.62f, 0.44f, 0.32f), 0.93f, 0.58f);
         var darkMetal = VisualMaterials.Lit(new Color(0.14f, 0.15f, 0.17f), 0.90f, 0.52f);
         var stripe = VisualMaterials.Lit(new Color(0.04f, 0.04f, 0.045f), 0.45f, 0.32f);
@@ -153,8 +151,9 @@ public static class RocketVisualBuilder
 
     static Material MakeTankSkin(string name, float sootAmount, float panelContrast, int seed)
     {
-        const int tw = 1024;
-        const int th = 2048;
+        // Half previous atlas — 4× fewer texels, still sharp on a ~42 m body
+        const int tw = 512;
+        const int th = 1024;
         var tex = new Texture2D(tw, th, TextureFormat.RGB24, true, false);
         tex.name = name + "_Albedo";
         tex.wrapModeU = TextureWrapMode.Repeat;
@@ -351,8 +350,8 @@ public static class RocketVisualBuilder
 
     static Material MakeFairingSkin(string name, int seed)
     {
-        const int tw = 1024;
-        const int th = 1024;
+        const int tw = 512;
+        const int th = 512;
         var tex = new Texture2D(tw, th, TextureFormat.RGB24, true, false);
         tex.name = name;
         tex.wrapModeU = TextureWrapMode.Repeat;
@@ -655,49 +654,54 @@ public static class RocketVisualBuilder
 
     static void BuildEngineFX(Transform visual)
     {
+        // Nozzle exit lip is near y≈0 (center bell s=1.2). Emit just below the exit, not into the tank.
+        const float exitY = -0.08f;
+        // Default PS emits along +Z; pitch 90° → exhaust goes down (−Y).
+        var down = Quaternion.Euler(90f, 0f, 0f);
+
         var flameGo = new GameObject("EngineFlame");
         flameGo.transform.SetParent(visual, false);
-        flameGo.transform.localPosition = new Vector3(0f, -1.2f, 0f);
-        flameGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        flameGo.transform.localPosition = new Vector3(0f, exitY, 0f);
+        flameGo.transform.localRotation = down;
         var flame = flameGo.AddComponent<ParticleSystem>();
         ConfigureFlameOuter(flame);
 
         var coreGo = new GameObject("EngineFlameCore");
         coreGo.transform.SetParent(visual, false);
-        coreGo.transform.localPosition = new Vector3(0f, -0.95f, 0f);
-        coreGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        coreGo.transform.localPosition = new Vector3(0f, exitY - 0.05f, 0f);
+        coreGo.transform.localRotation = down;
         var core = coreGo.AddComponent<ParticleSystem>();
         ConfigureFlameCore(core);
 
         var smokeGo = new GameObject("EngineSmoke");
         smokeGo.transform.SetParent(visual, false);
-        smokeGo.transform.localPosition = new Vector3(0f, -5.5f, 0f);
-        smokeGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        smokeGo.transform.localPosition = new Vector3(0f, exitY - 1.8f, 0f);
+        smokeGo.transform.localRotation = down;
         var smoke = smokeGo.AddComponent<ParticleSystem>();
         ConfigureSmoke(smoke);
 
         var sparkGo = new GameObject("EngineSparks");
         sparkGo.transform.SetParent(visual, false);
-        sparkGo.transform.localPosition = new Vector3(0f, -1.0f, 0f);
-        sparkGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        sparkGo.transform.localPosition = new Vector3(0f, exitY, 0f);
+        sparkGo.transform.localRotation = down;
         var sparks = sparkGo.AddComponent<ParticleSystem>();
         ConfigureSparks(sparks);
 
         var dustGo = new GameObject("EngineDust");
         dustGo.transform.SetParent(visual, false);
-        dustGo.transform.localPosition = new Vector3(0f, -8f, 0f);
-        dustGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        dustGo.transform.localPosition = new Vector3(0f, exitY - 0.5f, 0f);
+        dustGo.transform.localRotation = down;
         var dust = dustGo.AddComponent<ParticleSystem>();
         ConfigureDust(dust);
 
         var lightGo = new GameObject("EngineLight");
         lightGo.transform.SetParent(visual, false);
-        lightGo.transform.localPosition = new Vector3(0f, -2.5f, 0f);
+        lightGo.transform.localPosition = new Vector3(0f, exitY - 1.2f, 0f);
         var light = lightGo.AddComponent<Light>();
         light.type = LightType.Point;
-        light.color = new Color(0.65f, 0.85f, 1f);
+        light.color = new Color(1f, 0.72f, 0.38f);
         light.intensity = 0f;
-        light.range = 150f;
+        light.range = 140f;
         light.shadows = LightShadows.None;
 
         var fx = visual.gameObject.AddComponent<RocketEngineFX>();
@@ -709,31 +713,52 @@ public static class RocketVisualBuilder
         fx.engineLight = light;
     }
 
+    /// <summary>Unity requires ALL velocityOverLifetime axes in the same MinMaxCurve mode.</summary>
+    static void DisableVelocityOverLifetime(ParticleSystem ps)
+    {
+        var vel = ps.velocityOverLifetime;
+        vel.enabled = false;
+        // Force identical Constant mode on every axis (prevents runtime error spam)
+        vel.x = new ParticleSystem.MinMaxCurve(0f);
+        vel.y = new ParticleSystem.MinMaxCurve(0f);
+        vel.z = new ParticleSystem.MinMaxCurve(0f);
+        vel.speedModifier = new ParticleSystem.MinMaxCurve(1f);
+    }
+
     static void ConfigureFlameOuter(ParticleSystem ps)
     {
+        // Warm sheath from nozzle exit — billboard, world-space, no broken VOL curves
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
         main.loop = true;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.14f, 0.32f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(55f, 120f);
-        main.startSize = new ParticleSystem.MinMaxCurve(1.4f, 4.8f);
-        main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(1f, 0.92f, 0.75f, 0.95f),
-            new Color(1f, 0.45f, 0.12f, 0.85f));
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.maxParticles = 1200;
-        main.gravityModifier = 0f;
+        main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.28f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(35f, 70f);
+        main.startSize3D = false;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.9f, 2.4f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(1f, 0.9f, 0.55f, 0.92f),
+            new Color(1f, 0.4f, 0.08f, 0.7f));
+        main.maxParticles = 500;
+        main.gravityModifier = 0.02f;
         main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
 
         var emission = ps.emission;
         emission.rateOverTime = 0f;
 
         var shape = ps.shape;
+        shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 6.5f;
-        shape.radius = 1.75f;
+        shape.angle = 7f;
+        shape.radius = 1.15f; // ≈ center nozzle exit radius
+        shape.radiusThickness = 0.55f;
         shape.arc = 360f;
+        shape.alignToDirection = false;
+        shape.randomDirectionAmount = 0.05f;
+
+        DisableVelocityOverLifetime(ps);
 
         var col = ps.colorOverLifetime;
         col.enabled = true;
@@ -741,73 +766,76 @@ public static class RocketVisualBuilder
         g.SetKeys(
             new[]
             {
-                new GradientColorKey(new Color(1f, 0.98f, 0.95f), 0f),
-                new GradientColorKey(new Color(0.75f, 0.88f, 1f), 0.12f),
-                new GradientColorKey(new Color(1f, 0.62f, 0.22f), 0.42f),
-                new GradientColorKey(new Color(0.85f, 0.22f, 0.05f), 0.75f),
-                new GradientColorKey(new Color(0.25f, 0.06f, 0.02f), 1f)
+                new GradientColorKey(new Color(1f, 0.95f, 0.75f), 0f),
+                new GradientColorKey(new Color(1f, 0.7f, 0.25f), 0.25f),
+                new GradientColorKey(new Color(1f, 0.38f, 0.08f), 0.55f),
+                new GradientColorKey(new Color(0.35f, 0.1f, 0.04f), 1f)
             },
             new[]
             {
-                new GradientAlphaKey(0.95f, 0f),
-                new GradientAlphaKey(0.9f, 0.15f),
-                new GradientAlphaKey(0.55f, 0.5f),
-                new GradientAlphaKey(0.2f, 0.78f),
+                new GradientAlphaKey(0.85f, 0f),
+                new GradientAlphaKey(0.75f, 0.2f),
+                new GradientAlphaKey(0.35f, 0.6f),
                 new GradientAlphaKey(0f, 1f)
             });
         col.color = g;
 
         var size = ps.sizeOverLifetime;
         size.enabled = true;
+        size.separateAxes = false;
         size.size = new ParticleSystem.MinMaxCurve(1f,
             new AnimationCurve(
-                new Keyframe(0f, 0.35f),
-                new Keyframe(0.25f, 0.85f),
-                new Keyframe(0.7f, 1.35f),
-                new Keyframe(1f, 1.85f)));
-
-        var vel = ps.velocityOverLifetime;
-        vel.enabled = true;
-        vel.space = ParticleSystemSimulationSpace.Local;
-        vel.z = new ParticleSystem.MinMaxCurve(0f, AnimationCurve.Linear(0f, 0f, 1f, 8f));
+                new Keyframe(0f, 0.55f),
+                new Keyframe(0.35f, 1.1f),
+                new Keyframe(1f, 1.65f)));
 
         var noise = ps.noise;
         noise.enabled = true;
-        noise.strength = 0.35f;
-        noise.frequency = 0.6f;
-        noise.scrollSpeed = 1.2f;
+        noise.separateAxes = false;
+        noise.strength = new ParticleSystem.MinMaxCurve(0.4f);
+        noise.frequency = 0.7f;
+        noise.scrollSpeed = new ParticleSystem.MinMaxCurve(1.1f);
         noise.damping = true;
+        noise.octaveCount = 1;
         noise.quality = ParticleSystemNoiseQuality.Medium;
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;
-        rend.sharedMaterial = VisualMaterials.Particle(new Color(1f, 0.75f, 0.4f, 1f));
+        rend.sharedMaterial = VisualMaterials.ParticleAdditive(new Color(1f, 0.65f, 0.25f, 1f));
         rend.sortingFudge = -2f;
     }
 
     static void ConfigureFlameCore(ParticleSystem ps)
     {
+        // Bright core jet from throat/exit center
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
         main.loop = true;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.08f, 0.18f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(80f, 160f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.5f, 1.6f);
-        main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(0.85f, 0.95f, 1f, 1f),
-            new Color(0.55f, 0.82f, 1f, 0.95f));
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.maxParticles = 600;
+        main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.08f, 0.16f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(55f, 100f);
+        main.startSize3D = false;
+        main.startSize = new ParticleSystem.MinMaxCurve(0.35f, 0.95f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(1f, 1f, 1f, 1f),
+            new Color(0.6f, 0.88f, 1f, 0.95f));
+        main.maxParticles = 280;
         main.gravityModifier = 0f;
 
         var emission = ps.emission;
         emission.rateOverTime = 0f;
 
         var shape = ps.shape;
+        shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 3.2f;
-        shape.radius = 0.85f;
+        shape.angle = 3f;
+        shape.radius = 0.45f;
+        shape.radiusThickness = 0.4f;
+        shape.alignToDirection = false;
+
+        DisableVelocityOverLifetime(ps);
 
         var col = ps.colorOverLifetime;
         col.enabled = true;
@@ -816,28 +844,41 @@ public static class RocketVisualBuilder
             new[]
             {
                 new GradientColorKey(new Color(1f, 1f, 1f), 0f),
-                new GradientColorKey(new Color(0.7f, 0.9f, 1f), 0.35f),
-                new GradientColorKey(new Color(0.4f, 0.7f, 1f), 0.7f),
-                new GradientColorKey(new Color(0.3f, 0.4f, 0.8f), 1f)
+                new GradientColorKey(new Color(0.75f, 0.92f, 1f), 0.35f),
+                new GradientColorKey(new Color(0.45f, 0.7f, 1f), 0.75f),
+                new GradientColorKey(new Color(0.3f, 0.4f, 0.85f), 1f)
             },
             new[]
             {
                 new GradientAlphaKey(1f, 0f),
-                new GradientAlphaKey(0.85f, 0.4f),
-                new GradientAlphaKey(0.25f, 0.8f),
+                new GradientAlphaKey(0.8f, 0.4f),
+                new GradientAlphaKey(0.2f, 0.85f),
                 new GradientAlphaKey(0f, 1f)
             });
         col.color = g;
 
         var size = ps.sizeOverLifetime;
         size.enabled = true;
+        size.separateAxes = false;
         size.size = new ParticleSystem.MinMaxCurve(1f,
-            AnimationCurve.EaseInOut(0f, 0.5f, 1f, 1.4f));
+            new AnimationCurve(
+                new Keyframe(0f, 0.7f),
+                new Keyframe(0.4f, 1f),
+                new Keyframe(1f, 0.4f)));
+
+        var noise = ps.noise;
+        noise.enabled = true;
+        noise.separateAxes = false;
+        noise.strength = new ParticleSystem.MinMaxCurve(0.15f);
+        noise.frequency = 1.1f;
+        noise.scrollSpeed = new ParticleSystem.MinMaxCurve(1.8f);
+        noise.damping = true;
+        noise.quality = ParticleSystemNoiseQuality.Medium;
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;
-        rend.sharedMaterial = VisualMaterials.Particle(new Color(0.7f, 0.9f, 1f, 1f));
-        rend.sortingFudge = -5f;
+        rend.sharedMaterial = VisualMaterials.ParticleAdditive(new Color(0.7f, 0.9f, 1f, 1f));
+        rend.sortingFudge = -6f;
     }
 
     static void ConfigureSmoke(ParticleSystem ps)
@@ -865,6 +906,8 @@ public static class RocketVisualBuilder
         shape.angle = 14f;
         shape.radius = 1.4f;
 
+        DisableVelocityOverLifetime(ps);
+
         var col = ps.colorOverLifetime;
         col.enabled = true;
         var g = new Gradient();
@@ -886,6 +929,7 @@ public static class RocketVisualBuilder
 
         var size = ps.sizeOverLifetime;
         size.enabled = true;
+        size.separateAxes = false;
         size.size = new ParticleSystem.MinMaxCurve(1f,
             new AnimationCurve(
                 new Keyframe(0f, 0.4f),
@@ -894,15 +938,18 @@ public static class RocketVisualBuilder
 
         var noise = ps.noise;
         noise.enabled = true;
-        noise.strength = 0.85f;
+        noise.separateAxes = false;
+        noise.strength = new ParticleSystem.MinMaxCurve(0.85f);
         noise.frequency = 0.35f;
-        noise.scrollSpeed = 0.4f;
+        noise.scrollSpeed = new ParticleSystem.MinMaxCurve(0.4f);
         noise.damping = true;
         noise.quality = ParticleSystemNoiseQuality.Medium;
 
         var rot = ps.rotationOverLifetime;
         rot.enabled = true;
+        rot.separateAxes = false;
         rot.z = new ParticleSystem.MinMaxCurve(-0.6f, 0.6f);
+        // Keep x/y same mode as z when separateAxes is false — Unity uses z only
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;
@@ -933,7 +980,9 @@ public static class RocketVisualBuilder
         var shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Cone;
         shape.angle = 11f;
-        shape.radius = 1.3f;
+        shape.radius = 1.1f;
+
+        DisableVelocityOverLifetime(ps);
 
         var col = ps.colorOverLifetime;
         col.enabled = true;
@@ -955,9 +1004,9 @@ public static class RocketVisualBuilder
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Stretch;
-        rend.lengthScale = 3.2f;
-        rend.velocityScale = 0.1f;
-        rend.sharedMaterial = VisualMaterials.Particle(new Color(1f, 0.85f, 0.4f, 1f));
+        rend.lengthScale = 2.4f;
+        rend.velocityScale = 0.08f;
+        rend.sharedMaterial = VisualMaterials.ParticleAdditive(new Color(1f, 0.85f, 0.4f, 1f));
     }
 
     static void ConfigureDust(ParticleSystem ps)
@@ -984,6 +1033,8 @@ public static class RocketVisualBuilder
         shape.shapeType = ParticleSystemShapeType.Cone;
         shape.angle = 55f;
         shape.radius = 2.5f;
+
+        DisableVelocityOverLifetime(ps);
 
         var col = ps.colorOverLifetime;
         col.enabled = true;

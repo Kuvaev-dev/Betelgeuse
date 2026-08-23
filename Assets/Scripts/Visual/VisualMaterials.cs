@@ -58,13 +58,33 @@ public static class VisualMaterials
     {
         var mat = new Material(ParticleShader);
         SetColor(mat, tint);
-        // Transparent + additive-friendly for flame/smoke billboards
+        // Transparent alpha for smoke/dust
         if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
         if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f); // alpha
         if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
         if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
         if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 0f);
+        mat.renderQueue = 3000;
+        return mat;
+    }
+
+    /// <summary>Additive particles for engine plume (bright core + sheath).</summary>
+    public static Material ParticleAdditive(Color tint)
+    {
+        var mat = new Material(ParticleShader);
+        SetColor(mat, tint);
+        if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
+        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 1f); // additive
+        if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+        if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
+        if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 0f);
+        if (mat.HasProperty("_EmissionColor"))
+        {
+            mat.EnableKeyword("_EMISSION");
+            mat.SetColor("_EmissionColor", tint * 1.6f);
+        }
         mat.renderQueue = 3000;
         return mat;
     }

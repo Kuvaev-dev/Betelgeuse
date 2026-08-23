@@ -71,6 +71,8 @@ public class ResearchExporterTests
         StringAssert.Contains("monte_carlo_comparison", json);
         StringAssert.Contains("algorithms", json);
         StringAssert.Contains("successRate_pct", json);
+        StringAssert.Contains("experimentSeed", json);
+        StringAssert.Contains("stdSuccessScore", json);
     }
 
     [Test]

@@ -12,6 +12,8 @@ public class HybridController : MonoBehaviour, ILandingController
 
     [Header("Hybrid Neuro-Fuzzy")]
     public bool isActive = true;
+    /// <summary>Ablation: false = pure Sugeno (no MLP residual) — thesis leave-one-out.</summary>
+    public bool useNeuralResidual = true;
     [Range(0f, 0.5f)] public float neuralThrustBlend = 0.25f;
     [Range(0f, 0.45f)] public float neuralGimbalBlend = 0.2f;
     [Range(0.05f, 0.6f)] public float maxResidualMult = 0.3f;
@@ -49,15 +51,16 @@ public class HybridController : MonoBehaviour, ILandingController
 
         float nnThrust = fuzzyThrust;
         Vector3 nnGimbal = fuzzyGimbal;
-        if (neural != null && neural.isActive)
+        bool residual = useNeuralResidual && neural != null && neural.isActive;
+        if (residual)
         {
             neural.CalculateControl(height, verticalVelocity, mass, currentThrust,
                 pitchError, yawError, horizSpeed, blendWithProfile: false,
                 out nnThrust, out nnGimbal);
         }
 
-        float alpha = neuralThrustBlend;
-        float beta = neuralGimbalBlend;
+        float alpha = residual ? neuralThrustBlend : 0f;
+        float beta = residual ? neuralGimbalBlend : 0f;
         // Біля землі — пріоритет fuzzy (інтерпретовані правила)
         if (height < 50f)
         {
@@ -90,6 +93,7 @@ public class HybridController : MonoBehaviour, ILandingController
             ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
             ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg, ctx.HorizSpeed,
             out float thrust, out Vector3 gimbal);
-        return new ControlCommand(thrust, gimbal, lateralScale: 1.15f, gimbalBlend: 0.5f);
+        // Strongest lateral (theme Neuro-Fuzzy) — expected MC leader
+        return new ControlCommand(thrust, gimbal, lateralScale: 1.38f, gimbalBlend: 0.5f);
     }
 }

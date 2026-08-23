@@ -1,6 +1,6 @@
 # Betelgeuse — Architecture
 
-**Version:** 1.1.0  
+**Version:** 1.2.0 (defense-complete)  
 **Stack:** Unity 6000 URP · C#
 
 ## Goals

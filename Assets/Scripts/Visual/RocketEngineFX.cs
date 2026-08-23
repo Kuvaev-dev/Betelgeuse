@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Візуальні ефекти двигуна: core/outer plume, дим, іскри, ground dust, light.
 /// Інтенсивність ∝ currentThrust / maxThrust (згладжено).
+/// Не чіпає velocityOverLifetime (різні mode X/Y/Z → Unity error).
 /// </summary>
 public class RocketEngineFX : MonoBehaviour
 {
@@ -13,13 +14,13 @@ public class RocketEngineFX : MonoBehaviour
     public ParticleSystem dust;
     public Light engineLight;
 
-    public float maxFlameRate = 320f;
-    public float maxCoreRate = 180f;
-    public float maxSmokeRate = 48f;
-    public float maxSparkRate = 110f;
-    public float maxDustRate = 90f;
-    public float maxLightIntensity = 110f;
-    public float lightRange = 150f;
+    public float maxFlameRate = 240f;
+    public float maxCoreRate = 140f;
+    public float maxSmokeRate = 40f;
+    public float maxSparkRate = 55f;
+    public float maxDustRate = 75f;
+    public float maxLightIntensity = 90f;
+    public float lightRange = 120f;
     public float smokeBoostBelowAltitude = 180f;
     public float dustBelowAltitude = 95f;
 
@@ -60,7 +61,7 @@ public class RocketEngineFX : MonoBehaviour
         float smokeRate = on ? smoothThrust * maxSmokeRate * smokeMul : 0f;
         SetEmission(smoke, smokeRate, on && smokeRate > 0.4f);
 
-        SetEmission(sparks, on ? smoothThrust * maxSparkRate * 0.55f : 0f, on);
+        SetEmission(sparks, on ? smoothThrust * maxSparkRate * 0.5f : 0f, on);
 
         float dustFade = Mathf.Clamp01(1f - h / dustBelowAltitude);
         float dustRate = on ? smoothThrust * maxDustRate * dustFade * dustFade : 0f;
@@ -68,47 +69,50 @@ public class RocketEngineFX : MonoBehaviour
 
         if (engineLight != null)
         {
-            float flicker = on ? 0.86f + 0.14f * Mathf.PerlinNoise(Time.time * 38f, 0.4f) : 1f;
+            float flicker = on ? 0.88f + 0.12f * Mathf.PerlinNoise(Time.time * 32f, 0.4f) : 1f;
             engineLight.intensity = smoothThrust * maxLightIntensity * flicker;
             engineLight.range = lightRange * (0.55f + 0.45f * smoothThrust);
-            // Methane/LOX Raptor-like: cool cyan core → warm amber at high throttle
             engineLight.color = Color.Lerp(
-                new Color(0.45f, 0.78f, 1f),
-                new Color(1f, 0.78f, 0.42f),
-                smoothThrust * 0.9f);
+                new Color(0.55f, 0.8f, 1f),
+                new Color(1f, 0.72f, 0.35f),
+                smoothThrust * 0.85f);
         }
 
+        // Only startSpeed / startSize (single-axis) — never mix curve modes on VOL axes
         if (flame != null && on)
         {
             var main = flame.main;
+            main.startSize3D = false;
             main.startSpeed = new ParticleSystem.MinMaxCurve(
-                38f + smoothThrust * 70f,
-                70f + smoothThrust * 110f);
+                28f + smoothThrust * 32f,
+                55f + smoothThrust * 45f);
             main.startSize = new ParticleSystem.MinMaxCurve(
-                1.1f + smoothThrust * 1.8f,
-                2.6f + smoothThrust * 3.8f);
+                0.75f + smoothThrust * 0.9f,
+                1.8f + smoothThrust * 1.6f);
         }
 
         if (flameCore != null && on)
         {
             var main = flameCore.main;
+            main.startSize3D = false;
             main.startSpeed = new ParticleSystem.MinMaxCurve(
-                55f + smoothThrust * 90f,
-                95f + smoothThrust * 140f);
+                48f + smoothThrust * 40f,
+                85f + smoothThrust * 55f);
             main.startSize = new ParticleSystem.MinMaxCurve(
-                0.45f + smoothThrust * 0.7f,
-                1.1f + smoothThrust * 1.4f);
+                0.3f + smoothThrust * 0.35f,
+                0.75f + smoothThrust * 0.55f);
         }
 
         if (smoke != null && on)
         {
             var main = smoke.main;
+            main.startSize3D = false;
             main.startSpeed = new ParticleSystem.MinMaxCurve(
-                10f + smoothThrust * 18f,
-                22f + smoothThrust * 36f);
+                10f + smoothThrust * 16f,
+                20f + smoothThrust * 30f);
             main.startSize = new ParticleSystem.MinMaxCurve(
-                1.4f + smoothThrust * 1.2f,
-                3.2f + smoothThrust * 3.5f);
+                1.4f + smoothThrust * 1.1f,
+                3.0f + smoothThrust * 3.0f);
         }
     }
 

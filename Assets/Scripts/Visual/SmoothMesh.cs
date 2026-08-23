@@ -6,9 +6,9 @@ using UnityEngine;
 /// </summary>
 public static class SmoothMesh
 {
-    const int DefaultSeg = 96;
-    const int SphereLat = 48;
-    const int SphereLon = 64;
+    const int DefaultSeg = 64;
+    const int SphereLat = 32;
+    const int SphereLon = 48;
 
     static Mesh cachedDisc;
     static Mesh cachedCylinder;

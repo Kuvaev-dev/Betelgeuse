@@ -48,7 +48,7 @@ public static class LunarTerrainMesh
     {
         if (box == null) yield break;
         if (radius < 1f) radius = TerrainRadius;
-        resolution = Mathf.Clamp(resolution, 96, 448);
+        resolution = Mathf.Clamp(resolution, 96, 320);
         var rng = new System.Random(seed);
         var craters = BuildCraterField(rng, radius);
 
@@ -65,14 +65,15 @@ public static class LunarTerrainMesh
                 float z = -half + iz * step;
                 height[ix, iz] = SampleHeight(x, z, craters, radius);
             }
-            if ((iz & 15) == 0) yield return null;
+            if ((iz & 31) == 0) yield return null;
         }
 
-        // Heavy smooth → circular bowls, no faceted rims
-        SmoothHeightField(height, n, 6);
+        // Smooth → circular bowls without multi-pass stall
+        SmoothHeightField(height, n, 3);
         yield return null;
 
-        int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 5, 1536, 2048));
+        // 512–1024 albedo is enough at lunar scale; 2K was the main load stall
+        int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 3, 512, 1024));
         Texture2D albedoTex = null;
         Texture2D normalTex = null;
         yield return BuildSurfaceMapsRoutine(craters, radius, texSize, seed,
@@ -107,7 +108,7 @@ public static class LunarTerrainMesh
                     (x * invR + 1f) * 0.5f,
                     (z * invR + 1f) * 0.5f));
             }
-            if ((iz & 15) == 0) yield return null;
+            if ((iz & 31) == 0) yield return null;
         }
 
         var tris = new List<int>(resolution * resolution * 6);
@@ -124,7 +125,7 @@ public static class LunarTerrainMesh
                 tris.Add(i00); tris.Add(i01); tris.Add(i10);
                 tris.Add(i10); tris.Add(i01); tris.Add(i11);
             }
-            if ((iz & 31) == 0) yield return null;
+            if ((iz & 63) == 0) yield return null;
         }
 
         var verts = vertList.ToArray();
@@ -141,7 +142,7 @@ public static class LunarTerrainMesh
             norms[i0] += faceN;
             norms[i1] += faceN;
             norms[i2] += faceN;
-            if ((t & 4095) == 0 && t > 0) yield return null;
+            if ((t & 16383) == 0 && t > 0) yield return null;
         }
         for (int i = 0; i < norms.Length; i++)
         {
@@ -267,7 +268,7 @@ public static class LunarTerrainMesh
                 hBuf[idx] = h;
                 aBuf[idx] = g;
             }
-            if ((y & 7) == 0) yield return null;
+            if ((y & 31) == 0) yield return null;
         }
 
         var order = new int[craters.Length];
@@ -277,12 +278,10 @@ public static class LunarTerrainMesh
         RasterizeCratersInto(hBuf, aBuf, craters, order, terrainRadius, texSize, half, metersPerTexel);
         yield return null;
 
-        // Wide blur kills any remaining pixel stair-steps on rims
-        BlurBuffer(hBuf, texSize, 3);
+        // Light blur — enough to soften rims without multi-pass stalls
+        BlurBuffer(hBuf, texSize, 2);
         yield return null;
-        BlurBuffer(aBuf, texSize, 4);
-        yield return null;
-        BlurBufferWide(aBuf, texSize, 2);
+        BlurBuffer(aBuf, texSize, 2);
         yield return null;
 
         var albedoTex = new Texture2D(texSize, texSize, TextureFormat.RGB24, true, false);
@@ -325,7 +324,7 @@ public static class LunarTerrainMesh
                     Mathf.Clamp01(v * 1.035f),
                     1f);
             }
-            if ((y & 7) == 0) yield return null;
+            if ((y & 31) == 0) yield return null;
         }
 
         albedoTex.SetPixels(albedoCols);
@@ -800,7 +799,7 @@ public static class LunarTerrainMesh
         go.transform.localPosition = Vector3.zero;
 
         var box = new BuildOutput();
-        yield return BuildRoutine(box, Mathf.Max(resolution, 420), radius, 42);
+        yield return BuildRoutine(box, resolution, radius, 42);
 
         var mf = go.AddComponent<MeshFilter>();
         mf.sharedMesh = box.mesh;

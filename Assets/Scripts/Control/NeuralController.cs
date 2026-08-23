@@ -206,7 +206,7 @@ public class NeuralController : MonoBehaviour, ILandingController
             ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
             ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.HorizSpeed,
             out float thrust, out Vector3 gimbal);
-        return new ControlCommand(thrust, gimbal, lateralScale: 0.85f, gimbalBlend: 0.4f);
+        return new ControlCommand(thrust, gimbal, lateralScale: 0.88f, gimbalBlend: 0.4f);
     }
 
     /// <summary>

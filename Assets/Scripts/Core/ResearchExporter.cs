@@ -60,7 +60,20 @@ public static class ResearchExporter
         public float windStrength;
         public float massVariationPercent;
         public float angleVariationDegrees;
+        public float positionJitterMeters = 18f;
+        public bool continuousWind = true;
+        public int experimentSeed = 42;
+        public int protocolVersion = 2;
+        public bool pairedSeeds = true;
+        public bool hybridResidual = true;
+        public float startHeight = 1800f;
+        public float startDescentSpeed = 72f;
+        public float startTiltDeg = 3.5f;
         public List<AlgoStats> algorithms = new();
+
+        /// <summary>True if any disturbance channel is active (for report wording).</summary>
+        public bool HasDisturbances =>
+            enableNoise || windStrength > 0.05f || positionJitterMeters > 0.1f;
     }
 
     public sealed class AlgoStats
@@ -75,6 +88,7 @@ public static class ResearchExporter
         public float avgFuelRemaining;
         public float avgFlightTime;
         public float avgSuccessScore;
+        public float stdSuccessScore;
         public float minTouchdownVelocity;
         public float maxTouchdownVelocity;
         public int successCount;
@@ -208,6 +222,19 @@ public static class ResearchExporter
         s.avgSuccessScore = sumS / n;
         s.minTouchdownVelocity = minV;
         s.maxTouchdownVelocity = maxV;
+
+        // Sample stdev of SuccessScore (n>1); 0 when single trial
+        if (n > 1)
+        {
+            float mean = s.avgSuccessScore;
+            double acc = 0;
+            foreach (var m in list)
+            {
+                double d = m.SuccessScore - mean;
+                acc += d * d;
+            }
+            s.stdSuccessScore = (float)System.Math.Sqrt(acc / (n - 1));
+        }
         return s;
     }
 
@@ -414,7 +441,8 @@ public static class ResearchExporter
             sb.AppendLine("| `03_results.json` | Для скриптів |");
             sb.AppendLine();
             sb.AppendLine($"- Запусків на алгоритм: **{d.testsPerAlgorithm}**");
-            sb.AppendLine($"- Збурення: **{(d.enableNoise ? "увімкнено" : "вимкнено")}**");
+            sb.AppendLine($"- Збурення: **{(d.HasDisturbances ? "увімкнено" : "вимкнено")}** (вітер={d.windStrength:F1}, jitter={d.positionJitterMeters:F0} м)");
+            sb.AppendLine($"- Paired seeds: **{(d.pairedSeeds ? "так" : "ні")}** · protocol v{d.protocolVersion}");
             sb.AppendLine($"- Папка: `SimulationLogs/{packFolder}/`");
             sb.AppendLine();
             sb.AppendLine("**З чого почати:** `01_SUMMARY.md`.");
@@ -432,7 +460,8 @@ public static class ResearchExporter
             sb.AppendLine("| `03_results.json` | For scripts |");
             sb.AppendLine();
             sb.AppendLine($"- Runs per algorithm: **{d.testsPerAlgorithm}**");
-            sb.AppendLine($"- Disturbances: **{(d.enableNoise ? "on" : "off")}**");
+            sb.AppendLine($"- Disturbances: **{(d.HasDisturbances ? "on" : "off")}** (wind={d.windStrength:F1}, jitter={d.positionJitterMeters:F0} m)");
+            sb.AppendLine($"- Paired seeds: **{(d.pairedSeeds ? "yes" : "no")}** · protocol v{d.protocolVersion}");
             sb.AppendLine($"- Folder: `SimulationLogs/{packFolder}/`");
             sb.AppendLine();
             sb.AppendLine("**Start here:** `01_SUMMARY.md`.");
@@ -579,7 +608,7 @@ public static class ResearchExporter
     public static string BuildComparisonCsv(ComparisonExportData d)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Algorithm,Tests,SuccessCount,SuccessRate(%),AvgTouchdownVelocity,MinTouchdownVelocity,MaxTouchdownVelocity,AvgAngleError,AvgHorizontalMiss,AvgHorizontalSpeed,AvgFuelRemaining,AvgFlightTime,AvgSuccessScore");
+        sb.AppendLine("Algorithm,Tests,SuccessCount,SuccessRate(%),AvgTouchdownVelocity,MinTouchdownVelocity,MaxTouchdownVelocity,AvgAngleError,AvgHorizontalMiss,AvgHorizontalSpeed,AvgFuelRemaining,AvgFlightTime,AvgSuccessScore,StdSuccessScore,Seed,HybridResidual,PositionJitter_m,Wind,PairedSeeds,ProtocolVersion");
         foreach (var a in d.algorithms)
         {
             sb.Append(EscCsv(a.name)).Append(',')
@@ -594,7 +623,14 @@ public static class ResearchExporter
               .Append(F(a.avgHorizontalSpeed)).Append(',')
               .Append(F(a.avgFuelRemaining)).Append(',')
               .Append(F(a.avgFlightTime)).Append(',')
-              .Append(F(a.avgSuccessScore))
+              .Append(F(a.avgSuccessScore)).Append(',')
+              .Append(F(a.stdSuccessScore)).Append(',')
+              .Append(d.experimentSeed).Append(',')
+              .Append(d.hybridResidual ? "1" : "0").Append(',')
+              .Append(F(d.positionJitterMeters)).Append(',')
+              .Append(F(d.windStrength)).Append(',')
+              .Append(d.pairedSeeds ? "1" : "0").Append(',')
+              .Append(d.protocolVersion)
               .AppendLine();
         }
         return sb.ToString();
@@ -612,7 +648,16 @@ public static class ResearchExporter
         sb.AppendLine($"    \"enableNoise\": {(d.enableNoise ? "true" : "false")},");
         sb.AppendLine($"    \"windStrength\": {F(d.windStrength)},");
         sb.AppendLine($"    \"massVariationPercent\": {F(d.massVariationPercent)},");
-        sb.AppendLine($"    \"angleVariationDegrees\": {F(d.angleVariationDegrees)}");
+        sb.AppendLine($"    \"angleVariationDegrees\": {F(d.angleVariationDegrees)},");
+        sb.AppendLine($"    \"positionJitterMeters\": {F(d.positionJitterMeters)},");
+        sb.AppendLine($"    \"continuousWind\": {(d.continuousWind ? "true" : "false")},");
+        sb.AppendLine($"    \"experimentSeed\": {d.experimentSeed},");
+        sb.AppendLine($"    \"protocolVersion\": {d.protocolVersion},");
+        sb.AppendLine($"    \"pairedSeeds\": {(d.pairedSeeds ? "true" : "false")},");
+        sb.AppendLine($"    \"hybridResidual\": {(d.hybridResidual ? "true" : "false")},");
+        sb.AppendLine($"    \"startHeight_m\": {F(d.startHeight)},");
+        sb.AppendLine($"    \"startDescentSpeed_mps\": {F(d.startDescentSpeed)},");
+        sb.AppendLine($"    \"startTilt_deg\": {F(d.startTiltDeg)}");
         sb.AppendLine("  },");
         sb.AppendLine("  \"algorithms\": [");
         for (int i = 0; i < d.algorithms.Count; i++)
@@ -631,7 +676,8 @@ public static class ResearchExporter
             sb.AppendLine($"      \"avgHorizontalSpeed_mps\": {F(a.avgHorizontalSpeed)},");
             sb.AppendLine($"      \"avgFuelRemaining_kg\": {F(a.avgFuelRemaining)},");
             sb.AppendLine($"      \"avgFlightTime_s\": {F(a.avgFlightTime)},");
-            sb.AppendLine($"      \"avgSuccessScore\": {F(a.avgSuccessScore)}");
+            sb.AppendLine($"      \"avgSuccessScore\": {F(a.avgSuccessScore)},");
+            sb.AppendLine($"      \"stdSuccessScore\": {F(a.stdSuccessScore)}");
             sb.Append("    }").AppendLine(i < d.algorithms.Count - 1 ? "," : "");
         }
         sb.AppendLine("  ]");
@@ -644,27 +690,33 @@ public static class ResearchExporter
         var sb = new StringBuilder(4096);
         sb.AppendLine("# Порівняння алгоритмів GNC (Monte-Carlo)");
         sb.AppendLine();
-        sb.AppendLine("Один експеримент: кожен алгоритм (PID / Fuzzy / Neural / Hybrid) запускається N разів із випадковими збуреннями.");
+        sb.AppendLine("Один експеримент: кожен алгоритм (PID / Fuzzy / Neural / Hybrid) запускається N разів.");
+        sb.AppendLine("**Paired seeds** — trial `i` має однакові збурення для всіх алгоритмів (чесне порівняння).");
         sb.AppendLine();
         sb.AppendLine($"| | |");
         sb.AppendLine($"|--|--|");
         sb.AppendLine($"| **Дата** | {DateTime.Now:yyyy-MM-dd HH:mm:ss} |");
         sb.AppendLine($"| **Запусків на алгоритм (N)** | {d.testsPerAlgorithm} |");
-        sb.AppendLine($"| **Збурення** | {(d.enableNoise ? "увімкнено" : "вимкнено")} |");
-        if (d.enableNoise)
-        {
-            sb.AppendLine($"| Вітер | {d.windStrength:F1} |");
-            sb.AppendLine($"| ±маса | {d.massVariationPercent:F1}% |");
-            sb.AppendLine($"| ±кут | {d.angleVariationDegrees:F1}° |");
-        }
+        sb.AppendLine($"| **Seed** | `{d.experimentSeed}` |");
+        sb.AppendLine($"| **Protocol** | v{d.protocolVersion} · paired={(d.pairedSeeds ? "yes" : "no")} |");
+        sb.AppendLine($"| **Hybrid residual** | {(d.hybridResidual ? "ON (Neuro-Fuzzy)" : "OFF = Fuzzy-only ablation")} |");
+        sb.AppendLine($"| **h₀** | {d.startHeight:F0} м |");
+        sb.AppendLine($"| **|Vy|₀** | {d.startDescentSpeed:F0} м/с |");
+        sb.AppendLine($"| **нахил₀** | {d.startTiltDeg:F1}° |");
+        sb.AppendLine($"| **Збурення** | {(d.HasDisturbances ? "увімкнено" : "вимкнено")} |");
+        sb.AppendLine($"| Вітер | {d.windStrength:F1} · continuous={(d.continuousWind ? "on" : "off")} |");
+        sb.AppendLine($"| ±маса | {d.massVariationPercent:F1}% |");
+        sb.AppendLine($"| ±кут | {d.angleVariationDegrees:F1}° |");
+        sb.AppendLine($"| Position jitter | ±{d.positionJitterMeters:F0} м |");
+        sb.AppendLine($"| enableNoise (mass/angle/jitter) | {(d.enableNoise ? "on" : "off")} |");
         sb.AppendLine();
         sb.AppendLine("## Зведена таблиця");
         sb.AppendLine();
-        sb.AppendLine("| Алгоритм | N | Успіх % | V̄_touch | ∠̄ | Промах | Score |");
-        sb.AppendLine("|----------|---|---------|---------|-----|--------|-------|");
+        sb.AppendLine("| Алгоритм | N | Успіх % | V̄_touch | ∠̄ | Промах | Score ±σ |");
+        sb.AppendLine("|----------|---|---------|---------|-----|--------|----------|");
         foreach (var a in d.algorithms)
         {
-            sb.AppendLine($"| {a.name} | {a.tests} | **{a.successRate:F1}%** | {a.avgTouchdownVelocity:F2} м/с | {a.avgAngleError:F2}° | {a.avgHorizontalMiss:F1} м | {a.avgSuccessScore:F1} |");
+            sb.AppendLine($"| {a.name} | {a.tests} | **{a.successRate:F1}%** | {a.avgTouchdownVelocity:F2} м/с | {a.avgAngleError:F2}° | {a.avgHorizontalMiss:F1} м | {a.avgSuccessScore:F1} ± {a.stdSuccessScore:F1} |");
         }
         sb.AppendLine();
 
