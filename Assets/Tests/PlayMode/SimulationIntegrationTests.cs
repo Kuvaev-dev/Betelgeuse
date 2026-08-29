@@ -20,10 +20,10 @@ public class SimulationIntegrationTests
         p.isp = 311f;
         p.fixedTimeStep = 0.01f;
         p.maxSimulationTime = 120f;
-        p.maxTouchdownVelocity = 3.5f;
-        p.maxLandingAngle = 7f;
-        p.maxHorizontalMiss = 25f;
-        p.maxHorizontalSpeed = 5f;
+        p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
+        p.maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
+        p.maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
+        p.maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
         return p;
     }
 

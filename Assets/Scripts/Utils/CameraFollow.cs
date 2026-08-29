@@ -142,6 +142,23 @@ public class CameraFollow : MonoBehaviour
             float wantFov = mode == ViewMode.Overview ? overviewFov : fov;
             cam.fieldOfView = hard ? wantFov : Mathf.Lerp(cam.fieldOfView, wantFov, 1f - Mathf.Exp(-6f * Time.deltaTime));
         }
+
+        // Keep shadow cascades dense on the focus so wheel-zoom does not blur silhouettes
+        UpdateShadowFit();
+    }
+
+    float _lastShadowFitDepth = -1f;
+
+    void UpdateShadowFit()
+    {
+        float depth = Vector3.Distance(transform.position, smoothFocus);
+        if (mode == ViewMode.Overview)
+            depth = Mathf.Max(depth, distance > 1f ? distance : 400f);
+        // Skip tiny changes — Quality/URP writes every frame are unnecessary
+        if (Mathf.Abs(depth - _lastShadowFitDepth) < 2.5f && _lastShadowFitDepth > 0f)
+            return;
+        _lastShadowFitDepth = depth;
+        EnvironmentBuilder.FitShadowsToFocusDepth(depth);
     }
 
     bool IsOrbitKeyHeld()

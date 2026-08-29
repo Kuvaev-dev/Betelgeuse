@@ -43,87 +43,99 @@ public static class RocketVisualBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(root, false);
 
-        // ── Palette — clean Falcon-class presentation ──
-        var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.042f, seed: 11);
-        var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.22f, panelContrast: 0.048f, seed: 29);
+        // ── Palette — flight-hardware look: cooler white, sharper metal, deeper CFRP ──
+        var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.055f, seed: 11);
+        var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.28f, panelContrast: 0.06f, seed: 29);
         yield return null;
-        var black = VisualMaterials.Lit(new Color(0.035f, 0.037f, 0.042f), 0.62f, 0.38f);
-        var metal = VisualMaterials.Lit(new Color(0.78f, 0.80f, 0.84f), 0.95f, 0.86f);
-        var titanium = VisualMaterials.Lit(new Color(0.66f, 0.68f, 0.72f), 0.92f, 0.74f);
-        var carbon = VisualMaterials.Lit(new Color(0.055f, 0.058f, 0.062f), 0.48f, 0.48f);
-        var silver = VisualMaterials.Lit(new Color(0.90f, 0.92f, 0.95f), 0.94f, 0.84f);
+        var black = VisualMaterials.Lit(new Color(0.028f, 0.03f, 0.034f), 0.58f, 0.42f);
+        var metal = VisualMaterials.Lit(new Color(0.82f, 0.84f, 0.88f), 0.96f, 0.88f);
+        var titanium = VisualMaterials.Lit(new Color(0.7f, 0.72f, 0.76f), 0.94f, 0.78f);
+        var carbon = VisualMaterials.Lit(new Color(0.045f, 0.048f, 0.052f), 0.42f, 0.52f);
+        var silver = VisualMaterials.Lit(new Color(0.93f, 0.94f, 0.97f), 0.96f, 0.9f);
         var heat = MakeNozzleSkin("NozzleHeat", seed: 7);
-        var copper = VisualMaterials.Lit(new Color(0.62f, 0.44f, 0.32f), 0.93f, 0.58f);
-        var darkMetal = VisualMaterials.Lit(new Color(0.14f, 0.15f, 0.17f), 0.90f, 0.52f);
-        var stripe = VisualMaterials.Lit(new Color(0.04f, 0.04f, 0.045f), 0.45f, 0.32f);
-        var accent = VisualMaterials.Lit(new Color(0.12f, 0.42f, 0.78f), 0.35f, 0.55f); // quiet brand blue
-        var hydra = VisualMaterials.Lit(new Color(0.86f, 0.88f, 0.92f), 0.88f, 0.62f);
-        var whitePaint = VisualMaterials.Lit(new Color(0.96f, 0.97f, 0.985f), 0.08f, 0.78f);
+        var copper = VisualMaterials.Lit(new Color(0.68f, 0.48f, 0.34f), 0.94f, 0.62f);
+        var darkMetal = VisualMaterials.Lit(new Color(0.12f, 0.13f, 0.15f), 0.92f, 0.55f);
+        var stripe = VisualMaterials.Lit(new Color(0.03f, 0.03f, 0.035f), 0.4f, 0.35f);
+        var accent = VisualMaterials.Lit(new Color(0.1f, 0.48f, 0.88f), 0.28f, 0.62f);
+        var hydra = VisualMaterials.Lit(new Color(0.88f, 0.9f, 0.94f), 0.9f, 0.68f);
+        var whitePaint = VisualMaterials.Lit(new Color(0.98f, 0.985f, 0.995f), 0.06f, 0.84f);
+        var goldFoil = VisualMaterials.Lit(new Color(0.78f, 0.62f, 0.28f), 0.85f, 0.55f);
         var interstageMat = MakeInterstageSkin("InterstageCFRP", seed: 41);
         yield return null;
 
-        // ── Aft (octaweb + TPS skirt) ──
-        SmoothCyl("Octaweb", visual.transform, 0.82f, Radius * 2.40f, 0.88f, black);
-        SmoothCyl("OctawebLip", visual.transform, 0.26f, Radius * 2.48f, 0.035f, titanium);
-        SmoothCyl("AftSkirt", visual.transform, 2.65f, Radius * 2.14f, 0.78f, carbon);
-        SmoothCyl("AftSkirtRim", visual.transform, 3.48f, Radius * 2.16f, 0.04f, darkMetal);
-        SmoothCyl("AftJoin", visual.transform, 3.62f, Radius * 2.05f, 0.07f, silver);
+        // ── Aft (octaweb + TPS skirt) — more layered, readable from camera ──
+        SmoothCyl("Octaweb", visual.transform, 0.82f, Radius * 2.42f, 0.88f, black);
+        SmoothCyl("OctawebLip", visual.transform, 0.22f, Radius * 2.52f, 0.04f, titanium);
+        SmoothCyl("OctawebRing", visual.transform, 1.55f, Radius * 2.36f, 0.035f, metal);
+        SmoothCyl("AftSkirt", visual.transform, 2.65f, Radius * 2.16f, 0.78f, carbon);
+        SmoothCyl("AftSkirtBand", visual.transform, 2.9f, Radius * 2.18f, 0.06f, darkMetal);
+        SmoothCyl("AftSkirtRim", visual.transform, 3.48f, Radius * 2.18f, 0.045f, darkMetal);
+        SmoothCyl("AftJoin", visual.transform, 3.62f, Radius * 2.06f, 0.08f, silver);
 
         // ── Body stack ──
         SmoothCyl("LowerTank", visual.transform, 8.40f, Radius * 2.0f, 4.70f, whiteLower);
-        SmoothCyl("CommonDome", visual.transform, 13.25f, Radius * 2.05f, 0.14f, silver);
-        SmoothCyl("Stripe1", visual.transform, 13.50f, Radius * 2.08f, 0.09f, stripe);
+        SmoothCyl("CommonDome", visual.transform, 13.25f, Radius * 2.06f, 0.15f, silver);
+        SmoothCyl("Stripe1", visual.transform, 13.50f, Radius * 2.09f, 0.1f, stripe);
         SmoothCyl("MidTank", visual.transform, 21.20f, Radius * 2.0f, 7.60f, white);
-        SmoothCyl("Stripe2", visual.transform, 28.95f, Radius * 2.08f, 0.12f, stripe);
+        SmoothCyl("Stripe2", visual.transform, 28.95f, Radius * 2.09f, 0.13f, stripe);
         SmoothCyl("UpperTank", visual.transform, 32.80f, Radius * 2.0f, 3.70f, white);
 
-        // Thin bright weld rings — catch light on the white stack
-        float[] ringYs = { 5.9f, 10.2f, 17.2f, 24.2f, 31.2f, 35.6f };
+        // Bright weld rings + secondary micro-rings
+        float[] ringYs = { 5.9f, 8.05f, 10.2f, 15.0f, 17.2f, 20.7f, 24.2f, 27.7f, 31.2f, 33.9f, 35.6f };
         for (int i = 0; i < ringYs.Length; i++)
-            SmoothCyl($"Ring_{i}", visual.transform, ringYs[i], Radius * 2.035f, 0.010f, silver);
+            SmoothCyl($"Ring_{i}", visual.transform, ringYs[i], Radius * 2.04f, 0.012f, silver);
 
         // Soft residual soot only at very bottom of white stack
-        SmoothCyl("SootBand", visual.transform, 4.95f, Radius * 2.015f, 0.55f,
-            VisualMaterials.Lit(new Color(0.18f, 0.175f, 0.17f), 0.42f, 0.28f));
+        SmoothCyl("SootBand", visual.transform, 4.95f, Radius * 2.018f, 0.6f,
+            VisualMaterials.Lit(new Color(0.16f, 0.155f, 0.15f), 0.38f, 0.26f));
+        SmoothCyl("SootFade", visual.transform, 5.7f, Radius * 2.01f, 0.28f,
+            VisualMaterials.Lit(new Color(0.55f, 0.54f, 0.53f), 0.2f, 0.4f));
 
         // ── Head: black CFRP interstage + closed booster nose ──
         float top = 36.50f;
 
-        SmoothCyl("UpperCrown", visual.transform, top + 0.05f, Radius * 2.02f, 0.05f, silver);
+        SmoothCyl("UpperCrown", visual.transform, top + 0.05f, Radius * 2.03f, 0.055f, silver);
         top += 0.10f;
 
         float interH = 1.55f;
         SmoothCyl("Interstage", visual.transform, top + interH * 0.5f, Radius * 2.0f, interH * 0.5f, interstageMat);
-        // Thin bright lip at base of interstage
-        SmoothCyl("InterLip", visual.transform, top + 0.04f, Radius * 2.04f, 0.04f, titanium);
+        SmoothCyl("InterLip", visual.transform, top + 0.04f, Radius * 2.05f, 0.045f, titanium);
+        SmoothCyl("InterGold", visual.transform, top + interH * 0.55f, Radius * 2.015f, 0.08f, goldFoil);
         float interstageMidY = top + interH * 0.5f;
         top += interH;
 
-        SmoothCyl("SepRing", visual.transform, top + 0.025f, Radius * 2.05f, 0.025f, silver);
+        SmoothCyl("SepRing", visual.transform, top + 0.025f, Radius * 2.06f, 0.028f, silver);
         top += 0.05f;
         SmoothCyl("Bulkhead", visual.transform, top + 0.10f, Radius * 2.0f, 0.10f, darkMetal);
         top += 0.20f;
         SmoothMesh.MakeFrustum("NoseShoulder", visual.transform,
-            new Vector3(0f, top + 0.30f, 0f),
-            Radius * 2.0f, 0.30f, topRatio: 0.52f, titanium);
-        top += 0.60f;
+            new Vector3(0f, top + 0.32f, 0f),
+            Radius * 2.0f, 0.32f, topRatio: 0.48f, titanium);
+        top += 0.64f;
         SmoothMesh.MakeOgive("NoseTip", visual.transform,
-            new Vector3(0f, top + 0.40f, 0f),
-            Radius * 1.05f, 0.40f, metal, tipBlunt: 0.18f);
+            new Vector3(0f, top + 0.42f, 0f),
+            Radius * 0.98f, 0.42f, metal, tipBlunt: 0.15f);
 
-        // Raceway + thin conduit accent
+        // Raceway + conduit + sensor packs
         SmoothCylAt("Raceway", visual.transform,
-            new Vector3(Radius + 0.11f, 20.5f, 0f), 0.18f, 14.2f, carbon);
+            new Vector3(Radius + 0.12f, 20.5f, 0f), 0.2f, 14.4f, carbon);
         SmoothCylAt("RacewayEdge", visual.transform,
-            new Vector3(Radius + 0.20f, 20.5f, 0f), 0.05f, 14.0f, darkMetal);
+            new Vector3(Radius + 0.22f, 20.5f, 0f), 0.055f, 14.2f, darkMetal);
+        SmoothCylAt("RacewayHi", visual.transform,
+            new Vector3(Radius + 0.16f, 28.2f, 0f), 0.08f, 3.2f, titanium);
+        // Opposite-side LOX sensor rail
+        SmoothCylAt("SensorRail", visual.transform,
+            new Vector3(-(Radius + 0.1f), 18.5f, 0f), 0.1f, 6.5f, darkMetal);
 
-        // Brand panel: black plate + white field + blue accent bar
+        // Brand panel: black plate + white field + blue accent bar + hairline frame
         Prim(PrimitiveType.Cube, "LogoBack", visual.transform,
-            new Vector3(0f, 24.2f, Radius + 0.025f), new Vector3(1.85f, 2.70f, 0.022f), black);
+            new Vector3(0f, 24.2f, Radius + 0.025f), new Vector3(1.95f, 2.85f, 0.024f), black);
         Prim(PrimitiveType.Cube, "LogoField", visual.transform,
-            new Vector3(0f, 24.25f, Radius + 0.040f), new Vector3(1.45f, 1.85f, 0.018f), whitePaint);
+            new Vector3(0f, 24.28f, Radius + 0.042f), new Vector3(1.5f, 1.95f, 0.018f), whitePaint);
         Prim(PrimitiveType.Cube, "LogoBar", visual.transform,
-            new Vector3(0f, 23.25f, Radius + 0.048f), new Vector3(1.20f, 0.12f, 0.016f), accent);
+            new Vector3(0f, 23.22f, Radius + 0.05f), new Vector3(1.25f, 0.14f, 0.016f), accent);
+        Prim(PrimitiveType.Cube, "LogoHair", visual.transform,
+            new Vector3(0f, 25.05f, Radius + 0.05f), new Vector3(1.35f, 0.04f, 0.014f), silver);
 
         yield return null;
         BuildGridFins(visual.transform, titanium, silver, darkMetal, carbon, interstageMidY);
@@ -528,36 +540,37 @@ public static class RocketVisualBuilder
         for (int i = 0; i < 4; i++)
         {
             float a = i * 90f * Mathf.Deg2Rad;
-            float r = Radius + 1.42f;
+            float r = Radius + 1.48f;
             var fin = new GameObject($"GridFin_{i}");
             fin.transform.SetParent(visual, false);
             fin.transform.localPosition = new Vector3(Mathf.Sin(a) * r, mountY, Mathf.Cos(a) * r);
-            fin.transform.localRotation = Quaternion.Euler(0f, i * 90f, 2f);
+            fin.transform.localRotation = Quaternion.Euler(0f, i * 90f, 1.5f);
 
-            // Titanium frame + denser titanium lattice (readable from camera)
+            // Deeper frame + denser lattice — reads as real grid fin from orbit cam
             Prim(PrimitiveType.Cube, "Plate", fin.transform, Vector3.zero,
-                new Vector3(0.035f, 2.40f, 3.20f), carbon);
-            Prim(PrimitiveType.Cube, "RimT", fin.transform, new Vector3(0.04f, 1.18f, 0f),
-                new Vector3(0.09f, 0.055f, 3.15f), lattice);
-            Prim(PrimitiveType.Cube, "RimB", fin.transform, new Vector3(0.04f, -1.18f, 0f),
-                new Vector3(0.09f, 0.055f, 3.15f), frame);
-            Prim(PrimitiveType.Cube, "RimL", fin.transform, new Vector3(0.04f, 0f, 1.55f),
-                new Vector3(0.09f, 2.28f, 0.055f), frame);
-            Prim(PrimitiveType.Cube, "RimR", fin.transform, new Vector3(0.04f, 0f, -1.55f),
-                new Vector3(0.09f, 2.28f, 0.055f), frame);
+                new Vector3(0.04f, 2.55f, 3.35f), carbon);
+            Prim(PrimitiveType.Cube, "RimT", fin.transform, new Vector3(0.045f, 1.26f, 0f),
+                new Vector3(0.1f, 0.06f, 3.3f), lattice);
+            Prim(PrimitiveType.Cube, "RimB", fin.transform, new Vector3(0.045f, -1.26f, 0f),
+                new Vector3(0.1f, 0.06f, 3.3f), frame);
+            Prim(PrimitiveType.Cube, "RimL", fin.transform, new Vector3(0.045f, 0f, 1.62f),
+                new Vector3(0.1f, 2.42f, 0.06f), frame);
+            Prim(PrimitiveType.Cube, "RimR", fin.transform, new Vector3(0.045f, 0f, -1.62f),
+                new Vector3(0.1f, 2.42f, 0.06f), frame);
 
-            for (int g = 0; g < 5; g++)
-                Prim(PrimitiveType.Cube, $"H_{g}", fin.transform,
-                    new Vector3(0.055f, -0.90f + g * 0.45f, 0f),
-                    new Vector3(0.014f, 0.018f, 3.00f), lattice);
             for (int g = 0; g < 6; g++)
+                Prim(PrimitiveType.Cube, $"H_{g}", fin.transform,
+                    new Vector3(0.06f, -1.05f + g * 0.42f, 0f),
+                    new Vector3(0.016f, 0.02f, 3.15f), lattice);
+            for (int g = 0; g < 7; g++)
                 Prim(PrimitiveType.Cube, $"V_{g}", fin.transform,
-                    new Vector3(0.055f, 0f, -1.30f + g * 0.52f),
-                    new Vector3(0.014f, 2.20f, 0.018f), lattice);
+                    new Vector3(0.06f, 0f, -1.4f + g * 0.47f),
+                    new Vector3(0.016f, 2.35f, 0.02f), lattice);
 
-            SmoothSphere("Hub", fin.transform, new Vector3(-0.28f, 0f, 0f), Vector3.one * 0.44f, hub);
-            SmoothCylAt("Actuator", fin.transform, new Vector3(-0.52f, 0f, 0f), 0.15f, 0.24f, carbon);
-            SmoothCylAt("Mount", fin.transform, new Vector3(-0.72f, 0f, 0f), 0.22f, 0.10f, frame);
+            SmoothSphere("Hub", fin.transform, new Vector3(-0.3f, 0f, 0f), Vector3.one * 0.48f, hub);
+            SmoothCylAt("Actuator", fin.transform, new Vector3(-0.55f, 0f, 0f), 0.16f, 0.26f, carbon);
+            SmoothCylAt("Mount", fin.transform, new Vector3(-0.78f, 0f, 0f), 0.24f, 0.11f, frame);
+            SmoothCylAt("MountCollar", fin.transform, new Vector3(-0.95f, 0f, 0f), 0.32f, 0.06f, lattice);
         }
     }
 
@@ -571,31 +584,38 @@ public static class RocketVisualBuilder
             legRoot.transform.SetParent(visual, false);
 
             Vector3 hinge = new Vector3(
-                Mathf.Sin(a) * (Radius + 0.30f), 9.20f, Mathf.Cos(a) * (Radius + 0.30f));
+                Mathf.Sin(a) * (Radius + 0.32f), 9.35f, Mathf.Cos(a) * (Radius + 0.32f));
             Vector3 foot = new Vector3(
-                Mathf.Sin(a) * (Radius + 6.2f), 0.08f, Mathf.Cos(a) * (Radius + 6.2f));
+                Mathf.Sin(a) * (Radius + 6.45f), 0.06f, Mathf.Cos(a) * (Radius + 6.45f));
 
-            // Hinge fairing + primary boom
-            SmoothSphere("Hinge", legRoot.transform, hinge, Vector3.one * 0.52f, titanium);
-            SmoothCylAt("HingeCap", legRoot.transform, hinge + Vector3.up * 0.15f, 0.55f, 0.08f, darkMetal);
-            Strut(legRoot.transform, "Boom", hinge, foot, 0.34f, black);
-            // Light metal edge strip along boom (reads structure)
+            // Hinge fairing + primary boom + secondary A-frame
+            SmoothSphere("Hinge", legRoot.transform, hinge, Vector3.one * 0.56f, titanium);
+            SmoothCylAt("HingeCap", legRoot.transform, hinge + Vector3.up * 0.16f, 0.58f, 0.09f, darkMetal);
+            SmoothCylAt("HingeFair", legRoot.transform, hinge + Vector3.up * 0.35f, 0.42f, 0.2f, carbon);
+            Strut(legRoot.transform, "Boom", hinge, foot, 0.36f, black);
             Strut(legRoot.transform, "BoomEdge",
-                hinge + Vector3.up * 0.12f,
-                foot + Vector3.up * 0.12f, 0.10f, titanium);
+                hinge + Vector3.up * 0.14f,
+                foot + Vector3.up * 0.14f, 0.11f, titanium);
+            Strut(legRoot.transform, "BoomEdgeLo",
+                hinge - Vector3.up * 0.1f,
+                foot - Vector3.up * 0.02f, 0.08f, darkMetal);
 
             Vector3 bodyAnchor = new Vector3(
-                Mathf.Sin(a) * (Radius + 0.08f), 5.85f, Mathf.Cos(a) * (Radius + 0.08f));
-            Vector3 boomMid = Vector3.Lerp(hinge, foot, 0.42f);
-            Strut(legRoot.transform, "Hydraulics", bodyAnchor, boomMid, 0.12f, hydra);
-            SmoothSphere("HydJoint", legRoot.transform, bodyAnchor, Vector3.one * 0.24f, metal);
-            SmoothSphere("HydKnee", legRoot.transform, boomMid, Vector3.one * 0.18f, titanium);
+                Mathf.Sin(a) * (Radius + 0.08f), 5.9f, Mathf.Cos(a) * (Radius + 0.08f));
+            Vector3 boomMid = Vector3.Lerp(hinge, foot, 0.4f);
+            Vector3 boomKnee = Vector3.Lerp(hinge, foot, 0.68f);
+            Strut(legRoot.transform, "Hydraulics", bodyAnchor, boomMid, 0.13f, hydra);
+            Strut(legRoot.transform, "LockLink", bodyAnchor + Vector3.up * 0.8f, boomKnee, 0.08f, metal);
+            SmoothSphere("HydJoint", legRoot.transform, bodyAnchor, Vector3.one * 0.26f, metal);
+            SmoothSphere("HydKnee", legRoot.transform, boomMid, Vector3.one * 0.2f, titanium);
 
-            // Landing foot stack
-            SmoothCylAt("Crush", legRoot.transform, foot + Vector3.up * 0.38f, 0.72f, 0.26f, carbon);
-            SmoothCylAt("Foot", legRoot.transform, foot + Vector3.up * 0.12f, 1.85f, 0.07f, metal);
-            SmoothCylAt("FootPad", legRoot.transform, foot, 2.25f, 0.032f, black);
-            SmoothCylAt("FootRing", legRoot.transform, foot + Vector3.up * 0.05f, 2.05f, 0.02f, titanium);
+            // Landing foot stack — crush core + wide pad + traction ring
+            SmoothCylAt("Crush", legRoot.transform, foot + Vector3.up * 0.42f, 0.78f, 0.28f, carbon);
+            SmoothCylAt("CrushLip", legRoot.transform, foot + Vector3.up * 0.22f, 0.95f, 0.05f, darkMetal);
+            SmoothCylAt("Foot", legRoot.transform, foot + Vector3.up * 0.12f, 1.95f, 0.08f, metal);
+            SmoothCylAt("FootPad", legRoot.transform, foot, 2.4f, 0.035f, black);
+            SmoothCylAt("FootRing", legRoot.transform, foot + Vector3.up * 0.05f, 2.15f, 0.022f, titanium);
+            SmoothCylAt("FootGrip", legRoot.transform, foot + Vector3.up * 0.02f, 1.6f, 0.018f, darkMetal);
         }
     }
 

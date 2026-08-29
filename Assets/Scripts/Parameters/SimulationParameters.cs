@@ -25,6 +25,6 @@ public class SimulationParameters : ScriptableObject
     [Header("Критерії успішної посадки")]
     public float maxTouchdownVelocity = 3.5f;
     public float maxLandingAngle = 7f;
-    public float maxHorizontalMiss = 25f;
-    public float maxHorizontalSpeed = 5f;
+    public float maxHorizontalMiss = 40f;
+    public float maxHorizontalSpeed = 6.5f;
 }

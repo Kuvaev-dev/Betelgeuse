@@ -174,10 +174,16 @@ public static class UILocale
         ["m_peak_vy"] = new("Пік |Vy|", "Peak |Vy|"),
         ["m_peak_tilt"] = new("Пік нахилу", "Peak tilt"),
         ["m_min_h"] = new("Мін. h", "Min h"),
-        ["crit_vy"] = new("|Vy|", "|Vy|"),
-        ["crit_tilt"] = new("Нахил", "Tilt"),
-        ["crit_miss"] = new("Промах", "Miss"),
-        ["crit_vh"] = new("|Vh|", "|Vh|"),
+        // Landing gate badges — full names (not cryptic |Vy|)
+        ["crit_vy"] = new("Швидкість вниз", "Descent speed"),
+        ["crit_tilt"] = new("Нахил корпусу", "Body tilt"),
+        ["crit_miss"] = new("Промах до pad", "Miss to pad"),
+        ["crit_vh"] = new("Бічна швидкість", "Lateral speed"),
+        ["crit_ok"] = new("НОРМА", "OK"),
+        ["crit_fail"] = new("ПОРУШЕННЯ", "FAIL"),
+        ["crit_warn"] = new("БЛИЗЬКО", "WATCH"),
+        ["crit_idle"] = new("ліміт", "limit"),
+        ["crit_gate_hint"] = new("Успіх: усі 4 у НОРМІ на момент торкання", "Success: all 4 OK at touchdown"),
         ["graph_hint"] = new("мін/макс, поточне", "min/max, current"),
         ["u_m"] = new("м", "m"),
         ["u_ms"] = new("м/с", "m/s"),
@@ -272,7 +278,7 @@ public static class UILocale
             "  H панелі · G мова · Y тема · F1 довідка\n" +
             "  «Швидкість симуляції» — Play · «Прискорення MC» — порівняння\n\n" +
             "SOFT-LANDING\n" +
-            "  |Vy|<3.5 м/с · нахил<7° · промах<25 м · |Vh|<5 м/с\n\n" +
+            "  |Vy|<3.5 м/с · нахил<7° · промах<40 м · |Vh|<6.5 м/с\n\n" +
             "ДОСЛІДЖЕННЯ\n" +
             "  P — DefenseBaseline MC (paired seeds)\n" +
             "  Residual OFF — ablation (Hybrid≈Fuzzy)\n" +
@@ -285,7 +291,7 @@ public static class UILocale
             "  H panels · G lang · Y theme · F1 help\n" +
             "  «Simulation speed» — Play · «MC speed» — compare\n\n" +
             "SOFT-LANDING\n" +
-            "  |Vy|<3.5 m/s · tilt<7° · miss<25 m · |Vh|<5 m/s\n\n" +
+            "  |Vy|<3.5 m/s · tilt<7° · miss<40 m · |Vh|<6.5 m/s\n\n" +
             "RESEARCH\n" +
             "  P — DefenseBaseline MC (paired seeds, seed 42)\n" +
             "  Residual OFF — ablation (Hybrid≈Fuzzy)\n" +

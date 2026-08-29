@@ -87,11 +87,12 @@ public static class UserSettings
         set => PlayerPrefs.SetInt(P + "Train", value ? 1 : 0);
     }
 
-    /// <summary>Hybrid MLP residual on (false = Fuzzy-only ablation).</summary>
+    /// <summary>Hybrid MLP residual on (false = Fuzzy-only; default off).</summary>
     public static bool HybridResidual
     {
-        get => PlayerPrefs.GetInt(P + "HybRes", 1) != 0;
-        set => PlayerPrefs.SetInt(P + "HybRes", value ? 1 : 0);
+        // Key v2: old HybRes defaulted to 1 and would keep residual stuck on
+        get => PlayerPrefs.GetInt(P + "HybRes2", 0) != 0;
+        set => PlayerPrefs.SetInt(P + "HybRes2", value ? 1 : 0);
     }
 
     public static bool TrajectoryVisible

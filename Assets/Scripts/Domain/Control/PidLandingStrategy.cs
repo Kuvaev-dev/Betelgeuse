@@ -40,7 +40,7 @@ public sealed class PidLandingStrategy : ILandingController
             0f,
             Mathf.Clamp(baseGimbal.z + yc * 0.35f, -16f, 16f));
         // Weakest lateral — baseline for Monte-Carlo differentiation
-        return new ControlCommand(thrust, g, lateralScale: 0.58f, gimbalBlend: 1f);
+        return new ControlCommand(thrust, g, lateralScale: 0.78f, gimbalBlend: 1f);
     }
 
     float CalculateThrust(in ControlContext ctx)

@@ -42,10 +42,10 @@ public static class IdealLandingPresets
             rocket.parameters.isp = 311f;
             rocket.parameters.fixedTimeStep = 0.005f;
             rocket.parameters.maxSimulationTime = 400f;
-            rocket.parameters.maxTouchdownVelocity = 3.5f;
-            rocket.parameters.maxLandingAngle = 7f;
-            rocket.parameters.maxHorizontalMiss = 25f;
-            rocket.parameters.maxHorizontalSpeed = 5f;
+            rocket.parameters.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
+            rocket.parameters.maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
+            rocket.parameters.maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
+            rocket.parameters.maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
         }
 
         rocket.windVelocity = Vector3.zero;
@@ -99,10 +99,10 @@ public static class IdealLandingPresets
             fuzzy.isActive = true;
             fuzzy.heightScale = 2800f;
             fuzzy.velocityScale = 110f;
-            fuzzy.maxGimbalDeg = 18f;
-            fuzzy.fuzzyThrustWeight = 0.55f;
-            fuzzy.maxDevFrac = 0.55f;
-            fuzzy.gimbalBlend = 0.5f;
+            fuzzy.maxGimbalDeg = 14f;
+            fuzzy.fuzzyThrustWeight = 0.42f;
+            fuzzy.maxDevFrac = 0.4f;
+            fuzzy.gimbalBlend = 0.35f;
         }
 
         if (neural != null)
@@ -117,11 +117,11 @@ public static class IdealLandingPresets
         if (hybrid != null)
         {
             hybrid.isActive = true;
-            hybrid.neuralThrustBlend = 0.25f;
-            hybrid.neuralGimbalBlend = 0.2f;
-            hybrid.maxResidualMult = 0.3f;
-            hybrid.smartWeight = 0.5f;
-            hybrid.maxDevFrac = 0.4f;
+            hybrid.neuralThrustBlend = 0.2f;
+            hybrid.neuralGimbalBlend = 0.15f;
+            hybrid.maxResidualMult = 0.25f;
+            hybrid.smartWeight = 0.42f;
+            hybrid.maxDevFrac = 0.32f;
             hybrid.fuzzy = fuzzy;
             hybrid.neural = neural;
         }

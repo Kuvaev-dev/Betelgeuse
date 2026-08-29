@@ -19,10 +19,10 @@ public class MonteCarloFairnessTests
         p.isp = 311f;
         p.fixedTimeStep = 0.01f; // slightly coarser for test speed
         p.maxSimulationTime = 400f;
-        p.maxTouchdownVelocity = 3.5f;
-        p.maxLandingAngle = 7f;
-        p.maxHorizontalMiss = 25f;
-        p.maxHorizontalSpeed = 5f;
+        p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
+        p.maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
+        p.maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
+        p.maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
         return p;
     }
 
@@ -63,8 +63,8 @@ public class MonteCarloFairnessTests
         float w = DefenseBaseline.WindStrength;
         Vector3 windKick = new Vector3(
             SimRng.Range(-w, w), 0f, SimRng.Range(-w * 0.55f, w * 0.55f));
-        rp.state.velocity += windKick * 0.75f;
-        rp.windVelocity = windKick * 0.28f;
+        rp.state.velocity += windKick * 0.45f;
+        rp.windVelocity = windKick * 0.1f;
         rp.applyContinuousWind = true;
 
         float massNoise = 1f + SimRng.Range(-DefenseBaseline.MassVariationPercent,
@@ -87,7 +87,7 @@ public class MonteCarloFairnessTests
             steps++;
         }
         if (!rp.state.simulationFinished)
-            rp.ForceFinish(asTimeout: rp.state.position.y >= 2f);
+            rp.ForceFinish(asTimeout: rp.state.position.y >= EnvironmentBuilder.PadSurfaceY + 2f);
 
         return new LandingMetrics
         {

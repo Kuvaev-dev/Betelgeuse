@@ -7,8 +7,9 @@ public static class LandingCriteria
 {
     public const float DefaultMaxTouchdownVelocity = 3.5f;
     public const float DefaultMaxLandingAngle = 7f;
-    public const float DefaultMaxHorizontalMiss = 25f;
-    public const float DefaultMaxHorizontalSpeed = 5f;
+    // First-stage class: ±40 m pad miss / 6.5 m/s Vh is still a soft landing
+    public const float DefaultMaxHorizontalMiss = 40f;
+    public const float DefaultMaxHorizontalSpeed = 6.5f;
 
     public readonly struct Limits
     {

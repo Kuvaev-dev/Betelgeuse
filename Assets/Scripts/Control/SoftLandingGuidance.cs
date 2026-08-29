@@ -39,15 +39,21 @@ public static class SoftLandingGuidance
         if (v < target - 10f)
             mult += Mathf.Clamp((-v + target - 10f) * 0.022f, 0f, 0.75f);
 
+        if (h < 25f)
+        {
+            // Stronger terminal brake so Fuzzy/Hybrid stay under 3.5 m/s gate
+            if (v < -3.2f) mult = Mathf.Max(mult, 1.35f);
+            else if (v < -2.2f) mult = Mathf.Max(mult, 1.22f);
+        }
         if (h < 15f)
         {
-            if (v < -2.5f) mult = Mathf.Max(mult, 1.28f);
+            if (v < -2.5f) mult = Mathf.Max(mult, 1.32f);
             else if (v > -0.3f) mult = Mathf.Min(mult, 0.78f);
-            else mult = Mathf.Clamp(1.0f + err * 0.1f, 0.88f, 1.28f);
+            else mult = Mathf.Clamp(1.0f + err * 0.12f, 0.88f, 1.32f);
         }
         if (h < 4f)
         {
-            if (v < -1.0f) mult = Mathf.Clamp(1.18f + (-v - 1.0f) * 0.18f, 1.1f, 1.55f);
+            if (v < -1.0f) mult = Mathf.Clamp(1.22f + (-v - 1.0f) * 0.22f, 1.12f, 1.65f);
             else mult = Mathf.Clamp(0.92f + (-v) * 0.12f, 0.72f, 1.12f);
         }
 

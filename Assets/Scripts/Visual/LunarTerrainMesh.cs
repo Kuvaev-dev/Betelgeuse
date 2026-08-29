@@ -222,9 +222,10 @@ public static class LunarTerrainMesh
 
                 if (dist <= PadClearRadius)
                 {
-                    h = Noise2(wx * 0.25f, wz * 0.25f) * 0.006f;
+                    // Match mesh pit (albedo only — height comes from SampleHeight)
                     float padT = dist / Mathf.Max(1f, PadClearRadius);
-                    g = Mathf.Lerp(0.36f, 0.41f, padT * padT);
+                    g = Mathf.Lerp(0.34f, 0.40f, padT * padT);
+                    g += Noise2(wx * 0.2f, wz * 0.2f) * 0.01f;
                 }
                 else
                 {
@@ -611,8 +612,13 @@ public static class LunarTerrainMesh
     {
         float dist = Mathf.Sqrt(x * x + z * z);
 
+        // Deep pit under LZ so pad mesh never z-fights the terrain disc
         if (dist <= PadClearRadius)
-            return Noise2(x * 0.35f, z * 0.35f) * 0.01f;
+        {
+            float t = dist / Mathf.Max(1f, PadClearRadius);
+            // Floor ~-1.6 m at center, rises to ~0 at clear edge
+            return Mathf.Lerp(-1.6f, -0.15f, t * t) + Noise2(x * 0.2f, z * 0.2f) * 0.02f;
+        }
 
         float h = 0f;
         h += Noise2(x * 0.0016f, z * 0.0016f) * 2.8f;

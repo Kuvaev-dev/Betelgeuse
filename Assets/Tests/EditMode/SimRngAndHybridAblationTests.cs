@@ -61,7 +61,7 @@ public class SimRngAndHybridAblationTests
         Assert.GreaterOrEqual(DefenseBaseline.TestsPerAlgorithm, 5);
         Assert.Greater(DefenseBaseline.WindStrength, 0f);
         Assert.IsTrue(DefenseBaseline.EnableNoise);
-        Assert.IsTrue(DefenseBaseline.HybridResidualOn);
+        Assert.IsFalse(DefenseBaseline.HybridResidualOn);
         Assert.GreaterOrEqual(DefenseBaseline.ProtocolVersion, 2);
         Assert.Greater(DefenseBaseline.PositionJitterMeters, 0f);
     }

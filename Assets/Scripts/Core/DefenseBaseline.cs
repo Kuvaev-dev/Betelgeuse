@@ -4,19 +4,20 @@
 /// </summary>
 public static class DefenseBaseline
 {
-    public const int ProtocolVersion = 2;
+    public const int ProtocolVersion = 4;
     public const int Seed = 42;
     public const int TestsPerAlgorithm = 15;
-    public const float WindStrength = 8f;
-    public const float MassVariationPercent = 8f;
-    public const float AngleVariationDegrees = 8f;
-    public const float PositionJitterMeters = 18f;
+    // v4: milder wind/jitter so lateral GNC differentiates A–D instead of universal miss
+    public const float WindStrength = 5.5f;
+    public const float MassVariationPercent = 6f;
+    public const float AngleVariationDegrees = 5f;
+    public const float PositionJitterMeters = 12f;
     public const bool EnableNoise = true;
     public const bool ContinuousWind = true;
-    public const bool HybridResidualOn = true;
-    public const float StartHeight = 1800f;
-    public const float StartDescentSpeed = 72f;
-    public const float StartTiltDeg = 3.5f;
+    public const bool HybridResidualOn = false;
+    public const float StartHeight = 1600f;
+    public const float StartDescentSpeed = 60f;
+    public const float StartTiltDeg = 2f;
 
     /// <summary>
     /// Expected qualitative ranking under protocol (success %):

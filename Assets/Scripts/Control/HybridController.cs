@@ -13,7 +13,7 @@ public class HybridController : MonoBehaviour, ILandingController
     [Header("Hybrid Neuro-Fuzzy")]
     public bool isActive = true;
     /// <summary>Ablation: false = pure Sugeno (no MLP residual) — thesis leave-one-out.</summary>
-    public bool useNeuralResidual = true;
+    public bool useNeuralResidual = false;
     [Range(0f, 0.5f)] public float neuralThrustBlend = 0.25f;
     [Range(0f, 0.45f)] public float neuralGimbalBlend = 0.2f;
     [Range(0.05f, 0.6f)] public float maxResidualMult = 0.3f;
@@ -94,6 +94,6 @@ public class HybridController : MonoBehaviour, ILandingController
             ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg, ctx.HorizSpeed,
             out float thrust, out Vector3 gimbal);
         // Strongest lateral (theme Neuro-Fuzzy) — expected MC leader
-        return new ControlCommand(thrust, gimbal, lateralScale: 1.38f, gimbalBlend: 0.5f);
+        return new ControlCommand(thrust, gimbal, lateralScale: 1.55f, gimbalBlend: 0.35f);
     }
 }

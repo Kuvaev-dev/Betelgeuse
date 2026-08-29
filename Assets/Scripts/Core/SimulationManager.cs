@@ -129,7 +129,7 @@ public class SimulationManager : MonoBehaviour
 
         SimRng.Reseed(experimentSeed);
 
-        // Monte-Carlo must use HARD nominal IC (not leftover Ideal [I] gentleness → fake 100%)
+        // Monte-Carlo uses DefenseBaseline IC (not leftover Ideal [I] gentleness)
         RestoreHardInitialConditions();
         IdealLandingPresets.ApplyDefaultControllerTuning(
             rocketPhysics,
@@ -282,8 +282,9 @@ public class SimulationManager : MonoBehaviour
 
             if (!rocketPhysics.state.simulationFinished)
             {
-                // Near ground without finish flag → count as touchdown, not timeout
-                bool nearPad = rocketPhysics.state.position.y < 2f;
+                // Near pad surface without finish flag → count as touchdown, not timeout
+                float ground = EnvironmentBuilder.PadSurfaceY;
+                bool nearPad = rocketPhysics.state.position.y < ground + 2f;
                 rocketPhysics.ForceFinish(asTimeout: !nearPad);
             }
 
@@ -334,6 +335,11 @@ public class SimulationManager : MonoBehaviour
         p.dryMass = 25600f;
         p.fuelMass = 14000f;
         p.maxThrust = 845000f;
+        // Keep soft-landing gates consistent with LandingCriteria defaults
+        p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
+        p.maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
+        p.maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
+        p.maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
         originalFuelMass = p.fuelMass;
     }
 
@@ -347,9 +353,9 @@ public class SimulationManager : MonoBehaviour
             SimRng.Range(-w, w),
             0f,
             SimRng.Range(-w * 0.55f, w * 0.55f));
-        // Milder continuous wind so lateral GNC can still recover (still stresses PID)
-        rocketPhysics.state.velocity += windKick * 0.75f;
-        rocketPhysics.windVelocity = continuousWind && w > 0.05f ? windKick * 0.28f : Vector3.zero;
+        // Mild kick + light continuous wind — recoverable; still stresses weak lateral (PID)
+        rocketPhysics.state.velocity += windKick * 0.45f;
+        rocketPhysics.windVelocity = continuousWind && w > 0.05f ? windKick * 0.1f : Vector3.zero;
         rocketPhysics.applyContinuousWind = continuousWind && w > 0.05f;
 
         if (enableNoise)

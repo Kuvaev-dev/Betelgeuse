@@ -152,8 +152,10 @@ public class RocketPhysics : MonoBehaviour
         UpdateControl();
         RungeKutta4Step(dt);
 
-        if (state.position.y < 0f)
-            state.position.y = 0f;
+        // Keep physics origin on/above pad surface (deck top ≈ PadSurfaceY)
+        float ground = EnvironmentBuilder.PadSurfaceY;
+        if (state.position.y < ground)
+            state.position.y = ground;
 
         ClampToTerrainDisk();
         SyncTransformWithState();
@@ -166,7 +168,7 @@ public class RocketPhysics : MonoBehaviour
             cachedVisualizer?.SampleFlight(force: false);
         }
 
-        if (state.position.y <= 0.05f)
+        if (state.position.y <= ground + 0.04f)
             FinishLanding(timeout: false);
     }
 
@@ -226,38 +228,50 @@ public class RocketPhysics : MonoBehaviour
     void ApplyLateralGuidance(float gainScale = 1f)
     {
         float h = Mathf.Max(0f, state.position.y);
-        // Keep correcting until near touchdown; start as soon as descent begins.
-        if (h > 2200f || h < 2.5f) return;
+        if (h > 2800f || h < 0.8f) return;
 
         float tilt = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
-        if (tilt > 18f) return;
+        if (tilt > 28f) return;
 
-        float scale = Mathf.Clamp(gainScale, 0.25f, 1.6f);
-        // Stronger base gains so wind/jitter is recoverable; scale differentiates A–D.
-        float fade = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(h / 1800f)) * scale;
-        float kPos = 0.055f * fade;
-        float kVel = 0.14f * fade;
-        if (h < 200f)
-        {
-            kPos *= 1.25f;
-            kVel *= 1.35f;
-        }
-        if (h < 60f)
-        {
-            // Terminal: kill residual Vh and miss before soft-landing gate
-            kPos *= 1.15f;
-            kVel *= 1.45f;
-        }
+        float scale = Mathf.Clamp(gainScale, 0.45f, 1.8f);
+        // Always-on authority from apogee — early drift was the universal-0% cause
+        float shape = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(h / 2200f));
+        float fade = Mathf.Lerp(0.7f, 1.25f, shape) * scale;
 
-        float lim = 9f * Mathf.Clamp(scale, 0.45f, 1.45f);
-        float gx = Mathf.Clamp(-(kPos * state.position.z + kVel * state.velocity.z), -lim, lim);
-        float gz = Mathf.Clamp(+(kPos * state.position.x + kVel * state.velocity.x), -lim, lim);
+        float px = state.position.x;
+        float pz = state.position.z;
+        float vx = state.velocity.x;
+        float vz = state.velocity.z;
+        float miss = Mathf.Sqrt(px * px + pz * pz);
+        float vh = Mathf.Sqrt(vx * vx + vz * vz);
 
+        // Strong PD; far from pad lean on position, near pad kill Vh
+        float kPos = 0.22f * fade;
+        float kVel = 0.95f * fade;
+        if (h < 700f) { kPos *= 1.3f; kVel *= 1.4f; }
+        if (h < 250f) { kPos *= 1.25f; kVel *= 1.5f; }
+        if (h < 80f)  { kPos *= 0.9f;  kVel *= 2.0f; }
+        if (h < 25f)  { kPos *= 0.5f;  kVel *= 2.4f; }
+
+        // Extra pull when miss is large (open-loop urgency)
+        if (miss > 40f) kPos *= 1.35f;
+        if (vh > 8f) kVel *= 1.25f;
+
+        float lim = 14f * Mathf.Clamp(scale, 0.55f, 1.6f);
+        if (h < 70f) lim = Mathf.Min(lim, 9f);
+        if (h < 20f) lim = Mathf.Min(lim, 6.5f);
+        if (tilt > 12f) lim *= Mathf.Lerp(1f, 0.5f, (tilt - 12f) / 16f);
+
+        float gx = Mathf.Clamp(-(kPos * pz + kVel * vz), -lim, lim);
+        float gz = Mathf.Clamp(+(kPos * px + kVel * vx), -lim, lim);
+
+        // Mostly replace upright TVC with lateral command (keep a little PD upright)
         Vector3 td = state.thrustDirection.normalized;
         float curX = Mathf.Atan2(td.z, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
         float curZ = Mathf.Atan2(-td.x, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
-        float nx = Mathf.Clamp(curX + gx, -15f, 15f);
-        float nz = Mathf.Clamp(curZ + gz, -15f, 15f);
+        float uprightKeep = h < 30f ? 0.35f : 0.12f;
+        float nx = Mathf.Clamp(curX * uprightKeep + gx, -18f, 18f);
+        float nz = Mathf.Clamp(curZ * uprightKeep + gz, -18f, 18f);
         state.thrustDirection = (Quaternion.Euler(nx, 0f, nz) * Vector3.up).normalized;
     }
 
@@ -328,7 +342,8 @@ public class RocketPhysics : MonoBehaviour
     void FinishLanding(bool timeout)
     {
         if (!timeout)
-            state.position.y = 0f;
+            // Sit on pad deck — feet are ~0.06 m above origin, surface at PadSurfaceY
+            state.position.y = EnvironmentBuilder.PadSurfaceY;
 
         state.isLanded = true;
         state.simulationFinished = true;
@@ -443,13 +458,13 @@ public class RocketPhysics : MonoBehaviour
 
         if (windStrength > 0.05f)
         {
-            // Постійний вітер + початковий kick (seeded via SimRng)
+            // Постійний вітер + початковий kick (seeded via SimRng) — paired with MC recipe
             Vector3 kick = new Vector3(
                 SimRng.Range(-windStrength, windStrength),
                 0f,
                 SimRng.Range(-windStrength * 0.55f, windStrength * 0.55f));
-            windVelocity = kick * 0.45f;
-            state.velocity += kick * 0.75f;
+            windVelocity = kick * 0.1f;
+            state.velocity += kick * 0.45f;
         }
         else
         {

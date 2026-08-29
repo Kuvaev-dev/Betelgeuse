@@ -39,8 +39,8 @@ public class BootstrapRunner : MonoBehaviour
         BorderlessWindow.ApplyBorderlessChrome();
         if (SystemInfo.systemMemorySize > 0 && SystemInfo.systemMemorySize < 9000)
             QualitySettings.SetQualityLevel(Mathf.Min(QualitySettings.GetQualityLevel(), 1), true);
-        if (SystemInfo.graphicsMemorySize > 0 && SystemInfo.graphicsMemorySize < 3000)
-            QualitySettings.shadowDistance = Mathf.Min(QualitySettings.shadowDistance, 400f);
+        // Do not clamp shadowDistance here — CameraFollow.FitShadows scales it with zoom.
+        // A fixed 400 m cap made far orbit views drop into blurry far cascades.
 
         Prog(0.08f, "Пошук ракети…", "Finding rocket…");
         yield return null;

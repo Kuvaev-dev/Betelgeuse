@@ -46,6 +46,11 @@ public class MissionControlUI : MonoBehaviour
     GameObject resultRoot, progressRoot, canvasRoot, stepBarGo, helpRoot;
     GameObject leftPanelGo, rightPanelGo, topBarGo, topMenuGo;
     GameObject captionRoot; // separate canvas — no flicker on theme rebuild
+    /// <summary>Survives RebuildUi — condition sliders/inputs never destroyed → no NumField blink.</summary>
+    GameObject conditionSectionGo;
+    float conditionSectionHeight;
+    readonly List<(TMP_Text label, TMP_Text unit, string labelKey, string unitKey)> conditionLabelBindings = new();
+    readonly List<(Toggle toggle, TMP_Text label, string key)> conditionToggleBindings = new();
     bool panelsHidden;
     bool helpVisible;
     Coroutine defenseDemoCo;
@@ -89,6 +94,33 @@ public class MissionControlUI : MonoBehaviour
     static Color C_GraphA => UiTheme.Current.GraphA;
     static Color C_GraphB => UiTheme.Current.GraphB;
     static Color C_GraphC => UiTheme.Current.GraphC;
+
+    /// <summary>
+    /// Section titles: theme text (not neon accent — avoids permanent green on Green theme).
+    /// </summary>
+    static Color C_Header
+    {
+        get
+        {
+            // Soft blend of text + accent so headers track the theme without looking “always green”
+            Color t = C_Text;
+            Color a = C_Accent;
+            // Prefer text weight so Green/Cyan neon does not dominate labels
+            return Color.Lerp(t, a, UiTheme.IsLightBackground ? 0.22f : 0.28f);
+        }
+    }
+
+    static Color HeaderLineColor
+    {
+        get
+        {
+            Color lineCol = Color.Lerp(C_Header, UiTheme.IsLightBackground
+                ? new Color(0.5f, 0.54f, 0.6f, 1f)
+                : new Color(0.85f, 0.88f, 0.92f, 1f), 0.4f);
+            lineCol.a = UiTheme.IsLightBackground ? 0.7f : 0.5f;
+            return lineCol;
+        }
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void AutoCreate()
@@ -140,39 +172,46 @@ public class MissionControlUI : MonoBehaviour
     void OnLanguageChanged()
     {
         if (!built || rebuilding) return;
-        RebuildUi();
+        // Rebuild chrome/left/labels, but condition NumFields stay alive (stashed)
+        StartCoroutine(RebuildUiSmooth());
     }
 
     void OnThemeChanged()
     {
         if (!built || rebuilding) return;
-        // Recolor window caption in-place (no destroy → no flicker on − □ ×)
         ApplyCaptionTheme();
-        RebuildUi();
+        ApplyThemeInPlace();
+    }
+
+    System.Collections.IEnumerator RebuildUiSmooth()
+    {
+        if (rebuilding) yield break;
+        rebuilding = true;
+        // Keep canvas visible — condition inputs are not destroyed, only chrome rebuilds
+        RebuildUiCore();
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+        rebuilding = false;
     }
 
     void RebuildUi()
     {
+        if (rebuilding) return;
         rebuilding = true;
+        RebuildUiCore();
+        rebuilding = false;
+    }
+
+    void RebuildUiCore()
+    {
         built = false;
 
-        // Preserve live state across theme/language rebuild
         float[] snapAlt = graphAlt != null ? graphAlt.GetSamples() : null;
         float[] snapVel = graphVel != null ? graphVel.GetSamples() : null;
         float[] snapThr = graphThr != null ? graphThr.GetSamples() : null;
-        float windV = windSlider != null ? windSlider.value : 10f;
-        float testsV = testsSlider != null ? testsSlider.value : 15f;
-        float timeV = timeScaleSlider != null ? timeScaleSlider.value : 12f;
-        float liveV = liveSpeedSlider != null ? liveSpeedSlider.value : UserSettings.LiveTimeScale;
-        float seedV = seedSlider != null ? seedSlider.value : UserSettings.ExperimentSeed;
-        float h0V = heightSlider != null ? heightSlider.value : UserSettings.StartHeight;
-        float vy0V = descentSlider != null ? descentSlider.value : UserSettings.StartDescentSpeed;
-        float tilt0V = tilt0Slider != null ? tilt0Slider.value : UserSettings.StartTilt;
-        float massNV = massNoiseSlider != null ? massNoiseSlider.value : UserSettings.MassNoise;
-        float angNV = angleNoiseSlider != null ? angleNoiseSlider.value : UserSettings.AngleNoise;
-        bool noiseOn = noiseToggle == null || noiseToggle.isOn;
-        bool trainOn = trainToggle == null || trainToggle.isOn;
-        bool residualOn = residualToggle == null || residualToggle.isOn;
+        // Slider values live inside conditionSectionGo — keep them by detaching section
+        DetachConditionSection();
+
         bool hide = panelsHidden;
         bool helpWas = helpVisible;
         bool hadResult = resultShown;
@@ -182,24 +221,14 @@ public class MissionControlUI : MonoBehaviour
         modeButtonImages.Clear();
         metricLabels.Clear();
         if (canvasRoot != null) Destroy(canvasRoot);
+        // conditionSectionGo is parented to this MonoBehaviour — survives Destroy(canvasRoot)
         Build();
         WireLegacyDashboard();
 
-        // Restore session state (not from disk — live values across theme/lang rebuild)
-        loadingSettings = true;
-        if (windSlider) windSlider.value = windV;
-        if (testsSlider) testsSlider.value = testsV;
-        if (timeScaleSlider) timeScaleSlider.value = timeV;
-        if (liveSpeedSlider) liveSpeedSlider.value = liveV;
-        if (seedSlider) seedSlider.value = seedV;
-        if (heightSlider) heightSlider.value = h0V;
-        if (descentSlider) descentSlider.value = vy0V;
-        if (tilt0Slider) tilt0Slider.value = tilt0V;
-        if (massNoiseSlider) massNoiseSlider.value = massNV;
-        if (angleNoiseSlider) angleNoiseSlider.value = angNV;
-        if (noiseToggle) noiseToggle.isOn = noiseOn;
-        if (trainToggle) trainToggle.isOn = trainOn;
-        if (residualToggle) residualToggle.isOn = residualOn;
+        // Re-apply theme to reused condition controls + rest of new chrome
+        ApplyThemeInPlace();
+        RefreshConditionLabels();
+
         loadingSettings = false;
         SetHelpVisible(helpWas);
         if (snapAlt != null && snapAlt.Length > 0) graphAlt?.RestoreSamples(snapAlt);
@@ -214,11 +243,491 @@ public class MissionControlUI : MonoBehaviour
 
         WireSettingsPersistence();
         built = true;
-        rebuilding = false;
         RefreshCamLabel();
         RefreshSpeedLabel();
         UpdateTrajButtonLabel();
         if (rocket != null) UpdateFlightStep(rocket.state);
+    }
+
+    void DetachConditionSection()
+    {
+        if (conditionSectionGo == null) return;
+        // Park under MissionControlUI object so canvas destroy cannot wipe inputs
+        conditionSectionGo.transform.SetParent(transform, false);
+        conditionSectionGo.SetActive(false);
+    }
+
+    void RefreshConditionLabels()
+    {
+        for (int i = 0; i < conditionLabelBindings.Count; i++)
+        {
+            var b = conditionLabelBindings[i];
+            if (b.label != null && !string.IsNullOrEmpty(b.labelKey))
+                b.label.text = UILocale.T(b.labelKey);
+            if (b.unit != null && !string.IsNullOrEmpty(b.unitKey))
+                b.unit.text = UILocale.T(b.unitKey);
+            // Headers have no unit binding — same color as other section titles
+            if (b.label != null)
+                b.label.color = b.unit == null ? C_Header : C_Text;
+            if (b.unit != null) b.unit.color = C_Muted;
+        }
+        for (int i = 0; i < conditionToggleBindings.Count; i++)
+        {
+            var b = conditionToggleBindings[i];
+            if (b.label != null && !string.IsNullOrEmpty(b.key))
+            {
+                b.label.text = UILocale.T(b.key);
+                b.label.color = C_Text;
+            }
+        }
+    }
+
+    void SyncAllConditionFieldsFromSliders()
+    {
+        void Sync(Slider s)
+        {
+            if (s == null) return;
+            var input = s.transform.parent != null
+                ? s.transform.parent.GetComponentInChildren<TMP_InputField>(true)
+                : null;
+            if (input == null) return;
+            input.SetTextWithoutNotify(Mathf.RoundToInt(s.value).ToString());
+        }
+        Sync(windSlider); Sync(testsSlider); Sync(timeScaleSlider); Sync(liveSpeedSlider);
+        Sync(seedSlider); Sync(heightSlider); Sync(descentSlider); Sync(tilt0Slider);
+        Sync(massNoiseSlider); Sync(angleNoiseSlider);
+    }
+
+    /// <summary>
+    /// Recolor existing HUD without Destroy/Build — keeps TMP_InputField instances
+    /// so condition fields do not blink on theme cycle.
+    /// </summary>
+    void ApplyThemeInPlace()
+    {
+        if (canvasRoot == null) return;
+
+        foreach (var img in canvasRoot.GetComponentsInChildren<Image>(true))
+        {
+            if (img == null) continue;
+            string n = img.gameObject.name;
+
+            // Skip fully transparent hit boxes
+            if (img.color.a < 0.01f && (n == "Row2" || n == "Row1" || n == "Viewport"
+                || n == "Content" || n == "LViewport" || n == "LContent"
+                || n.StartsWith("GraphRoot")))
+                continue;
+
+            if (img.GetComponent<TMP_InputField>() != null)
+            {
+                RefreshNumFieldTheme(img);
+                continue;
+            }
+
+            var sld = img.GetComponentInParent<Slider>();
+            if (sld != null)
+            {
+                if (n == "Fill") { var c = C_Accent; c.a = 1f; img.color = c; continue; }
+                if (n == "Handle") { var c = C_Amber; c.a = 1f; img.color = c; continue; }
+                if (n == "Background")
+                {
+                    Color track = Color.Lerp(C_Edge, C_PanelSoft, UiTheme.IsLightBackground ? 0.25f : 0.4f);
+                    track.a = 1f;
+                    img.color = track;
+                    continue;
+                }
+            }
+
+            switch (n)
+            {
+                case "LeftPanel":
+                case "RightPanel":
+                case "TopChrome":
+                case "ResultCard":
+                case "HelpCard":
+                case "StepBar":
+                    img.color = C_Panel;
+                    break;
+                case "SliderBlock":
+                case "ToggleRow":
+                case "CritBadge":
+                case "StatusBadge":
+                case "InsightBg":
+                case "WinnerBg":
+                case "CamBg":
+                case "InfoBox":
+                case "ModePill":
+                case "GFrame":
+                case "StatBadge":
+                case "ScorePill":
+                    img.color = n == "ScorePill"
+                        ? new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.18f)
+                        : C_PanelSoft;
+                    break;
+                case "TopAccent":
+                case "StepAccent":
+                case "HeaderLine":
+                case "ResAccent":
+                    {
+                        if (n == "ResAccent")
+                            img.color = new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.9f);
+                        else if (n == "StepAccent")
+                            img.color = C_Accent;
+                        else if (n == "HeaderLine")
+                            img.color = HeaderLineColor;
+                        else
+                        {
+                            var e = C_Edge; e.a = 0.5f;
+                            img.color = e;
+                        }
+                    }
+                    break;
+                case "PFill":
+                    img.color = C_Cyan;
+                    break;
+                case "ProgressRoot":
+                    img.color = UiTheme.DarkChrome;
+                    break;
+                case "ResultOverlay":
+                    img.color = UiTheme.ModalScrim;
+                    break;
+                case "HelpOverlay":
+                    img.color = UiTheme.IsLightBackground
+                        ? new Color(0.12f, 0.14f, 0.18f, 0.55f)
+                        : new Color(0.02f, 0.03f, 0.05f, 0.72f);
+                    break;
+                case "Box":
+                    img.color = C_Btn;
+                    break;
+                case "Check":
+                    img.color = C_Accent;
+                    break;
+                default:
+                    if (n.StartsWith("Mode_"))
+                        img.color = C_Btn;
+                    else if (n == "MBtn" || n == "Action" || n.EndsWith("Btn")
+                             || n == "LangBtn" || n == "ThemeBtn" || n == "HideBtn")
+                    {
+                        // Default chrome/action fill — specialized ones refined below
+                        if (img.GetComponent<Button>() != null)
+                            img.color = C_Btn;
+                    }
+                    else if (n == "Bar")
+                    {
+                        img.color = UiTheme.IsLightBackground
+                            ? new Color(0.78f, 0.8f, 0.84f, 1f)
+                            : new Color(0.05f, 0.05f, 0.06f, 1f);
+                    }
+                    break;
+            }
+        }
+
+        // Also theme condition section (may be parked under this transform)
+        if (conditionSectionGo != null)
+        {
+            foreach (var img in conditionSectionGo.GetComponentsInChildren<Image>(true))
+            {
+                if (img == null) continue;
+                string n = img.gameObject.name;
+                if (img.GetComponent<TMP_InputField>() != null) { RefreshNumFieldTheme(img); continue; }
+                var sld = img.GetComponentInParent<Slider>();
+                if (sld != null)
+                {
+                    if (n == "Fill") { var c = C_Accent; c.a = 1f; img.color = c; continue; }
+                    if (n == "Handle") { var c = C_Amber; c.a = 1f; img.color = c; continue; }
+                    if (n == "Background")
+                    {
+                        Color track = Color.Lerp(C_Edge, C_PanelSoft, UiTheme.IsLightBackground ? 0.25f : 0.4f);
+                        track.a = 1f; img.color = track; continue;
+                    }
+                }
+                if (n is "SliderBlock" or "ToggleRow") img.color = C_PanelSoft;
+                else if (n == "Box") img.color = C_Btn;
+                else if (n == "Check") img.color = C_Accent;
+                else if (n == "HeaderLine")
+                    img.color = HeaderLineColor;
+                else if (n == "SecHdr")
+                {
+                    // text is TMP, not Image
+                }
+            }
+            foreach (var tmp in conditionSectionGo.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (tmp != null && tmp.gameObject.name == "SecHdr")
+                    tmp.color = C_Header;
+            }
+        }
+
+        // Panel outlines
+        void StyleOutlines(Transform root)
+        {
+            if (root == null) return;
+            foreach (var outline in root.GetComponentsInChildren<UnityEngine.UI.Outline>(true))
+            {
+                if (outline == null) continue;
+                if (outline.GetComponent<TMP_InputField>() != null) continue;
+                if (UiTheme.IsLightBackground)
+                {
+                    outline.effectColor = new Color(0.55f, 0.62f, 0.72f, 0.42f);
+                    outline.effectDistance = new Vector2(0.7f, -0.7f);
+                }
+                else
+                {
+                    var e = C_Edge;
+                    e.a = Mathf.Clamp(e.a, 0.55f, 0.85f);
+                    outline.effectColor = e;
+                }
+            }
+        }
+        StyleOutlines(canvasRoot.transform);
+        if (conditionSectionGo != null) StyleOutlines(conditionSectionGo.transform);
+
+        // —— Buttons: solid fills + always-readable labels ——
+        void PaintButton(Button btn, Color bg)
+        {
+            if (btn == null) return;
+            bg.a = 1f;
+            var img = btn.targetGraphic as Image;
+            if (img != null) img.color = bg;
+            var cb = btn.colors;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = new Color(1.12f, 1.12f, 1.14f, 1f);
+            cb.pressedColor = new Color(0.85f, 0.85f, 0.88f, 1f);
+            cb.selectedColor = Color.white;
+            btn.colors = cb;
+            // Title = contrast on fill; ModeSub = secondary readable line
+            var tmps = btn.GetComponentsInChildren<TMP_Text>(true);
+            for (int ti = 0; ti < tmps.Length; ti++)
+            {
+                var tmp = tmps[ti];
+                if (tmp == null) continue;
+                tmp.raycastTarget = false;
+                if (tmp.gameObject.name == "ModeSub")
+                    tmp.color = ModeSubtitleOn(bg);
+                else
+                    tmp.color = ButtonLabelOn(bg);
+            }
+        }
+
+        foreach (var btn in canvasRoot.GetComponentsInChildren<Button>(true))
+        {
+            if (btn == null) continue;
+            string n = btn.gameObject.name;
+            Color bg;
+            if (n == "MBtn_Start")
+                bg = BtnGreen();
+            else if (n == "MBtn_Stop")
+                bg = BtnRed();
+            else if (n == "MBtn_Pause")
+                bg = BtnBlue();
+            else if (n.StartsWith("MBtn_"))
+                bg = C_Btn;
+            else if (n == "Action_Demo")
+                bg = BtnAmber();
+            else if (n == "Action_Compare")
+                bg = BtnViolet();
+            else if (n == "Action_Cancel")
+                bg = BtnPink();
+            else if (n == "Action")
+                bg = BtnViolet();
+            else if (n.StartsWith("Mode_"))
+            {
+                bool active = rocket != null && n == "Mode_" + rocket.controlMode;
+                bg = active ? C_BtnActive : C_Btn;
+            }
+            else if (n is "LangBtn" or "ThemeBtn" or "HideBtn")
+            {
+                bg = (n == "HideBtn" && panelsHidden) ? C_BtnActive : C_Btn;
+            }
+            else
+            {
+                bg = C_Btn;
+            }
+            PaintButton(btn, bg);
+        }
+
+        UpdateTrajButtonVisual();
+        UpdateViewButtonVisual();
+        UpdateHideButtonVisual();
+        UpdatePauseButtonVisual();
+
+        // —— Body text only (never overwrite button labels) ——
+        void FixTmp(TMP_Text t)
+        {
+            if (t == null) return;
+            if (t.GetComponentInParent<Button>() != null) return; // keep ButtonLabelOn
+            if (t.GetComponentInParent<TMP_InputField>() != null)
+            {
+                t.color = C_Text;
+                return;
+            }
+            Color c = t.color;
+            float l = Luma(c);
+            bool chromatic = Mathf.Abs(c.r - c.g) > 0.08f
+                || Mathf.Abs(c.g - c.b) > 0.08f
+                || Mathf.Abs(c.r - c.b) > 0.08f;
+            if (chromatic && l > 0.15f && l < 0.95f)
+            {
+                if (UiTheme.IsLightBackground && l > 0.55f)
+                    t.color = Color.Lerp(c, C_Text, 0.55f);
+                else if (!UiTheme.IsLightBackground && l < 0.4f)
+                    t.color = Color.Lerp(c, C_Text, 0.5f);
+                return;
+            }
+            if (UiTheme.IsLightBackground && l > 0.65f)
+                t.color = C_Text;
+            else if (!UiTheme.IsLightBackground && l < 0.4f)
+                t.color = C_Text;
+            else if (!chromatic)
+                t.color = C_Text;
+        }
+
+        foreach (var tmp in canvasRoot.GetComponentsInChildren<TMP_Text>(true))
+            FixTmp(tmp);
+        if (conditionSectionGo != null)
+            foreach (var tmp in conditionSectionGo.GetComponentsInChildren<TMP_Text>(true))
+                FixTmp(tmp);
+
+        // Section headers everywhere (including condition block)
+        foreach (var tmp in canvasRoot.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (tmp != null && tmp.gameObject.name == "SecHdr")
+                tmp.color = C_Header;
+        }
+
+        // Known roles (override generic fix)
+        void T(TMP_Text t, Color c) { if (t != null) t.color = c; }
+        T(txtTitle, C_Header);
+        T(txtMode, C_Amber);
+        T(txtTime, C_Text);
+        T(txtInsight, C_Text);
+        T(txtInfo, C_Muted);
+        T(txtWinner, C_Ok);
+        T(txtCamMode, C_Cyan);
+        T(txtCamHelp, C_Muted);
+        T(txtGraphHint, C_Muted);
+        T(txtProgress, UiTheme.ChromeText);
+        T(txtStep, C_Text);
+        // Edge chips already painted above; force label ink again after FixTmp skip
+        if (txtLangBtn != null && hideBtnImg == null) { /* no-op */ }
+        if (txtLangBtn != null)
+        {
+            var p = txtLangBtn.transform.parent != null
+                ? txtLangBtn.transform.parent.GetComponent<Image>() : null;
+            txtLangBtn.color = ButtonLabelOn(p != null ? p.color : C_Btn);
+        }
+        if (txtThemeBtn != null)
+        {
+            var p = txtThemeBtn.transform.parent != null
+                ? txtThemeBtn.transform.parent.GetComponent<Image>() : null;
+            txtThemeBtn.color = ButtonLabelOn(p != null ? p.color : C_Btn);
+        }
+        if (txtHideBtn != null)
+        {
+            var p = hideBtnImg != null ? hideBtnImg
+                : (txtHideBtn.transform.parent != null
+                    ? txtHideBtn.transform.parent.GetComponent<Image>() : null);
+            txtHideBtn.color = ButtonLabelOn(p != null ? p.color : C_Btn);
+        }
+        foreach (var m in metricLabels) T(m, C_Muted);
+        if (txtStep != null) txtStep.color = C_Text;
+        RefreshConditionLabels();
+
+        graphAlt?.ApplyThemeColors();
+        graphVel?.ApplyThemeColors();
+        graphThr?.ApplyThemeColors();
+
+        for (int i = 0; i < modeButtonImages.Count; i++)
+        {
+            if (modeButtonImages[i] == null) continue;
+            bool active = i < modeButtons.Count && modeButtons[i] != null
+                && rocket != null
+                && modeButtons[i].gameObject.name == "Mode_" + rocket.controlMode;
+            Color bg = active ? C_BtnActive : C_Btn;
+            modeButtonImages[i].color = bg;
+            if (modeButtons[i] == null) continue;
+            foreach (var tmp in modeButtons[i].GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (tmp == null) continue;
+                tmp.color = tmp.gameObject.name == "ModeSub"
+                    ? ModeSubtitleOn(bg)
+                    : ButtonLabelOn(bg);
+            }
+        }
+
+        RefreshSpeedLabel();
+        if (rocket != null) UpdateFlightStep(rocket.state);
+        if (resultShown && rocket?.metrics != null)
+            ShowLandingResult(rocket.metrics);
+    }
+
+    static float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+
+    /// <summary>NumField fill from theme (not fixed gray).</summary>
+    static Color NumFieldBg()
+    {
+        var p = UiTheme.Current;
+        if (UiTheme.IsLightBackground)
+        {
+            // Paper field with a hint of theme accent
+            Color bg = Color.Lerp(Color.white, p.PanelSoft, 0.35f);
+            bg = Color.Lerp(bg, p.Accent, 0.06f);
+            bg.a = 0.98f;
+            return bg;
+        }
+        // Dark themes: panel + btn + edge + accent so Cyan/Amber/Violet/Green differ
+        Color baseBg = Color.Lerp(p.PanelSoft, p.Btn, 0.5f);
+        baseBg = Color.Lerp(baseBg, p.Edge, 0.22f);
+        baseBg = Color.Lerp(baseBg, p.Accent, 0.1f);
+        // Lift slightly so fields read as controls, not dead gray
+        baseBg = Color.Lerp(baseBg, Color.white, 0.06f);
+        baseBg.a = 1f;
+        return baseBg;
+    }
+
+    static Color NumFieldFocusBg(Color fieldBg)
+    {
+        var accent = UiTheme.Current.Accent;
+        float t = UiTheme.IsLightBackground ? 0.24f : 0.42f;
+        Color focus = Color.Lerp(fieldBg, accent, t);
+        focus.a = 1f;
+        return focus;
+    }
+
+    static void RefreshNumFieldTheme(Image fieldImg)
+    {
+        if (fieldImg == null) return;
+        var input = fieldImg.GetComponent<TMP_InputField>();
+        Color fieldBg = NumFieldBg();
+        Color focusBg = NumFieldFocusBg(fieldBg);
+
+        // ColorTint multiplies graphic.color — keep white
+        fieldImg.color = Color.white;
+        if (input != null)
+        {
+            var ic = input.colors;
+            ic.normalColor = fieldBg;
+            ic.highlightedColor = Color.Lerp(fieldBg, UiTheme.Current.Accent, 0.18f);
+            ic.pressedColor = focusBg;
+            ic.selectedColor = focusBg;
+            ic.disabledColor = new Color(fieldBg.r, fieldBg.g, fieldBg.b, 0.45f);
+            ic.colorMultiplier = 1f;
+            ic.fadeDuration = 0.06f;
+            input.colors = ic;
+            input.caretColor = UiTheme.Current.Accent;
+            input.selectionColor = new Color(
+                UiTheme.Current.Accent.r, UiTheme.Current.Accent.g, UiTheme.Current.Accent.b,
+                UiTheme.IsLightBackground ? 0.28f : 0.4f);
+            if (input.textComponent != null)
+                input.textComponent.color = UiTheme.Current.Text;
+            if (input.placeholder is TMP_Text ph)
+                ph.color = UiTheme.Current.Muted;
+        }
+        var outline = fieldImg.GetComponent<UnityEngine.UI.Outline>();
+        if (outline != null)
+        {
+            var oc = UiTheme.Current.Accent; oc.a = 1f;
+            outline.effectColor = oc;
+        }
     }
 
     void LoadUserSettingsIntoUi()
@@ -949,33 +1458,24 @@ public class MissionControlUI : MonoBehaviour
         switch (kind)
         {
             case MenuBtnKind.Start:
-                bg = UiTheme.IsLightBackground
-                    ? new Color(0.12f, 0.52f, 0.32f, 1f)
-                    : new Color(0.14f, 0.42f, 0.28f, 1f);
-                txtCol = UiTheme.TextOnDark;
+                bg = BtnGreen();
+                txtCol = ButtonLabelOn(bg);
                 break;
             case MenuBtnKind.Stop:
-                bg = UiTheme.IsLightBackground
-                    ? new Color(0.68f, 0.2f, 0.2f, 1f)
-                    : new Color(0.48f, 0.16f, 0.16f, 1f);
-                txtCol = UiTheme.TextOnDark;
+                bg = BtnRed();
+                txtCol = ButtonLabelOn(bg);
                 break;
             case MenuBtnKind.Pause:
-                // Same muted depth as Start/Stop — navy, not bright blue
-                bg = UiTheme.IsLightBackground
-                    ? new Color(0.16f, 0.34f, 0.58f, 1f)
-                    : new Color(0.14f, 0.28f, 0.48f, 1f);
-                txtCol = UiTheme.TextOnDark;
+                bg = BtnBlue();
+                txtCol = ButtonLabelOn(bg);
                 break;
             default:
-                bg = UiTheme.IsLightBackground
-                    ? new Color(0.88f, 0.9f, 0.93f, 1f)
-                    : C_Btn;
-                txtCol = UiTheme.IsLightBackground ? C_Text : UiTheme.TextOnDark;
+                bg = C_Btn;
+                txtCol = ButtonLabelOn(bg);
                 break;
         }
 
-        var go = CreatePanel("MBtn", parent, bg);
+        var go = CreatePanel("MBtn_" + kind, parent, bg);
         var le = go.AddComponent<LayoutElement>();
         le.preferredWidth = width;
         le.minWidth = width;
@@ -1106,16 +1606,13 @@ public class MissionControlUI : MonoBehaviour
 
     void UpdateHideButtonVisual()
     {
-        // Highlight when panels are hidden (toggle is "on")
         Color bg = panelsHidden ? C_BtnActive : C_Btn;
-        if (UiTheme.IsLightBackground && !panelsHidden)
-            bg = new Color(0.88f, 0.9f, 0.93f, 1f);
         if (hideBtnImg != null)
             hideBtnImg.color = bg;
         if (txtHideBtn != null)
         {
             txtHideBtn.text = HideButtonLabel();
-            txtHideBtn.color = UiTheme.ContrastOn(bg);
+            txtHideBtn.color = ButtonLabelOn(bg);
         }
     }
 
@@ -1152,7 +1649,7 @@ public class MissionControlUI : MonoBehaviour
     static Color StatusBadgeBg(Color accent)
     {
         if (UiTheme.IsLightBackground)
-            return Color.Lerp(accent, new Color(0.92f, 0.94f, 0.97f, 1f), 0.72f);
+            return Color.Lerp(accent, new Color(0.96f, 0.97f, 0.985f, 1f), 0.82f);
         return Color.Lerp(accent, new Color(0.08f, 0.09f, 0.12f, 1f), 0.55f);
     }
 
@@ -1160,15 +1657,18 @@ public class MissionControlUI : MonoBehaviour
     {
         if (txtStatus != null)
         {
-            // Same language as landing-gate badges: bold label + accent on soft tinted chip
+            // Same language as landing-gate badges: bold label + high-contrast ink on chip
             txtStatus.text = UILocale.T(key);
-            txtStatus.color = accent;
+            // On light themes keep deep ink (never pale neon on pale fill)
+            txtStatus.color = UiTheme.IsLightBackground
+                ? Color.Lerp(accent, C_Text, 0.28f)
+                : accent;
             txtStatus.fontStyle = FontStyles.Bold;
         }
         if (statusDot != null)
         {
-            // Soft fill like criterion badges: tinted PanelSoft, solid alpha for chrome
-            float t = UiTheme.IsLightBackground ? 0.55f : 0.42f;
+            // Soft fill: light themes stay pale so dark status ink stays readable
+            float t = UiTheme.IsLightBackground ? 0.22f : 0.42f;
             Color c = Color.Lerp(C_PanelSoft, accent, t);
             c.a = 1f;
             statusDot.color = c;
@@ -1289,10 +1789,10 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildCriterionGrid(Transform root, ref float y, float pad, float inner)
     {
-        // 2x2 gate badges — instant GO / NO-GO scan
+        // 2×2 gate: name + live vs limit + clear status (OK / FAIL / WATCH)
         float gap = 6f;
         float cellW = (inner - gap) * 0.5f;
-        float cellH = 36f;
+        float cellH = 52f;
         float row0 = y;
 
         txtCritV = MakeCriterionBadge(root, pad, row0, cellW, cellH, UILocale.T("crit_vy"));
@@ -1301,9 +1801,17 @@ public class MissionControlUI : MonoBehaviour
         float row1 = y;
         txtCritM = MakeCriterionBadge(root, pad, row1, cellW, cellH, UILocale.T("crit_miss"));
         txtCritH = MakeCriterionBadge(root, pad + cellW + gap, row1, cellW, cellH, UILocale.T("crit_vh"));
-        y -= cellH + gap;
+        y -= cellH + 4f;
 
-        // Status strip under miss/vh row — same badge family as criteria
+        // One-line hint under the grid
+        var hint = CreateText(root, UILocale.T("crit_gate_hint"), 10, C_Muted);
+        hint.alignment = TextAlignmentOptions.MidlineLeft;
+        hint.overflowMode = TextOverflowModes.Ellipsis;
+        hint.textWrappingMode = TextWrappingModes.NoWrap;
+        PinTL(hint.rectTransform, pad, y, inner, 16);
+        y -= 18f;
+
+        // Status strip — same badge family as criteria
         float statusH = 32f;
         var statusBg = CreatePanel("StatusBadge", root, C_PanelSoft);
         statusDot = statusBg.GetComponent<Image>();
@@ -1324,12 +1832,14 @@ public class MissionControlUI : MonoBehaviour
         bg.GetComponent<Image>().raycastTarget = false;
         PinTL(bg.GetComponent<RectTransform>(), x, y, w, h);
 
-        var t = CreateText(bg.transform, title + "\n--", 11, C_Muted, FontStyles.Bold);
+        // 3 lines: name / value vs limit / status — no cryptic OK/NO/..
+        string idle = title + "\n" + UILocale.T("crit_idle") + "\n—";
+        var t = CreateText(bg.transform, idle, 11, C_Muted, FontStyles.Normal);
         t.alignment = TextAlignmentOptions.Center;
         t.textWrappingMode = TextWrappingModes.Normal;
-        t.overflowMode = TextOverflowModes.Ellipsis;
-        t.lineSpacing = -6f;
-        StretchFull(t.rectTransform, 4, 3, 4, 3);
+        t.overflowMode = TextOverflowModes.Truncate;
+        t.lineSpacing = -4f;
+        StretchFull(t.rectTransform, 5, 4, 5, 4);
         return t;
     }
 
@@ -1394,50 +1904,20 @@ public class MissionControlUI : MonoBehaviour
             UILocale.T("mode_btn_d"), UILocale.T("mode_sub_d"), RocketPhysics.ControlMode.Hybrid));
         y -= cellH + 8f;
 
-        // ── 2. General conditions (single Start + shared disturbances) ──
-        Header(root, UILocale.T("h_step3"), ref y, pad, inner);
-        SliderLine(root, UILocale.T("sl_h0"), UILocale.T("sl_h0_u"),
-            800, 3000, UserSettings.StartHeight, ref y, out heightSlider, pad, inner);
-        SliderLine(root, UILocale.T("sl_vy0"), UILocale.T("sl_vy0_u"),
-            30, 120, UserSettings.StartDescentSpeed, ref y, out descentSlider, pad, inner);
-        SliderLine(root, UILocale.T("sl_tilt0"), UILocale.T("sl_tilt0_u"),
-            0, 12, UserSettings.StartTilt, ref y, out tilt0Slider, pad, inner);
-        txtWindVal = SliderLine(root, UILocale.T("sl_wind"), UILocale.T("sl_wind_u"),
-            0, 25, UserSettings.Wind, ref y, out windSlider, pad, inner);
-        SliderLine(root, UILocale.T("sl_massn"), UILocale.T("sl_massn_u"),
-            0, 15, UserSettings.MassNoise, ref y, out massNoiseSlider, pad, inner);
-        SliderLine(root, UILocale.T("sl_angn"), UILocale.T("sl_angn_u"),
-            0, 15, UserSettings.AngleNoise, ref y, out angleNoiseSlider, pad, inner);
-        // Live Play speed — always visible at end of general block
-        SliderLine(root, UILocale.T("sl_live"), UILocale.T("sl_live_u"),
-            1, 8, UserSettings.LiveTimeScale, ref y, out liveSpeedSlider, pad, inner);
-        noiseToggle = ToggleAt(root, pad, y, halfW, 26f, UILocale.T("tg_noise"), UserSettings.Noise);
-        trainToggle = ToggleAt(root, pad + halfW + gap, y, halfW, 26f, UILocale.T("tg_train"), UserSettings.Train);
-        y -= 32f;
-
-        // ── 3. Compare-only conditions ──
-        Header(root, UILocale.T("h_mc"), ref y, pad, inner);
-        txtTestsVal = SliderLine(root, UILocale.T("sl_tests"), UILocale.T("sl_tests_u"),
-            5, 40, UserSettings.Tests, ref y, out testsSlider, pad, inner);
-        SliderLine(root, UILocale.T("sl_time"), UILocale.T("sl_time_u"),
-            1, 40, UserSettings.TimeScale, ref y, out timeScaleSlider, pad, inner);
-        txtSeedVal = SliderLine(root, UILocale.T("sl_seed"), UILocale.T("sl_seed_u"),
-            1, 999, UserSettings.ExperimentSeed, ref y, out seedSlider, pad, inner);
-        residualToggle = ToggleAt(root, pad, y, inner, 26f, UILocale.T("tg_residual"), UserSettings.HybridResidual);
-        y -= 32f;
+        // ── 2–3. Conditions (persistent section — NumFields never destroyed) ──
+        PlaceConditionSection(root, ref y, pad, inner, gap);
 
         // ── 4. Compare actions ──
         Header(root, UILocale.T("h_step2"), ref y, pad, inner);
         float btnH = 34f;
+        // Same tone/brightness family as top Start (green) / Stop (red) / Pause (blue)
         ActionButtonAt(root, pad, y, halfW, btnH, UILocale.T("btn_compare"),
-            UiTheme.IsLightBackground ? new Color(0.18f, 0.42f, 0.68f, 1f) : C_BtnActive, OnStartCompare);
+            "Action_Compare", BtnViolet(), OnStartCompare);
         ActionButtonAt(root, pad + halfW + gap, y, halfW, btnH, UILocale.T("btn_cancel"),
-            C_Btn, OnCancelCompare);
+            "Action_Cancel", BtnPink(), OnCancelCompare);
         y -= btnH + gap;
         ActionButtonAt(root, pad, y, inner, btnH, UILocale.T("btn_demo"),
-            UiTheme.IsLightBackground
-                ? new Color(0.82f, 0.58f, 0.10f, 1f)
-                : new Color(0.58f, 0.42f, 0.10f, 1f), OnDefenseDemo);
+            "Action_Demo", BtnAmber(), OnDefenseDemo);
         y -= btnH + 10f;
 
         // ── 4. Comparison results 2x2 ──
@@ -1609,10 +2089,7 @@ public class MissionControlUI : MonoBehaviour
         var tv = FindAnyObjectByType<TrajectoryVisualizer>();
         if (tv != null) trajVisible = tv.IsVisible;
 
-        // Fixed label; active state = accent highlight (no "ON" text)
         Color bg = trajVisible ? C_BtnActive : C_Btn;
-        if (UiTheme.IsLightBackground && !trajVisible)
-            bg = new Color(0.88f, 0.9f, 0.93f, 1f);
 
         if (trajToggleImg == null && trajToggleBtn != null)
             trajToggleImg = trajToggleBtn.targetGraphic as Image;
@@ -1621,7 +2098,7 @@ public class MissionControlUI : MonoBehaviour
         if (txtTrajBtn != null)
         {
             txtTrajBtn.text = PathButtonLabel();
-            txtTrajBtn.color = UiTheme.ContrastOn(bg);
+            txtTrajBtn.color = ButtonLabelOn(bg);
         }
     }
 
@@ -1674,14 +2151,19 @@ public class MissionControlUI : MonoBehaviour
 
     void UpdatePauseButtonVisual()
     {
-        if (txtPauseBtn != null)
-            txtPauseBtn.text = PauseButtonLabel();
-        if (pauseBtnImg == null) return;
         bool paused = rocket != null && rocket.simulationPaused;
-        // Match MenuBtnKind.Pause base; slightly lifted when actively paused
-        pauseBtnImg.color = UiTheme.IsLightBackground
-            ? (paused ? new Color(0.20f, 0.40f, 0.66f, 1f) : new Color(0.16f, 0.34f, 0.58f, 1f))
-            : (paused ? new Color(0.18f, 0.34f, 0.56f, 1f) : new Color(0.14f, 0.28f, 0.48f, 1f));
+        Color bg = BtnBlue();
+        if (paused)
+            bg = Color.Lerp(bg, Color.white, 0.12f);
+        if (pauseBtnImg == null && pauseBtn != null)
+            pauseBtnImg = pauseBtn.targetGraphic as Image;
+        if (pauseBtnImg != null)
+            pauseBtnImg.color = bg;
+        if (txtPauseBtn != null)
+        {
+            txtPauseBtn.text = PauseButtonLabel();
+            txtPauseBtn.color = ButtonLabelOn(bg);
+        }
     }
 
     void OnPause()
@@ -1790,8 +2272,6 @@ public class MissionControlUI : MonoBehaviour
         var cam = ResolveCamera();
         bool on = overviewCam || (cam != null && cam.mode == CameraFollow.ViewMode.Overview);
         Color bg = on ? C_BtnActive : C_Btn;
-        if (UiTheme.IsLightBackground && !on)
-            bg = new Color(0.88f, 0.9f, 0.93f, 1f);
 
         if (viewToggleImg == null && viewToggleBtn != null)
             viewToggleImg = viewToggleBtn.targetGraphic as Image;
@@ -1800,7 +2280,7 @@ public class MissionControlUI : MonoBehaviour
         if (txtViewBtn != null)
         {
             txtViewBtn.text = ViewButtonLabel();
-            txtViewBtn.color = UiTheme.ContrastOn(bg);
+            txtViewBtn.color = ButtonLabelOn(bg);
         }
     }
 
@@ -1859,10 +2339,10 @@ public class MissionControlUI : MonoBehaviour
             algorithm = FriendlyMode(rocket != null ? rocket.controlMode : RocketPhysics.ControlMode.PID),
             timestamp = ResearchExporter.Stamp(),
             metrics = m,
-            maxTouchdownVelocity = maxV > 0 ? maxV : (p != null ? p.maxTouchdownVelocity : 3.5f),
-            maxLandingAngle = maxA > 0 ? maxA : (p != null ? p.maxLandingAngle : 7f),
-            maxHorizontalMiss = maxM > 0 ? maxM : (p != null ? p.maxHorizontalMiss : 25f),
-            maxHorizontalSpeed = maxH > 0 ? maxH : (p != null ? p.maxHorizontalSpeed : 5f),
+            maxTouchdownVelocity = maxV > 0 ? maxV : (p != null ? p.maxTouchdownVelocity : LandingCriteria.DefaultMaxTouchdownVelocity),
+            maxLandingAngle = maxA > 0 ? maxA : (p != null ? p.maxLandingAngle : LandingCriteria.DefaultMaxLandingAngle),
+            maxHorizontalMiss = maxM > 0 ? maxM : (p != null ? p.maxHorizontalMiss : LandingCriteria.DefaultMaxHorizontalMiss),
+            maxHorizontalSpeed = maxH > 0 ? maxH : (p != null ? p.maxHorizontalSpeed : LandingCriteria.DefaultMaxHorizontalSpeed),
             trajectoryCsvPath = dataLogger != null ? dataLogger.LastFilePath : null,
             trajectoryRows = dataLogger != null ? dataLogger.CloneRows() : null,
             samples = dataLogger != null ? dataLogger.CloneSamples() : null
@@ -1912,6 +2392,9 @@ public class MissionControlUI : MonoBehaviour
         if (sim.IsExperimentRunning) { NotifyInfo(UILocale.T("st_batch") + "…"); return; }
         if (defenseDemoCo != null) { StopCoroutine(defenseDemoCo); defenseDemoCo = null; }
         HideLandingResult();
+        ClearGraphs();
+        sampleTimer = 0f;
+        ResetFlightPeaks();
         // Lock fair paired Monte-Carlo protocol (same IC + disturbances for A–D)
         DefenseBaseline.ApplyTo(sim);
         if (rocket?.hybridController != null)
@@ -2077,7 +2560,21 @@ public class MissionControlUI : MonoBehaviour
 
     public void NotifyInfo(string msg)
     {
-        if (txtInfo) txtInfo.text = msg;
+        if (txtInfo == null) return;
+        txtInfo.text = msg;
+        // Success / compare-done lines must stay readable on light panel chips
+        bool successTone = !string.IsNullOrEmpty(msg) && (
+            msg.IndexOf("успіх", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("success", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("перемож", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("winner", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("експорт", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("export", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("завершен", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("complete", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("звіти", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || msg.IndexOf("готов", System.StringComparison.OrdinalIgnoreCase) >= 0);
+        txtInfo.color = successTone ? C_Ok : C_Text;
     }
 
     public void SetBatchMode(bool on)
@@ -2085,6 +2582,9 @@ public class MissionControlUI : MonoBehaviour
         batchMode = on;
         if (on)
         {
+            // New comparison pack → wipe prior landing/batch traces
+            ClearGraphs();
+            sampleTimer = 0f;
             HideLandingResult();
             // Prevent PATH freezes during / right after Monte-Carlo
             var tv = EnsureTrajectoryVisualizer();
@@ -2095,6 +2595,7 @@ public class MissionControlUI : MonoBehaviour
             // Wide overview while A–D batch runs (pad + descent corridor)
             EnterOverviewForCompare();
         }
+        // on=false: keep charts so the finished comparison remains visible
         if (progressRoot != null) progressRoot.SetActive(on);
         RefreshSpeedLabel();
     }
@@ -2127,10 +2628,10 @@ public class MissionControlUI : MonoBehaviour
         resultRoot.SetActive(true);
 
         var p = rocket?.parameters;
-        float maxV = p != null && p.maxTouchdownVelocity > 0.1f ? p.maxTouchdownVelocity : 3.5f;
-        float maxA = p != null && p.maxLandingAngle > 0.1f ? p.maxLandingAngle : 7f;
-        float maxM = p != null && p.maxHorizontalMiss > 0.1f ? p.maxHorizontalMiss : 25f;
-        float maxH = p != null && p.maxHorizontalSpeed > 0.1f ? p.maxHorizontalSpeed : 5f;
+        float maxV = p != null && p.maxTouchdownVelocity > 0.1f ? p.maxTouchdownVelocity : LandingCriteria.DefaultMaxTouchdownVelocity;
+        float maxA = p != null && p.maxLandingAngle > 0.1f ? p.maxLandingAngle : LandingCriteria.DefaultMaxLandingAngle;
+        float maxM = p != null && p.maxHorizontalMiss > 0.1f ? p.maxHorizontalMiss : LandingCriteria.DefaultMaxHorizontalMiss;
+        float maxH = p != null && p.maxHorizontalSpeed > 0.1f ? p.maxHorizontalSpeed : LandingCriteria.DefaultMaxHorizontalSpeed;
 
         bool ok = m.isSuccessfulLanding;
         Color status = ok ? C_Ok : C_Alert;
@@ -2475,10 +2976,10 @@ public class MissionControlUI : MonoBehaviour
         if (s.velocity.y < -0.15f && s.position.y > 0.5f)
             eta = s.position.y / Mathf.Abs(s.velocity.y);
 
-        float maxV = rocket.parameters != null ? rocket.parameters.maxTouchdownVelocity : 3.5f;
-        float maxA = rocket.parameters != null ? rocket.parameters.maxLandingAngle : 7f;
-        float maxM = rocket.parameters != null ? rocket.parameters.maxHorizontalMiss : 25f;
-        float maxH = rocket.parameters != null ? rocket.parameters.maxHorizontalSpeed : 5f;
+        float maxV = rocket.parameters != null ? rocket.parameters.maxTouchdownVelocity : LandingCriteria.DefaultMaxTouchdownVelocity;
+        float maxA = rocket.parameters != null ? rocket.parameters.maxLandingAngle : LandingCriteria.DefaultMaxLandingAngle;
+        float maxM = rocket.parameters != null ? rocket.parameters.maxHorizontalMiss : LandingCriteria.DefaultMaxHorizontalMiss;
+        float maxH = rocket.parameters != null ? rocket.parameters.maxHorizontalSpeed : LandingCriteria.DefaultMaxHorizontalSpeed;
 
         Write(txtAlt, $"{s.position.y:F1}", s.position.y < 80f ? C_Amber : C_Text);
         float av = Mathf.Abs(s.velocity.y);
@@ -2533,16 +3034,28 @@ public class MissionControlUI : MonoBehaviour
         SetBar(fuelBarFill, fuelPct, fuelPct < 0.15f ? C_Alert : C_Ok);
         SetBar(tiltBarFill, Mathf.Clamp01(tilt / 15f), tilt > maxA ? C_Alert : C_Amber);
 
-        bool nearGround = s.position.y < 40f || s.isLanded || s.simulationFinished;
-        // Gate badges: short title + live value vs limit (ASCII-safe)
-        UpdateCriterion(txtCritV, av < maxV, UILocale.T("crit_vy"),
-            $"{av:F2} / {maxV:F1}", nearGround || av >= maxV * 0.85f);
-        UpdateCriterion(txtCritA, tilt < maxA, UILocale.T("crit_tilt"),
-            $"{tilt:F1} / {maxA:F0}", true);
-        UpdateCriterion(txtCritM, miss < maxM, UILocale.T("crit_miss"),
-            $"{miss:F1} / {maxM:F0}", true);
-        UpdateCriterion(txtCritH, hVel < maxH, UILocale.T("crit_vh"),
-            $"{hVel:F2} / {maxH:F0}", true);
+        // Soft-landing gate: name + current ≤ limit + NОРМА/ПОРУШЕННЯ/БЛИЗЬКО
+        bool flying = rocket.simulationArmed && (s.time > 0.05f || s.simulationFinished || s.isLanded);
+        bool landed = s.simulationFinished || s.isLanded;
+        // After touchdown prefer frozen metrics
+        if (landed && rocket.metrics != null && rocket.metrics.totalFlightTime > 0.05f)
+        {
+            av = rocket.metrics.touchdownVelocity;
+            tilt = rocket.metrics.landingAngleError;
+            miss = rocket.metrics.horizontalMiss;
+            hVel = rocket.metrics.horizontalSpeed;
+        }
+        string ums = UILocale.T("u_ms");
+        string um = UILocale.T("u_m");
+        string udeg = "°";
+        UpdateLandingGate(txtCritV, flying, av, maxV, 0.85f,
+            UILocale.T("crit_vy"), ums, "F2", "F1");
+        UpdateLandingGate(txtCritA, flying, tilt, maxA, 0.7f,
+            UILocale.T("crit_tilt"), udeg, "F1", "F0");
+        UpdateLandingGate(txtCritM, flying, miss, maxM, 0.7f,
+            UILocale.T("crit_miss"), um, "F1", "F0");
+        UpdateLandingGate(txtCritH, flying, hVel, maxH, 0.7f,
+            UILocale.T("crit_vh"), ums, "F2", "F1");
 
         UpdateInsight(s, av, hVel, tilt, miss, twr, fuelPct, eta, maxV, maxA, maxM, maxH);
 
@@ -2596,10 +3109,17 @@ public class MissionControlUI : MonoBehaviour
             }
         }
 
-        // Щільніший семплінг під час польоту — зручніше стежити за змінами
+        // Strip charts: single flight + live MC comparison (reset only on new compare start)
+        bool expRunning = batchMode || (sim != null && sim.IsExperimentRunning);
         sampleTimer += Time.unscaledDeltaTime;
-        float sampleDt = s.position.y < 200f ? 0.04f : 0.07f;
-        if (sampleTimer >= sampleDt && !s.simulationFinished && s.time > 0f && rocket.simulationArmed)
+        // Faster sample during batch so multi-trial bursts still leave a visible trace
+        float sampleDt = expRunning
+            ? 0.03f
+            : (s.position.y < 200f ? 0.04f : 0.07f);
+        if (sampleTimer >= sampleDt
+            && rocket.simulationArmed
+            && s.time > 0.01f
+            && !s.simulationFinished)
         {
             sampleTimer = 0f;
             graphAlt?.Push(s.position.y);
@@ -2650,9 +3170,16 @@ public class MissionControlUI : MonoBehaviour
         }
         if (txtInfo)
         {
-            txtInfo.text = max <= 0.05f
-                ? UILocale.T("msg_compare_zero")
-                : string.Format(UILocale.T("msg_compare_done"), winner, max);
+            if (max <= 0.05f)
+            {
+                txtInfo.text = UILocale.T("msg_compare_zero");
+                txtInfo.color = C_Alert;
+            }
+            else
+            {
+                txtInfo.text = string.Format(UILocale.T("msg_compare_done"), winner, max);
+                txtInfo.color = C_Ok;
+            }
         }
     }
 
@@ -2664,8 +3191,9 @@ public class MissionControlUI : MonoBehaviour
         var img = t.transform.parent != null ? t.transform.parent.GetComponent<Image>() : null;
         if (img != null)
         {
-            Color bg = new Color(c.r, c.g, c.b, UiTheme.IsLightBackground ? 0.18f : 0.14f);
-            img.color = bg;
+            // Pale wash on light themes — keep ink (c) dominant for contrast
+            float a = UiTheme.IsLightBackground ? 0.12f : 0.14f;
+            img.color = new Color(c.r, c.g, c.b, a);
         }
     }
 
@@ -2922,18 +3450,14 @@ public class MissionControlUI : MonoBehaviour
 
     TMP_Text Header(Transform parent, string title, ref float y, float pad = 14f, float width = 300f)
     {
-        // Section label + hairline — tight, consistent rhythm
-        var t = CreateText(parent, title, 10, C_Accent, FontStyles.Bold);
+        // Section label + hairline — same recipe as SectionHeader
+        var t = CreateText(parent, title, 10, C_Header, FontStyles.Bold);
+        t.gameObject.name = "SecHdr";
         t.characterSpacing = 3.2f;
         PinTL(t.rectTransform, pad, y, width, 15);
         y -= 16f;
 
-        Color lineCol = Color.Lerp(C_Accent, UiTheme.IsLightBackground
-            ? new Color(0.55f, 0.58f, 0.62f, 1f)
-            : new Color(0.85f, 0.88f, 0.92f, 1f), 0.42f);
-        lineCol.a = UiTheme.IsLightBackground ? 0.65f : 0.48f;
-
-        var line = CreatePanel("HeaderLine", parent, lineCol);
+        var line = CreatePanel("HeaderLine", parent, HeaderLineColor);
         line.GetComponent<Image>().raycastTarget = false;
         PinTL(line.GetComponent<RectTransform>(), pad, y, width, 1.5f);
         y -= 10f;
@@ -2976,26 +3500,60 @@ public class MissionControlUI : MonoBehaviour
         t.color = c;
     }
 
-    static void UpdateCriterion(TMP_Text t, bool ok, string title, string detail, bool emphasize)
+    /// <summary>
+    /// Soft-landing gate cell: title, "value ≤ limit unit", status NОРМА/ПОРУШЕННЯ/БЛИЗЬКО/—.
+    /// </summary>
+    static void UpdateLandingGate(TMP_Text t, bool active, float value, float limit, float warnFrac,
+        string title, string unit, string valFmt, string limFmt)
     {
         if (t == null) return;
-        // Two-line badge: TITLE + value/limit
-        string mark = ok ? "OK" : (emphasize ? "NO" : "..");
-        t.text = title + "  " + mark + "\n" + detail;
-        t.color = ok ? C_Ok : (emphasize ? C_Alert : C_Amber);
-        // Tint parent badge background if present
+
+        bool pass = value < limit;
+        bool warn = pass && value >= limit * Mathf.Clamp01(warnFrac);
+
+        string status;
+        Color ink;
+        if (!active)
+        {
+            status = "—";
+            ink = C_Muted;
+        }
+        else if (!pass)
+        {
+            status = UILocale.T("crit_fail");
+            ink = C_Alert;
+        }
+        else if (warn)
+        {
+            status = UILocale.T("crit_warn");
+            ink = C_Amber;
+        }
+        else
+        {
+            status = UILocale.T("crit_ok");
+            ink = C_Ok;
+        }
+
+        string lim = limit.ToString(limFmt);
+        string valLine;
+        if (!active)
+            valLine = $"{UILocale.T("crit_idle")} ≤ {lim} {unit}";
+        else if (pass)
+            valLine = $"{value.ToString(valFmt)} ≤ {lim} {unit}";
+        else
+            valLine = $"{value.ToString(valFmt)} > {lim} {unit}";
+
+        t.text = title + "\n" + valLine + "\n" + status;
+        t.color = ink;
+
         var img = t.transform.parent != null ? t.transform.parent.GetComponent<Image>() : null;
         if (img != null)
         {
-            Color baseBg = ok
-                ? new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.14f)
-                : emphasize
-                    ? new Color(C_Alert.r, C_Alert.g, C_Alert.b, 0.16f)
-                    : new Color(C_Amber.r, C_Amber.g, C_Amber.b, 0.12f);
-            // Keep readable on light themes
-            if (UiTheme.IsLightBackground)
-                baseBg.a = Mathf.Max(baseBg.a, 0.22f);
-            img.color = baseBg;
+            float a = UiTheme.IsLightBackground
+                ? (!active ? 0.06f : 0.12f)
+                : (!active ? 0.08f : pass ? (warn ? 0.14f : 0.12f) : 0.18f);
+            Color wash = !active ? C_PanelSoft : ink;
+            img.color = new Color(wash.r, wash.g, wash.b, a);
         }
     }
 
@@ -3273,7 +3831,9 @@ public class MissionControlUI : MonoBehaviour
 
         if (!string.IsNullOrEmpty(subtitle))
         {
-            var sub = CreateText(go.transform, subtitle, 10, C_Muted);
+            // Readable on light chips (C_Muted alone was too pale / green-tinted on some themes)
+            var sub = CreateText(go.transform, subtitle, 10, ModeSubtitleOn(C_Btn));
+            sub.gameObject.name = "ModeSub";
             var sr = sub.rectTransform;
             sr.anchorMin = new Vector2(0, 0);
             sr.anchorMax = new Vector2(1, 0.48f);
@@ -3308,24 +3868,25 @@ public class MissionControlUI : MonoBehaviour
 
     void ActionButtonAt(Transform parent, float x, float y, float w, float h,
         string label, Color col, UnityEngine.Events.UnityAction action)
+        => ActionButtonAt(parent, x, y, w, h, label, "Action", col, action);
+
+    void ActionButtonAt(Transform parent, float x, float y, float w, float h,
+        string label, string goName, Color col, UnityEngine.Events.UnityAction action)
     {
+        // Keep solid accent fills (Start/Stop family) — do not wash out on light themes
         Color bg = col;
-        if (UiTheme.IsLightBackground)
-        {
-            float luma = 0.2126f * col.r + 0.7152f * col.g + 0.0722f * col.b;
-            if (luma < 0.45f)
-                bg = Color.Lerp(col, new Color(0.2f, 0.45f, 0.7f, 1f), 0.35f);
-        }
-        var go = CreatePanel("Action", parent, bg);
+        bg.a = 1f;
+        var go = CreatePanel(goName, parent, bg);
         PinTL(go.GetComponent<RectTransform>(), x, y, w, h);
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = go.GetComponent<Image>();
         var colors = btn.colors;
         colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1.08f, 1.08f, 1.1f);
-        colors.pressedColor = new Color(0.85f, 0.85f, 0.88f);
+        colors.highlightedColor = new Color(1.1f, 1.1f, 1.12f);
+        colors.pressedColor = new Color(0.82f, 0.82f, 0.85f);
         btn.colors = colors;
-        Color tc = UiTheme.ActionBtnText(bg);
+        // Dark/saturated fills always get light label (never dark ink on navy/amber)
+        Color tc = ButtonLabelOn(bg);
         var txt = CreateText(go.transform, label, 11, tc, FontStyles.Bold);
         StretchFull(txt.rectTransform, 4, 2, 4, 2);
         txt.alignment = TextAlignmentOptions.Center;
@@ -3335,8 +3896,168 @@ public class MissionControlUI : MonoBehaviour
         btn.onClick.AddListener(action);
     }
 
+    /// <summary>Theme-aware label on button fill (same family as panel text).</summary>
+    static Color ButtonLabelOn(Color bg) => UiTheme.LabelOnFill(bg);
+
+    // Shared action palette — top Start/Stop/Pause and right Compare/Cancel/Demo
+    static Color BtnGreen() => UiTheme.IsLightBackground
+        ? new Color(0.12f, 0.50f, 0.30f, 1f)
+        : new Color(0.14f, 0.40f, 0.26f, 1f);
+    static Color BtnRed() => UiTheme.IsLightBackground
+        ? new Color(0.70f, 0.18f, 0.18f, 1f)
+        : new Color(0.50f, 0.14f, 0.14f, 1f);
+    static Color BtnBlue() => UiTheme.IsLightBackground
+        ? new Color(0.14f, 0.32f, 0.55f, 1f)
+        : new Color(0.12f, 0.26f, 0.45f, 1f);
+    /// <summary>Amber at same weight as Start/Stop (not washed theme-amber).</summary>
+    static Color BtnAmber() => UiTheme.IsLightBackground
+        ? new Color(0.78f, 0.48f, 0.06f, 1f)
+        : new Color(0.68f, 0.42f, 0.08f, 1f);
+    /// <summary>Violet — same luminance band as Pause blue.</summary>
+    static Color BtnViolet() => UiTheme.IsLightBackground
+        ? new Color(0.42f, 0.22f, 0.62f, 1f)
+        : new Color(0.36f, 0.20f, 0.52f, 1f);
+    /// <summary>Rose/pink — same luminance band as Stop red.</summary>
+    static Color BtnPink() => UiTheme.IsLightBackground
+        ? new Color(0.72f, 0.22f, 0.42f, 1f)
+        : new Color(0.55f, 0.16f, 0.32f, 1f);
+
+    /// <summary>Secondary line on mode cards — theme muted with contrast on fill.</summary>
+    static Color ModeSubtitleOn(Color bg)
+    {
+        float l = 0.2126f * bg.r + 0.7152f * bg.g + 0.0722f * bg.b;
+        Color muted = UiTheme.Current.Muted;
+        if (l > 0.55f)
+        {
+            // Pale chip: muted must stay dark enough
+            float ml = 0.2126f * muted.r + 0.7152f * muted.g + 0.0722f * muted.b;
+            if (ml > 0.5f)
+                return Color.Lerp(muted, UiTheme.Current.Text, 0.55f);
+            return muted;
+        }
+        // Dark/active chip: lift muted toward light theme text
+        return Color.Lerp(muted, UiTheme.TextOnDark, 0.45f);
+    }
+
+    void PlaceConditionSection(Transform root, ref float y, float pad, float inner, float gap)
+    {
+        float halfW = (inner - gap) * 0.5f;
+        bool fresh = conditionSectionGo == null;
+
+        if (fresh)
+        {
+            conditionSectionGo = CreatePanel("ConditionSection", transform, new Color(0, 0, 0, 0));
+            conditionSectionGo.GetComponent<Image>().raycastTarget = false;
+            conditionLabelBindings.Clear();
+            conditionToggleBindings.Clear();
+
+            var sec = conditionSectionGo.transform;
+            float ly = 0f;
+
+            SectionHeader(sec, "h_step3", ref ly, pad, inner);
+            SliderLine(sec, UILocale.T("sl_h0"), UILocale.T("sl_h0_u"),
+                800, 3000, UserSettings.StartHeight, ref ly, out heightSlider, pad, inner, "sl_h0", "sl_h0_u");
+            SliderLine(sec, UILocale.T("sl_vy0"), UILocale.T("sl_vy0_u"),
+                30, 120, UserSettings.StartDescentSpeed, ref ly, out descentSlider, pad, inner, "sl_vy0", "sl_vy0_u");
+            SliderLine(sec, UILocale.T("sl_tilt0"), UILocale.T("sl_tilt0_u"),
+                0, 12, UserSettings.StartTilt, ref ly, out tilt0Slider, pad, inner, "sl_tilt0", "sl_tilt0_u");
+            txtWindVal = SliderLine(sec, UILocale.T("sl_wind"), UILocale.T("sl_wind_u"),
+                0, 25, UserSettings.Wind, ref ly, out windSlider, pad, inner, "sl_wind", "sl_wind_u");
+            SliderLine(sec, UILocale.T("sl_massn"), UILocale.T("sl_massn_u"),
+                0, 15, UserSettings.MassNoise, ref ly, out massNoiseSlider, pad, inner, "sl_massn", "sl_massn_u");
+            SliderLine(sec, UILocale.T("sl_angn"), UILocale.T("sl_angn_u"),
+                0, 15, UserSettings.AngleNoise, ref ly, out angleNoiseSlider, pad, inner, "sl_angn", "sl_angn_u");
+            SliderLine(sec, UILocale.T("sl_live"), UILocale.T("sl_live_u"),
+                1, 8, UserSettings.LiveTimeScale, ref ly, out liveSpeedSlider, pad, inner, "sl_live", "sl_live_u");
+
+            noiseToggle = ToggleAt(sec, pad, ly, halfW, 26f, UILocale.T("tg_noise"), UserSettings.Noise, "tg_noise");
+            trainToggle = ToggleAt(sec, pad + halfW + gap, ly, halfW, 26f, UILocale.T("tg_train"), UserSettings.Train, "tg_train");
+            ly -= 32f;
+
+            SectionHeader(sec, "h_mc", ref ly, pad, inner);
+            txtTestsVal = SliderLine(sec, UILocale.T("sl_tests"), UILocale.T("sl_tests_u"),
+                5, 40, UserSettings.Tests, ref ly, out testsSlider, pad, inner, "sl_tests", "sl_tests_u");
+            SliderLine(sec, UILocale.T("sl_time"), UILocale.T("sl_time_u"),
+                1, 40, UserSettings.TimeScale, ref ly, out timeScaleSlider, pad, inner, "sl_time", "sl_time_u");
+            txtSeedVal = SliderLine(sec, UILocale.T("sl_seed"), UILocale.T("sl_seed_u"),
+                1, 999, UserSettings.ExperimentSeed, ref ly, out seedSlider, pad, inner, "sl_seed", "sl_seed_u");
+            residualToggle = ToggleAt(sec, pad, ly, inner, 26f, UILocale.T("tg_residual"), UserSettings.HybridResidual, "tg_residual");
+            ly -= 32f;
+
+            conditionSectionHeight = Mathf.Max(40f, -ly);
+        }
+        else
+        {
+            // Re-bind refs (same objects, new right-panel parent)
+            var sliders = conditionSectionGo.GetComponentsInChildren<Slider>(true);
+            if (sliders.Length >= 10)
+            {
+                heightSlider = sliders[0];
+                descentSlider = sliders[1];
+                tilt0Slider = sliders[2];
+                windSlider = sliders[3];
+                massNoiseSlider = sliders[4];
+                angleNoiseSlider = sliders[5];
+                liveSpeedSlider = sliders[6];
+                testsSlider = sliders[7];
+                timeScaleSlider = sliders[8];
+                seedSlider = sliders[9];
+            }
+            var toggles = conditionSectionGo.GetComponentsInChildren<Toggle>(true);
+            if (toggles.Length >= 3)
+            {
+                noiseToggle = toggles[0];
+                trainToggle = toggles[1];
+                residualToggle = toggles[2];
+            }
+            // Display-value refs still point at NumField text components
+            if (windSlider != null)
+            {
+                var inp = windSlider.transform.parent.GetComponentInChildren<TMP_InputField>(true);
+                txtWindVal = inp != null ? inp.textComponent : txtWindVal;
+            }
+            if (testsSlider != null)
+            {
+                var inp = testsSlider.transform.parent.GetComponentInChildren<TMP_InputField>(true);
+                txtTestsVal = inp != null ? inp.textComponent : txtTestsVal;
+            }
+            if (seedSlider != null)
+            {
+                var inp = seedSlider.transform.parent.GetComponentInChildren<TMP_InputField>(true);
+                txtSeedVal = inp != null ? inp.textComponent : txtSeedVal;
+            }
+            RefreshConditionLabels();
+        }
+
+        conditionSectionGo.SetActive(true);
+        conditionSectionGo.transform.SetParent(root, false);
+        var rt = conditionSectionGo.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, y);
+        rt.sizeDelta = new Vector2(0f, conditionSectionHeight);
+        y -= conditionSectionHeight + 4f;
+    }
+
+    void SectionHeader(Transform parent, string localeKey, ref float y, float pad, float width)
+    {
+        // Match Header() geometry and colors exactly (was mismatched line offset + accent-green)
+        var t = CreateText(parent, UILocale.T(localeKey), 10, C_Header, FontStyles.Bold);
+        t.gameObject.name = "SecHdr";
+        t.characterSpacing = 3.2f;
+        conditionLabelBindings.Add((t, null, localeKey, null));
+        PinTL(t.rectTransform, pad, y, width, 15f);
+        y -= 16f;
+        var line = CreatePanel("HeaderLine", parent, HeaderLineColor);
+        line.GetComponent<Image>().raycastTarget = false;
+        PinTL(line.GetComponent<RectTransform>(), pad, y, width, 1.5f);
+        y -= 10f;
+    }
+
     TMP_Text SliderLine(Transform parent, string label, string unit, float min, float max, float val,
-        ref float y, out Slider slider, float pad = 12f, float width = 314f)
+        ref float y, out Slider slider, float pad = 12f, float width = 314f,
+        string labelKey = null, string unitKey = null)
     {
         // Fixed geometry — label + numeric input + unit + track
         const float blockH = 48f;
@@ -3347,14 +4068,12 @@ public class MissionControlUI : MonoBehaviour
         const float inputW = 58f;
         const float unitW = 36f;
 
-        Color trackCol = Color.Lerp(C_Edge, C_PanelSoft, UiTheme.IsLightBackground ? 0.25f : 0.4f);
+        Color trackCol = Color.Lerp(C_Edge, C_PanelSoft, UiTheme.IsLightBackground ? 0.25f : 0.35f);
         trackCol.a = 1f;
         Color fillCol = C_Accent; fillCol.a = 1f;
         Color handleCol = C_Amber; handleCol.a = 1f;
         Color labelCol = C_Text; labelCol.a = 0.92f;
-        Color fieldBg = UiTheme.IsLightBackground
-            ? new Color(1f, 1f, 1f, 0.95f)
-            : new Color(0.08f, 0.09f, 0.12f, 1f);
+        Color fieldBg = NumFieldBg();
 
         string unitS = string.IsNullOrEmpty(unit) ? "" : unit;
         val = Mathf.Clamp(val, min, max);
@@ -3366,6 +4085,7 @@ public class MissionControlUI : MonoBehaviour
 
         // Label (left)
         var k = CreateText(block.transform, label ?? "", 12, labelCol, FontStyles.Normal);
+        k.gameObject.name = "SliderLabel";
         k.raycastTarget = false;
         k.overflowMode = TextOverflowModes.Ellipsis;
         k.textWrappingMode = TextWrappingModes.NoWrap;
@@ -3379,6 +4099,7 @@ public class MissionControlUI : MonoBehaviour
 
         // Unit (far right)
         var uLab = CreateText(block.transform, unitS, 11, C_Muted, FontStyles.Normal);
+        uLab.gameObject.name = "SliderUnit";
         uLab.raycastTarget = false;
         uLab.alignment = TextAlignmentOptions.MidlineLeft;
         uLab.overflowMode = TextOverflowModes.Overflow;
@@ -3388,7 +4109,10 @@ public class MissionControlUI : MonoBehaviour
         urt.anchoredPosition = new Vector2(-6f, -4f);
         urt.sizeDelta = new Vector2(unitW, labelH);
 
-        // Numeric input (digits only) — click to type
+        if (!string.IsNullOrEmpty(labelKey) || !string.IsNullOrEmpty(unitKey))
+            conditionLabelBindings.Add((k, uLab, labelKey, unitKey));
+
+        // Numeric input (digits only) — click to type; focus must be obvious
         var fieldGo = new GameObject("NumField", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         fieldGo.transform.SetParent(block.transform, false);
         var frtIn = fieldGo.GetComponent<RectTransform>();
@@ -3399,6 +4123,15 @@ public class MissionControlUI : MonoBehaviour
         var fieldImg = fieldGo.GetComponent<Image>();
         StyleSimpleImage(fieldImg, fieldBg);
         fieldImg.raycastTarget = true;
+
+        // Outline focus ring (enabled on select) — visible on light & dark themes
+        var focusOutline = fieldGo.AddComponent<Outline>();
+        Color outlineCol = C_Accent;
+        outlineCol.a = 1f;
+        focusOutline.effectColor = outlineCol;
+        focusOutline.effectDistance = new Vector2(2.5f, -2.5f);
+        focusOutline.useGraphicAlpha = false;
+        focusOutline.enabled = false;
 
         var textGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         textGo.transform.SetParent(fieldGo.transform, false);
@@ -3430,11 +4163,27 @@ public class MissionControlUI : MonoBehaviour
         input.characterValidation = TMP_InputField.CharacterValidation.Integer;
         input.lineType = TMP_InputField.LineType.SingleLine;
         input.characterLimit = 5;
-        input.caretWidth = 1;
+        input.caretWidth = 2;
+        input.caretBlinkRate = 0.85f;
         input.customCaretColor = true;
         input.caretColor = C_Accent;
-        input.selectionColor = new Color(C_Accent.r, C_Accent.g, C_Accent.b, 0.35f);
+        input.selectionColor = new Color(C_Accent.r, C_Accent.g, C_Accent.b,
+            UiTheme.IsLightBackground ? 0.28f : 0.4f);
         input.targetGraphic = fieldImg;
+        input.transition = Selectable.Transition.ColorTint;
+        var ic = ColorBlock.defaultColorBlock;
+        Color idleBg = fieldBg;
+        Color focusBg = NumFieldFocusBg(fieldBg);
+        ic.normalColor = idleBg;
+        ic.highlightedColor = Color.Lerp(idleBg, C_Accent, 0.18f);
+        ic.pressedColor = focusBg;
+        ic.selectedColor = focusBg;
+        ic.disabledColor = new Color(idleBg.r, idleBg.g, idleBg.b, 0.45f);
+        ic.colorMultiplier = 1f;
+        ic.fadeDuration = 0.06f;
+        input.colors = ic;
+        // ColorTint multiplies graphic.color — keep white so ColorBlock drives the fill
+        fieldImg.color = Color.white;
         input.text = Mathf.RoundToInt(val).ToString();
         // Keep display TMP_Text reference for legacy txtSeedVal updates
         TMP_Text displayVal = v;
@@ -3589,6 +4338,14 @@ public class MissionControlUI : MonoBehaviour
         {
             input.selectionAnchorPosition = 0;
             input.selectionFocusPosition = input.text.Length;
+            if (focusOutline != null) focusOutline.enabled = true;
+            input.caretWidth = 2;
+            input.customCaretColor = true;
+            input.caretColor = C_Accent;
+        });
+        input.onDeselect.AddListener(_ =>
+        {
+            if (focusOutline != null) focusOutline.enabled = false;
         });
 
         sld.SetValueWithoutNotify(val);
@@ -3618,7 +4375,8 @@ public class MissionControlUI : MonoBehaviour
         return string.IsNullOrEmpty(unitS) ? num : (num + " " + unitS.Trim());
     }
 
-    Toggle ToggleAt(Transform parent, float x, float y, float w, float h, string label, bool on)
+    Toggle ToggleAt(Transform parent, float x, float y, float w, float h, string label, bool on,
+        string labelKey = null)
     {
         var row = CreatePanel("ToggleRow", parent, C_PanelSoft);
         row.GetComponent<Image>().raycastTarget = true;
@@ -3635,6 +4393,7 @@ public class MissionControlUI : MonoBehaviour
         StretchFull(check.GetComponent<RectTransform>(), 3, 3, 3, 3);
 
         var txt = CreateText(row.transform, label, 10, C_Text);
+        txt.gameObject.name = "ToggleLabel";
         var trt = txt.rectTransform;
         trt.anchorMin = new Vector2(0, 0);
         trt.anchorMax = new Vector2(1, 1);
@@ -3649,6 +4408,8 @@ public class MissionControlUI : MonoBehaviour
         toggle.targetGraphic = box.GetComponent<Image>();
         toggle.graphic = check.GetComponent<Image>();
         toggle.isOn = on;
+        if (!string.IsNullOrEmpty(labelKey))
+            conditionToggleBindings.Add((toggle, txt, labelKey));
         return toggle;
     }
 
