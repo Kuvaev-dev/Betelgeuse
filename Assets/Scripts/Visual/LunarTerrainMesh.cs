@@ -31,7 +31,7 @@ public static class LunarTerrainMesh
         return box.mesh;
     }
 
-    /// <summary>Run nested IEnumerators to completion (sync). Unity coroutines do this automatically.</summary>
+    /// <summary>Прогнати вкладені IEnumerator до кінця (sync). Unity-корутини роблять це автоматично.</summary>
     public static void Drain(IEnumerator e)
     {
         if (e == null) return;
@@ -42,7 +42,7 @@ public static class LunarTerrainMesh
         }
     }
 
-    /// <summary>Same as Build, but yields every few rows so splash spinner can keep spinning.</summary>
+    /// <summary>Як Build, але yield кожні кілька рядків, щоб splash-спінер крутився.</summary>
     public static IEnumerator BuildRoutine(BuildOutput box,
         int resolution = 256, float radius = -1f, int seed = 42)
     {
@@ -68,11 +68,11 @@ public static class LunarTerrainMesh
             if ((iz & 31) == 0) yield return null;
         }
 
-        // Smooth → circular bowls without multi-pass stall
+        // Згладити → круглі чаші без multi-pass зависання
         SmoothHeightField(height, n, 3);
         yield return null;
 
-        // 512–1024 albedo is enough at lunar scale; 2K was the main load stall
+        // Albedo 512–1024 достатньо на місячному масштабі; 2K був головною причиною зависання завантаження
         int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 3, 512, 1024));
         Texture2D albedoTex = null;
         Texture2D normalTex = null;
@@ -98,7 +98,7 @@ public static class LunarTerrainMesh
 
                 float dist = Mathf.Sqrt(x * x + z * z);
                 float h = height[ix, iz];
-                // Very soft outer lip
+                // Дуже м’яка зовнішня кромка
                 float edge = Mathf.Clamp01((radius - dist) / (radius * 0.04f));
                 if (edge < 1f) h = Mathf.Lerp(h - 1.2f, h, Quintic01(edge));
 
@@ -151,7 +151,7 @@ public static class LunarTerrainMesh
         }
         yield return null;
 
-        // One Laplacian pass on normals via shared edges → softer crater rims
+        // Один Laplacian-прохід normals через shared edges → м’якші краї кратерів
         {
             var acc = new Vector3[norms.Length];
             var cnt = new int[norms.Length];
@@ -193,13 +193,13 @@ public static class LunarTerrainMesh
 
     /// <summary>
     /// Albedo + normal у тій самій world-space проєкції, що й mesh UV.
-    /// Yields every few rows so the splash spinner can keep rotating.
+    /// Yield кожні кілька рядків, щоб splash-спінер крутився.
     /// </summary>
     static IEnumerator BuildSurfaceMapsRoutine(Crater[] craters, float terrainRadius, int texSize, int seed,
         System.Action<Texture2D> setAlbedo, System.Action<Texture2D> setNormal)
     {
-        // Pure procedural bake — no external tiles (tiling = ragged seams).
-        // Fill the FULL square continuously (no hard black circle edge).
+        // Чистий procedural bake — без зовнішніх tiles (tiling = рвані шви).
+        // Заповнити ВЕСЬ квадрат безперервно (без жорсткого чорного краю кола).
         var hBuf = new float[texSize * texSize];
         var aBuf = new float[texSize * texSize];
 
@@ -217,19 +217,19 @@ public static class LunarTerrainMesh
                 float dist = Mathf.Sqrt(wx * wx + wz * wz);
 
                 float h = 0f;
-                // Presentation mid-gray: readable under sun, not chalk and not coal
+                // Презентаційний mid-gray: читабельний під сонцем, ні крейда, ні вугілля
                 float g = 0.42f;
 
                 if (dist <= PadClearRadius)
                 {
-                    // Match mesh pit (albedo only — height comes from SampleHeight)
+                    // Збігтись з ямою меша (лише albedo — висота з SampleHeight)
                     float padT = dist / Mathf.Max(1f, PadClearRadius);
                     g = Mathf.Lerp(0.34f, 0.40f, padT * padT);
                     g += Noise2(wx * 0.2f, wz * 0.2f) * 0.01f;
                 }
                 else
                 {
-                    // Low-frequency undulation only — high-freq grain looks ragged when baked
+                    // Лише низькочастотна хвилястість — high-freq grain виглядає рвано після bake
                     h += Noise2(wx * 0.0016f, wz * 0.0016f) * 2.8f;
                     h += Noise2(wx * 0.0048f + 11f, wz * 0.0048f - 7f) * 1.15f;
                     h += Noise2(wx * 0.012f, wz * 0.012f) * 0.35f;
@@ -244,7 +244,7 @@ public static class LunarTerrainMesh
                     grain += Noise2(wx * 0.045f + 4f, wz * 0.045f - 3f) * 0.008f;
                     g = 0.42f + grain;
 
-                    // Mare — slightly darker basalt plains
+                    // Моря — трохи темніші базальтові рівнини
                     float mare = Noise2(wx * 0.0009f + 2f, wz * 0.0009f - 1f);
                     mare = Mathf.SmoothStep(0.20f, 0.58f, mare * 0.5f + 0.5f);
                     g -= mare * 0.045f;
@@ -256,8 +256,8 @@ public static class LunarTerrainMesh
                     }
                 }
 
-                // Outside geometric disk: KEEP continuous gray (never hard black —
-                // black corners of the UV square caused ragged ring artifacts).
+                // Поза геометричним диском: ЗАЛИШИТИ суцільний сірий (ніколи жорсткий чорний —
+                // чорні кути UV-квадрата давали рвані артефакти кілець).
                 if (dist > terrainRadius)
                 {
                     float over = (dist - terrainRadius) / Mathf.Max(1f, terrainRadius * 0.15f);
@@ -279,7 +279,7 @@ public static class LunarTerrainMesh
         RasterizeCratersInto(hBuf, aBuf, craters, order, terrainRadius, texSize, half, metersPerTexel);
         yield return null;
 
-        // Light blur — enough to soften rims without multi-pass stalls
+        // Легке розмиття — достатньо пом’якшити краї без multi-pass зависань
         BlurBuffer(hBuf, texSize, 2);
         yield return null;
         BlurBuffer(aBuf, texSize, 2);
@@ -291,7 +291,7 @@ public static class LunarTerrainMesh
         albedoTex.filterMode = FilterMode.Trilinear;
         albedoTex.anisoLevel = 8;
 
-        // Flat normal map (mesh carries relief). Bump maps double-shade and look ragged.
+        // Плоска normal map (рельєф несе меш). Bump maps дають double-shade і рваний вигляд.
         var normalTex = new Texture2D(4, 4, TextureFormat.RGBA32, false, true);
         normalTex.name = "LunarNormal_Flat";
         normalTex.wrapMode = TextureWrapMode.Clamp;
@@ -312,12 +312,12 @@ public static class LunarTerrainMesh
                 int idx = y * texSize + x;
                 float g = Mathf.Clamp(aBuf[idx], 0.30f, 0.52f);
 
-                // Soft radial vignette near disk edge (not a hard cut)
+                // М’яка радіальна віньєтка біля краю диска (не жорсткий зріз)
                 float dist = Mathf.Sqrt(wx * wx + wz * wz);
                 float rim = Mathf.SmoothStep(terrainRadius * 0.92f, terrainRadius * 1.02f, dist);
                 g = Mathf.Lerp(g, 0.38f, rim * 0.18f);
 
-                // Presentable cool silver-gray
+                // Презентабельний холодний сріблясто-сірий
                 float v = Mathf.Lerp(0.40f, g, 0.88f);
                 albedoCols[idx] = new Color(
                     Mathf.Clamp01(v * 0.97f),
@@ -380,7 +380,7 @@ public static class LunarTerrainMesh
                     else
                         cH[idx] = SoftMax(cH[idx], p, sk * 0.8f);
 
-                    // Soft radial weight — no hard crater albedo edges
+                    // М’яка радіальна вага — без жорстких країв albedo кратерів
                     float infl = 1f - Mathf.Clamp01(d / outerR);
                     infl = Quintic01(infl);
                     float w = infl * blend;
@@ -397,7 +397,7 @@ public static class LunarTerrainMesh
             {
                 float cg = SmoothAlbedoCurve(Mathf.Clamp01(cA[i]));
                 cg = Mathf.Clamp(cg, 0.32f, 0.48f);
-                // Gentle mix — geometry shows the bowl, albedo only hints
+                // М’яке змішування — геометрія показує чашу, albedo лише натякає
                 float k = Mathf.Clamp01(cW[i] * 0.50f);
                 aBuf[i] = Mathf.Lerp(aBuf[i], cg, k);
             }
@@ -429,16 +429,16 @@ public static class LunarTerrainMesh
         }
     }
 
-    /// <summary>5×5 gaussian-ish blur for albedo — removes remaining rim stair-steps.</summary>
+    /// <summary>Розмиття albedo ~5×5 gaussian — прибирає залишкові «сходинки» на краях.</summary>
     static void BlurBufferWide(float[] buf, int n, int passes)
     {
         if (passes <= 0) return;
         var tmp = new float[buf.Length];
-        // binomial-ish weights for radius 2
+        // приблизно біноміальні ваги для radius 2
         float[] ker = { 1f, 4f, 6f, 4f, 1f };
         for (int p = 0; p < passes; p++)
         {
-            // horizontal
+            // горизонтальний
             for (int y = 0; y < n; y++)
             for (int x = 0; x < n; x++)
             {
@@ -452,7 +452,7 @@ public static class LunarTerrainMesh
                 }
                 tmp[y * n + x] = sum / w;
             }
-            // vertical
+            // вертикальний
             for (int y = 0; y < n; y++)
             for (int x = 0; x < n; x++)
             {
@@ -477,11 +477,11 @@ public static class LunarTerrainMesh
 
     static Crater[] BuildCraterField(System.Random rng, float terrainRadius)
     {
-        // Fewer, well-spaced round bowls — dense fields looked ragged on the mesh
+        // Менше, добре рознесених круглих чаш — щільні поля виглядали рвано на меші
         const float clear = PadClearRadius + 8f;
         var list = new List<Crater>(220);
 
-        // Ring of small fresh craters just outside the pad
+        // Кільце малих свіжих кратерів одразу за pad
         for (int i = 0; i < 18; i++)
         {
             float ang = i * (Mathf.PI * 2f / 18f) + 0.12f * (float)rng.NextDouble();
@@ -493,7 +493,7 @@ public static class LunarTerrainMesh
                 list.Add(Make(x, z, R, rng));
         }
 
-        // A handful of large landmark basins
+        // Кілька великих характерних басейнів
         float[] bigR = { 260f, 200f, 300f, 170f, 230f, 185f, 275f, 155f };
         for (int i = 0; i < bigR.Length; i++)
         {
@@ -506,19 +506,19 @@ public static class LunarTerrainMesh
                 list.Add(Make(x, z, R, rng));
         }
 
-        // Medium bowls
+        // Середні чаші
         for (int i = 0; i < 28; i++)
             TryAdd(list, rng, terrainRadius, clear, 45f, 120f, 50);
 
-        // Small bowls
+        // Малі чаші
         for (int i = 0; i < 55; i++)
             TryAdd(list, rng, terrainRadius, clear, 14f, 42f, 35);
 
-        // Tiny dots (still large enough for mesh resolution)
+        // Крихітні крапки (все ще достатні для роздільності меша)
         for (int i = 0; i < 40; i++)
             TryAdd(list, rng, terrainRadius, clear, 8f, 16f, 25);
 
-        // Sparse rim decoration near horizon
+        // Розріджений декор краю біля горизонту
         for (int i = 0; i < 30; i++)
         {
             float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
@@ -560,7 +560,7 @@ public static class LunarTerrainMesh
         if (d + R * 0.4f > terrainR * 0.97f) return false;
         if (d - infl * 0.75f < clear) return false;
 
-        // Keep centers apart so bowls don't tear each other
+        // Тримати центри на відстані, щоб чаші не рвали одна одну
         float minSep = R * 1.15f;
         for (int i = 0; i < list.Count; i++)
         {
@@ -568,7 +568,7 @@ public static class LunarTerrainMesh
             float dz = z - list[i].z;
             float sep = Mathf.Sqrt(dx * dx + dz * dz);
             float need = minSep + list[i].radius * 1.05f;
-            // Allow mild nesting of small into large floors, not rim-on-rim
+            // Дозволити м’яке вкладення малих у великі днища, не rim-on-rim
             if (list[i].radius > R * 2.2f && sep < list[i].radius * 0.55f)
                 continue;
             if (sep < need * 0.72f) return false;
@@ -578,7 +578,7 @@ public static class LunarTerrainMesh
 
     static Crater Make(float x, float z, float R, System.Random rng)
     {
-        // Depth ~ 12–22% of diameter for simple bowls; shallower for big basins
+        // Глибина ~12–22% діаметра для простих чаш; мілкіше для великих басейнів
         float dRatio = R > 140f
             ? (0.07f + (float)rng.NextDouble() * 0.05f)
             : (0.12f + (float)rng.NextDouble() * 0.08f);
@@ -599,7 +599,7 @@ public static class LunarTerrainMesh
             peakR = 0f
         };
 
-        // Soft central peak only on large basins
+        // М’який центральний пік лише на великих басейнах
         if (R > 160f && rng.NextDouble() < 0.65)
         {
             c.peakH = depth * (0.18f + (float)rng.NextDouble() * 0.18f);
@@ -612,11 +612,11 @@ public static class LunarTerrainMesh
     {
         float dist = Mathf.Sqrt(x * x + z * z);
 
-        // Deep pit under LZ so pad mesh never z-fights the terrain disc
+        // Глибока яма під LZ, щоб меш pad не z-fight з диском рельєфу
         if (dist <= PadClearRadius)
         {
             float t = dist / Mathf.Max(1f, PadClearRadius);
-            // Floor ~-1.6 m at center, rises to ~0 at clear edge
+            // Днище ~−1.6 м у центрі, підйом до ~0 на clear edge
             return Mathf.Lerp(-1.6f, -0.15f, t * t) + Noise2(x * 0.2f, z * 0.2f) * 0.02f;
         }
 
@@ -652,8 +652,8 @@ public static class LunarTerrainMesh
     }
 
     /// <summary>
-    /// Smooth circular bowl: floor → wall → rim crest → ejecta blanket.
-    /// Single C2 path, no terraces/ellipse (those looked ragged).
+    /// Гладка кругла чаша: днище → стіна → гребінь краю → покривало ejecta.
+    /// Єдиний C2-шлях, без терас/еліпсів (вони виглядали рвано).
     /// </summary>
     static float CraterProfile(float d, Crater c, out float shade)
     {
@@ -662,7 +662,7 @@ public static class LunarTerrainMesh
         float floorT = Mathf.Clamp(c.floorFrac, 0.22f, 0.48f);
         shade = 0.42f;
 
-        // Central peak (optional, large basins)
+        // Центральний пік (опційно, великі басейни)
         float peak = 0f;
         if (c.peakH > 0.05f)
         {
@@ -673,7 +673,7 @@ public static class LunarTerrainMesh
         if (t <= floorT)
         {
             float ft = t / Mathf.Max(1e-4f, floorT);
-            // Almost flat floor with tiny rise toward wall
+            // Майже плоске днище з ледь помітним підйомом до стіни
             float h = -c.depth + Quintic01(ft) * 0.04f * c.depth + peak;
             shade = Mathf.Lerp(0.34f, 0.38f, ft);
             return h;
@@ -683,10 +683,10 @@ public static class LunarTerrainMesh
         {
             float u = (t - floorT) / Mathf.Max(0.12f, 1f - floorT);
             u = Mathf.Clamp01(u);
-            float wall = Quintic01(u); // C2 floor→rim
+            float wall = Quintic01(u); // C2 днище→край
             float h = Mathf.Lerp(-c.depth, c.rimH, wall) + peak * (1f - wall);
 
-            // Soft gaussian crest centered at rim (t≈1), no sharp lip
+            // М’який gaussian-гребінь у центрі краю (t≈1), без гострої кромки
             float crest = Mathf.Exp(-((t - 1f) * (t - 1f)) / (2f * 0.07f * 0.07f));
             h += c.rimH * 0.12f * crest;
 
@@ -695,12 +695,12 @@ public static class LunarTerrainMesh
             return h;
         }
 
-        // Ejecta: smooth fall from rim to zero
+        // Ejecta: плавний спад від краю до нуля
         float te = (t - 1f) / Mathf.Max(0.15f, c.ejecta - 1f);
         if (te >= 1f) { shade = 0.42f; return 0f; }
         te = Mathf.Clamp01(te);
         float fall = 1f - Quintic01(te);
-        // Start ejecta from rim height continuously
+        // Починати ejecta з висоти краю неперервно
         shade = Mathf.Lerp(0.45f, 0.42f, te);
         return c.rimH * fall * 0.65f;
     }
@@ -713,7 +713,7 @@ public static class LunarTerrainMesh
 
     static float SoftMin(float a, float b, float k)
     {
-        // Polynomial smooth minimum — k in same units as heights
+        // Поліноміальний smooth minimum — k у тих самих одиницях, що висоти
         k = Mathf.Max(0.5f, k);
         float h = Mathf.Clamp01(0.5f + 0.5f * (b - a) / k);
         return Mathf.Lerp(b, a, h) - k * h * (1f - h);
@@ -728,7 +728,7 @@ public static class LunarTerrainMesh
 
     static float SmoothAlbedoCurve(float s)
     {
-        // Soft presentable band — floors a touch darker, rims lighter dust
+        // М’яка презентабельна смуга — днища трохи темніші, краї — світліший пил
         s = Mathf.Clamp01(s);
         return Mathf.Lerp(0.34f, 0.46f, Quintic01(s));
     }
@@ -767,7 +767,7 @@ public static class LunarTerrainMesh
         int y0 = Mathf.FloorToInt(y);
         float fx = x - x0;
         float fy = y - y0;
-        // quintic fade — fewer grid artifacts than cubic
+        // quintic fade — менше grid-артефактів, ніж cubic
         fx = fx * fx * fx * (fx * (fx * 6f - 15f) + 10f);
         fy = fy * fy * fy * (fy * (fy * 6f - 15f) + 10f);
         float v00 = Hash(x0, y0);
@@ -814,7 +814,7 @@ public static class LunarTerrainMesh
         var normalMap = box.normal;
 
         var mat = new Material(baseMat != null ? baseMat.shader : VisualMaterials.LitShader);
-        // Neutral multiply — brightness lives in the baked albedo
+        // Нейтральне множення — яскравість у baked albedo
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
         if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
         if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
@@ -829,7 +829,7 @@ public static class LunarTerrainMesh
         if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", albedo);
         mat.mainTexture = albedo;
 
-        // No bump map — mesh normals alone. Bump + low-res height = ragged shading.
+        // Без bump map — лише normals меша. Bump + low-res height = рване затінення.
         if (mat.HasProperty("_BumpMap"))
         {
             mat.SetTexture("_BumpMap", null);
@@ -837,7 +837,7 @@ public static class LunarTerrainMesh
             if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0f);
         }
         if (mat.HasProperty("_DetailNormalMapScale")) mat.SetFloat("_DetailNormalMapScale", 0f);
-        _ = normalMap; // kept in BuildOutput for API compat / future use
+        _ = normalMap; // збережено в BuildOutput для API-сумісності / майбутнього використання
 
         if (mat.HasProperty("_SpecularHighlights")) mat.SetFloat("_SpecularHighlights", 0f);
         if (mat.HasProperty("_EnvironmentReflections")) mat.SetFloat("_EnvironmentReflections", 0f);

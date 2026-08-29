@@ -67,11 +67,11 @@ public class CameraFollow : MonoBehaviour
     bool focusInited;
     bool orbitDragging;
     Vector3 lastMouse;
-    /// <summary>After manual orbit, don't auto-return angle until cleared (F/R).</summary>
+    /// <summary>Після ручного orbit не повертати кут автоматично, доки не скинуто (F/R).</summary>
     public bool userOrbitLock;
     Camera cam;
 
-    // Compat fields used elsewhere / inspector
+    // Поля сумісності, що використовуються деінде / в inspector
     public float manualYaw { get => yaw; set => yaw = value; }
     public float manualPitch { get => pitch; set => pitch = value; }
     public float manualDistance { get => distance; set => distance = value; }
@@ -129,7 +129,7 @@ public class CameraFollow : MonoBehaviour
         }
 
         bool hard = orbitDragging || Input.anyKey; // під час керування — без лагу
-        // anyKey too broad - only when orbit keys
+        // anyKey занадто широко — лише коли orbit-клавіші
         hard = orbitDragging || IsOrbitKeyHeld();
 
         if (mode == ViewMode.Overview)
@@ -143,7 +143,7 @@ public class CameraFollow : MonoBehaviour
             cam.fieldOfView = hard ? wantFov : Mathf.Lerp(cam.fieldOfView, wantFov, 1f - Mathf.Exp(-6f * Time.deltaTime));
         }
 
-        // Keep shadow cascades dense on the focus so wheel-zoom does not blur silhouettes
+        // Тримати shadow cascades щільними на focus, щоб wheel-zoom не милив силуети
         UpdateShadowFit();
     }
 
@@ -154,7 +154,7 @@ public class CameraFollow : MonoBehaviour
         float depth = Vector3.Distance(transform.position, smoothFocus);
         if (mode == ViewMode.Overview)
             depth = Mathf.Max(depth, distance > 1f ? distance : 400f);
-        // Skip tiny changes — Quality/URP writes every frame are unnecessary
+        // Пропускати дрібні зміни — записи Quality/URP щокадру зайві
         if (Mathf.Abs(depth - _lastShadowFitDepth) < 2.5f && _lastShadowFitDepth > 0f)
             return;
         _lastShadowFitDepth = depth;
@@ -176,8 +176,8 @@ public class CameraFollow : MonoBehaviour
     {
         bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
-        // Mode keys (F/T/C/R) are owned by MissionControlUI to avoid double-handling
-        // that could trap the camera in Overview.
+        // Клавіші режимів (F/T/C/R) належать MissionControlUI, щоб уникнути double-handling
+        // що могло б замкнути камеру в Overview.
 
         // Zoom: працює завжди в центрі екрана; біля minDist — від'їзд працює
         float scroll = Input.mouseScrollDelta.y;
@@ -191,7 +191,7 @@ public class CameraFollow : MonoBehaviour
             return;
         }
 
-        // LMB / RMB orbit
+        // ЛКМ / ПКМ orbit
         if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
         {
             orbitDragging = true;
@@ -230,7 +230,7 @@ public class CameraFollow : MonoBehaviour
                 ApplyZoom(-zD * Time.deltaTime * 12f);
         }
 
-        // Follow auto-distance when not user-locked
+        // Follow auto-distance, коли не зафіксовано користувачем
         if (mode == ViewMode.Follow && !userOrbitLock && !orbitDragging)
         {
             float h = 0f;
@@ -416,7 +416,7 @@ public class CameraFollow : MonoBehaviour
             SnapToFullTrajectoryView();
         else
         {
-            // Manual — keep current orbit angles
+            // Manual — зберегти поточні orbit-кути
             userOrbitLock = true;
             mode = ViewMode.Manual;
             SnapNow();

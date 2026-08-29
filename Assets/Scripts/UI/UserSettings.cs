@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Local PlayerPrefs for HUD / experiment setup. Theme & language have their own keys.
+/// Локальні PlayerPrefs для HUD / налаштування експерименту. Тема й мова мають власні ключі.
 /// </summary>
 public static class UserSettings
 {
@@ -19,14 +19,14 @@ public static class UserSettings
         set => PlayerPrefs.SetInt(P + "Tests", Mathf.Clamp(value, 5, 40));
     }
 
-    /// <summary>Monte-Carlo burst multiplier (Compare).</summary>
+    /// <summary>Множник burst Monte-Carlo (Порівняти).</summary>
     public static float TimeScale
     {
         get => PlayerPrefs.GetFloat(P + "TimeScale", 12f);
         set => PlayerPrefs.SetFloat(P + "TimeScale", Mathf.Clamp(value, 1f, 40f));
     }
 
-    /// <summary>Live flight Time.timeScale (single Start).</summary>
+    /// <summary>Time.timeScale живого польоту (одиночний Start).</summary>
     public static float LiveTimeScale
     {
         get => PlayerPrefs.GetFloat(P + "LiveTS", 1f);
@@ -39,35 +39,35 @@ public static class UserSettings
         set => PlayerPrefs.SetInt(P + "Seed", value);
     }
 
-    /// <summary>Initial altitude h₀, m (single flight + Monte-Carlo).</summary>
+    /// <summary>Початкова висота h₀, м (одиночний політ + Monte-Carlo).</summary>
     public static float StartHeight
     {
         get => PlayerPrefs.GetFloat(P + "H0", 1800f);
         set => PlayerPrefs.SetFloat(P + "H0", Mathf.Clamp(value, 800f, 3000f));
     }
 
-    /// <summary>Initial descent speed magnitude |Vy|, m/s (applied as −Vy).</summary>
+    /// <summary>Модуль початкової швидкості зниження |Vy|, м/с (як −Vy).</summary>
     public static float StartDescentSpeed
     {
         get => PlayerPrefs.GetFloat(P + "Vy0", 72f);
         set => PlayerPrefs.SetFloat(P + "Vy0", Mathf.Clamp(value, 30f, 120f));
     }
 
-    /// <summary>Initial tilt about Z, degrees.</summary>
+    /// <summary>Початковий нахил навколо Z, градуси.</summary>
     public static float StartTilt
     {
         get => PlayerPrefs.GetFloat(P + "Tilt0", 3.5f);
         set => PlayerPrefs.SetFloat(P + "Tilt0", Mathf.Clamp(value, 0f, 12f));
     }
 
-    /// <summary>Monte-Carlo mass noise ±%.</summary>
+    /// <summary>Шум маси Monte-Carlo ±%.</summary>
     public static float MassNoise
     {
         get => PlayerPrefs.GetFloat(P + "MassN", 8f);
         set => PlayerPrefs.SetFloat(P + "MassN", Mathf.Clamp(value, 0f, 15f));
     }
 
-    /// <summary>Monte-Carlo / single-run angle noise ±deg.</summary>
+    /// <summary>Шум кута Monte-Carlo / одиночного запуску ±град.</summary>
     public static float AngleNoise
     {
         get => PlayerPrefs.GetFloat(P + "AngN", 8f);
@@ -82,15 +82,15 @@ public static class UserSettings
 
     public static bool Train
     {
-        // Default off: stable presentation; enable for ES research demos
+        // За замовчуванням вимкнено: стабільна презентація; увімкнути для ES research-демо
         get => PlayerPrefs.GetInt(P + "Train", 0) != 0;
         set => PlayerPrefs.SetInt(P + "Train", value ? 1 : 0);
     }
 
-    /// <summary>Hybrid MLP residual on (false = Fuzzy-only; default off).</summary>
+    /// <summary>Hybrid MLP residual увімк (false = лише Fuzzy; за замовч. вимк).</summary>
     public static bool HybridResidual
     {
-        // Key v2: old HybRes defaulted to 1 and would keep residual stuck on
+        // Ключ v2: старий HybRes за замовч. був 1 і лишав residual завжди увімкненим
         get => PlayerPrefs.GetInt(P + "HybRes2", 0) != 0;
         set => PlayerPrefs.SetInt(P + "HybRes2", value ? 1 : 0);
     }

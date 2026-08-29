@@ -70,7 +70,7 @@ public class FuzzyLandingController : MonoBehaviour, ILandingController
             for (int j = 0; j < 5; j++)
             {
                 if (muV[j] <= 0f) continue;
-                float w = muH[i] * muV[j]; // product t-norm
+                float w = muH[i] * muV[j]; // t-норма добутку (product)
                 sumW += w;
                 sumY += w * ThrustTable[i, j];
             }
@@ -97,7 +97,7 @@ public class FuzzyLandingController : MonoBehaviour, ILandingController
     public Vector3 CalculateGimbal(float pitchError, float yawError)
         => CalculateGimbal(pitchError, yawError, 0f, 0f);
 
-    public void ResetSession() { /* stateless Sugeno */ }
+    public void ResetSession() { /* Sugeno без стану */ }
 
     public ControlCommand Evaluate(in ControlContext ctx)
     {

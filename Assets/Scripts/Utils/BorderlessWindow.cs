@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Borderless / frameless player window for custom HUD chrome (− □ ×).
-/// Works in standalone; Editor gets safe fallbacks (notify + resolution change).
+/// Безрамкове вікно player для кастомного HUD chrome (− □ ×).
+/// Працює в standalone; у Editor — безпечні fallback (notify + зміна resolution).
 /// </summary>
 public static class BorderlessWindow
 {
@@ -82,7 +82,7 @@ public static class BorderlessWindow
         Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
         Screen.fullScreen = true;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-        // Next frame: strip any residual chrome
+        // Наступний кадр: прибрати залишковий chrome
         ApplyBorderlessChrome();
 #endif
     }
@@ -97,7 +97,7 @@ public static class BorderlessWindow
         Screen.fullScreenMode = FullScreenMode.Windowed;
         Screen.SetResolution(w, h, FullScreenMode.Windowed);
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-        // Delay style strip until window exists
+        // Відкласти style strip, доки не існує вікно
         ApplyBorderlessChrome();
 #endif
     }
@@ -124,7 +124,7 @@ public static class BorderlessWindow
         }
         catch { /* ignore */ }
 #elif UNITY_EDITOR
-        // Editor: no OS minimize of Game view — drop to windowed as feedback
+        // Editor: без OS minimize Game view — перейти в windowed як feedback
         GoWindowed(1280, 720);
 #else
         GoWindowed(1280, 720);

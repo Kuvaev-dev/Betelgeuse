@@ -11,10 +11,10 @@ public readonly struct ControlCommand
     /// <summary>Кут TVC (град), зазвичай X/Z.</summary>
     public readonly Vector3 GimbalEuler;
 
-    /// <summary>Масштаб lateral guidance (слабкий у PID … сильний у Hybrid).</summary>
+    /// <summary>Масштаб бічного наведення (слабкий у PID … сильний у Hybrid).</summary>
     public readonly float LateralScale;
 
-    /// <summary>Blend gimbal стратегії з safety PD upright [0..1].</summary>
+    /// <summary>Змішування gimbal стратегії з захисним PD upright [0..1].</summary>
     public readonly float GimbalBlend;
 
     public ControlCommand(float thrust, Vector3 gimbalEuler, float lateralScale = 1f, float gimbalBlend = 0.5f)

@@ -1,13 +1,13 @@
 /// <summary>
-/// Fixed protocol for diploma defense Monte-Carlo.
-/// Apply via <see cref="ApplyTo"/> before a Comparison pack so results are comparable.
+/// Фіксований протокол Monte-Carlo для захисту диплома.
+/// Застосовувати через <see cref="ApplyTo"/> перед Comparison-пакетом, щоб результати були порівнянні.
 /// </summary>
 public static class DefenseBaseline
 {
     public const int ProtocolVersion = 4;
     public const int Seed = 42;
     public const int TestsPerAlgorithm = 15;
-    // v4: milder wind/jitter so lateral GNC differentiates A–D instead of universal miss
+    // v4: м’якший wind/jitter, щоб lateral GNC диференціював A–D замість універсального промаху
     public const float WindStrength = 5.5f;
     public const float MassVariationPercent = 6f;
     public const float AngleVariationDegrees = 5f;
@@ -20,13 +20,13 @@ public static class DefenseBaseline
     public const float StartTiltDeg = 2f;
 
     /// <summary>
-    /// Expected qualitative ranking under protocol (success %):
-    /// Hybrid ≥ Fuzzy and Hybrid ≥ PID (paired seeds, same IC/disturbances).
+    /// Очікуване якісне ранжування за протоколом (success %):
+    /// Hybrid ≥ Fuzzy і Hybrid ≥ PID (paired seeds, однакові ПУ/збурення).
     /// </summary>
     public const string RankingNote =
         "Expected: Hybrid ≥ Fuzzy and Hybrid ≥ PID under DefenseBaseline protocol (seed 42).";
 
-    /// <summary>Push protocol constants into a live SimulationManager.</summary>
+    /// <summary>Записати константи протоколу в живий SimulationManager.</summary>
     public static void ApplyTo(SimulationManager sim)
     {
         if (sim == null) return;

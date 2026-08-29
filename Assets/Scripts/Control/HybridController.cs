@@ -12,7 +12,7 @@ public class HybridController : MonoBehaviour, ILandingController
 
     [Header("Hybrid Neuro-Fuzzy")]
     public bool isActive = true;
-    /// <summary>Ablation: false = pure Sugeno (no MLP residual) — thesis leave-one-out.</summary>
+    /// <summary>Ablation: false = чистий Sugeno (без MLP residual) — leave-one-out для тези.</summary>
     public bool useNeuralResidual = false;
     [Range(0f, 0.5f)] public float neuralThrustBlend = 0.25f;
     [Range(0f, 0.45f)] public float neuralGimbalBlend = 0.2f;
@@ -84,7 +84,7 @@ public class HybridController : MonoBehaviour, ILandingController
 
     public void ResetSession()
     {
-        // Neural ES state is episode-level; hybrid itself is stateless per tick
+        // Стан Neural ES — на рівні епізоду; сам hybrid без стану на тік
     }
 
     public ControlCommand Evaluate(in ControlContext ctx)
@@ -93,7 +93,7 @@ public class HybridController : MonoBehaviour, ILandingController
             ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
             ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg, ctx.HorizSpeed,
             out float thrust, out Vector3 gimbal);
-        // Strongest lateral (theme Neuro-Fuzzy) — expected MC leader
+        // Найсильніше бічне наведення (тема Neuro-Fuzzy) — очікуваний лідер MC
         return new ControlCommand(thrust, gimbal, lateralScale: 1.55f, gimbalBlend: 0.35f);
     }
 }

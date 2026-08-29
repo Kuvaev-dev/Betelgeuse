@@ -23,7 +23,7 @@ public static class ResearchExporter
         }
     }
 
-    /// <summary>Create empty run folder under SimulationLogs (unique stamp).</summary>
+    /// <summary>Створити порожню теку запуску в SimulationLogs (унікальна мітка).</summary>
     public static string CreateRunDirectory(string kind, string label)
     {
         string stamp = Stamp();
@@ -71,7 +71,7 @@ public static class ResearchExporter
         public float startTiltDeg = 3.5f;
         public List<AlgoStats> algorithms = new();
 
-        /// <summary>True if any disturbance channel is active (for report wording).</summary>
+        /// <summary>True, якщо активний будь-який канал збурень (для формулювань звіту).</summary>
         public bool HasDisturbances =>
             enableNoise || windStrength > 0.05f || positionJitterMeters > 0.1f;
     }
@@ -119,7 +119,7 @@ public static class ResearchExporter
         string csvPath = Path.Combine(dir, "03_timeseries.csv");
         string calcMd = Path.Combine(dir, "04_analysis.md");
 
-        // Timeseries
+        // Часовий ряд
         if (data.trajectoryRows != null && data.trajectoryRows.Count > 0)
             File.WriteAllLines(csvPath, data.trajectoryRows, Encoding.UTF8);
         else if (!string.IsNullOrEmpty(data.trajectoryCsvPath) && File.Exists(data.trajectoryCsvPath))
@@ -223,7 +223,7 @@ public static class ResearchExporter
         s.minTouchdownVelocity = minV;
         s.maxTouchdownVelocity = maxV;
 
-        // Sample stdev of SuccessScore (n>1); 0 when single trial
+        // Вибіркова stdev SuccessScore (n>1); 0 при одиночному trial
         if (n > 1)
         {
             float mean = s.avgSuccessScore;
@@ -469,7 +469,7 @@ public static class ResearchExporter
         return sb.ToString();
     }
 
-    /// <summary>SVG line chart from samples (xSel, ySel).</summary>
+    /// <summary>SVG line chart з samples (xSel, ySel).</summary>
     public static string BuildSvgSeries(
         List<DataLogger.Sample> samples,
         System.Func<DataLogger.Sample, float> xSel,
@@ -530,13 +530,13 @@ public static class ResearchExporter
             sb.Append(X(xSel(s)).ToString("0.##", Inv)).Append(',')
               .Append(Y(ySel(s)).ToString("0.##", Inv)).Append(' ');
         }
-        // last point
+        // остання точка
         var last = samples[samples.Count - 1];
         sb.Append(X(xSel(last)).ToString("0.##", Inv)).Append(',')
           .Append(Y(ySel(last)).ToString("0.##", Inv));
         sb.AppendLine("\"/>");
 
-        // start/end markers
+        // маркери start/end
         var first = samples[0];
         sb.AppendLine($"<circle cx=\"{X(xSel(first)):0.##}\" cy=\"{Y(ySel(first)):0.##}\" r=\"4\" fill=\"#888\"/>");
         sb.AppendLine($"<circle cx=\"{X(xSel(last)):0.##}\" cy=\"{Y(ySel(last)):0.##}\" r=\"4\" fill=\"#222\"/>");

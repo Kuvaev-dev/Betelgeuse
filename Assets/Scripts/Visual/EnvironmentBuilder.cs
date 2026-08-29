@@ -11,7 +11,7 @@ public static class EnvironmentBuilder
         LunarTerrainMesh.Drain(BuildRoutine());
     }
 
-    /// <summary>Stepped build — yields so splash spinner keeps spinning.</summary>
+    /// <summary>Покрокова збірка — yield, щоб splash-спінер крутився.</summary>
     public static IEnumerator BuildRoutine()
     {
         SetupLighting(out Light sun);
@@ -46,11 +46,11 @@ public static class EnvironmentBuilder
             smooth: 0.028f);
 
         float R = LunarTerrainMesh.TerrainRadius;
-        // Balanced mesh: smooth enough rims, fast cold start
+        // Збалансований меш: достатньо гладкі краї, швидкий cold start
         int res = QualitySettings.GetQualityLevel() <= 1 ? 160 : 224;
         yield return LunarTerrainMesh.CreateRoutine(surface.transform, regolith, null, res, R);
 
-        // Horizon ring uses the same NASA LROC albedo (darker, no normal — cheap far field)
+        // Horizon ring використовує те саме albedo NASA LROC (темніше, без normal — дешеве far field)
         var farMat = MakeHorizonMaterial();
         var far = SmoothMesh.MakeCylinder("HorizonDisk", surface.transform,
             new Vector3(0f, -2.8f, 0f), R * 2f, 2.2f, farMat);
@@ -85,8 +85,8 @@ public static class EnvironmentBuilder
     static float SampleApproxHeight(float x, float z) => SampleTerrainSurfaceY(x, z);
 
     /// <summary>
-    /// Physics ground / deck top. ONE pad slab only — no stacked coplanar lids
-    /// (those caused camera shimmer). Terrain under pad is sunk in LunarTerrainMesh.
+    /// Фізична земля / верх палуби. ЛИШЕ одна плита pad — без накладених копланарних кришок
+    /// (вони давали мерехтіння камери). Рельєф під pad занурено в LunarTerrainMesh.
     /// </summary>
     public const float PadSurfaceY = 0.05f;
 
@@ -98,7 +98,7 @@ public static class EnvironmentBuilder
         var pad = new GameObject("LandingPad");
         pad.transform.SetParent(parent, false);
 
-        // One deck slab + low collar + 4 slim beacons. No stacked coplanar lids.
+        // Одна плита палуби + низький комір + 4 тонкі маяки. Без накладених копланарних кришок.
         var deckMat = MakePadDeckMaterial("PadDeckSkin");
         var sideMat = VisualMaterials.Lit(new Color(0.26f, 0.27f, 0.29f), 0.02f, 0.05f);
         var collarMat = MakePadCollarMaterial("PadCollarSkin");
@@ -113,7 +113,7 @@ public static class EnvironmentBuilder
             new Vector3(0f, centerY, 0f), 90f, half, deckMat);
         SetShadow(deck, true, true);
 
-        // Collar sits fully below deck top; wider footprint blends into pit wall
+        // Комір повністю нижче верху палуби; ширша пляма зливається зі стіною ями
         const float collarTop = top - 0.42f;
         const float collarBot = -1.1f;
         float cHalf = (collarTop - collarBot) * 0.5f;
@@ -122,12 +122,12 @@ public static class EnvironmentBuilder
             new Vector3(0f, cY, 0f), 112f, cHalf, collarMat);
         SetShadow(collar, true, true);
 
-        // Thin steel lip under deck edge (side only feel — lower than top)
+        // Тонка сталева кромка під краєм палуби (відчуття боку — нижче за top)
         var lip = SmoothMesh.MakeCylinder("DeckLip", pad.transform,
             new Vector3(0f, top - 0.12f, 0f), 91.2f, 0.08f, sideMat);
         SetShadow(lip, true, true);
 
-        // Four corner beacons — same kit as approach markers
+        // Чотири кутові маяки — той самий набір, що підхідні маркери
         for (int i = 0; i < 4; i++)
         {
             float a = (i * 90f + 45f) * Mathf.Deg2Rad;
@@ -136,7 +136,7 @@ public static class EnvironmentBuilder
         }
     }
 
-    /// <summary>Shared beacon kit: base + pole + soft white lamp (pad & approach identical).</summary>
+    /// <summary>Спільний набір маяка: база + щогла + м’яка біла лампа (pad і approach ідентичні).</summary>
     static void GetBeaconMaterials(out Material baseMat, out Material poleMat, out Material lampMat)
     {
         baseMat = VisualMaterials.Lit(new Color(0.3f, 0.31f, 0.33f), 0.06f, 0.1f);
@@ -145,12 +145,12 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>
-    /// One standard beacon. <paramref name="groundY"/> = surface under the base (pad top or terrain).
+    /// Один стандартний маяк. <paramref name="groundY"/> = поверхня під основою (верх pad або рельєф).
     /// </summary>
     static void PlaceBeacon(Transform parent, string id, Vector3 xz, float groundY,
         Material baseMat, Material poleMat, Material lampMat)
     {
-        // Geometry matches pad corner beacons exactly
+        // Геометрія точно збігається з кутовими маяками pad
         var bBase = SmoothMesh.MakeCylinder($"{id}_Base", parent,
             xz + Vector3.up * (groundY + 0.15f), 0.55f, 0.14f, baseMat);
         var bPole = SmoothMesh.MakeCylinder($"{id}_Pole", parent,
@@ -173,14 +173,14 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>
-    /// Dark-medium gray matte LZ (must read gray under harsh lunar sun ~2.8).
-    /// Line art: distance rings, cross, diagonals, rim ticks, bullseye.
-    /// Deck Ø ≈ 92 m → r=1 ≈ 46 m.
+    /// Матовий темно-середній сірий LZ (має читатись сірим під жорстким місячним сонцем ~2.8).
+    /// Line art: кільця дальності, хрест, діагоналі, риски краю, «яблучко».
+    /// Палуба Ø ≈ 92 м → r=1 ≈ 46 м.
     /// </summary>
     static Material MakePadDeckMaterial(string name)
     {
         const int n = 768;
-        // linear:false = sRGB albedo (correct for color textures in URP)
+        // linear:false = sRGB albedo (коректно для color textures в URP)
         var tex = new Texture2D(n, n, TextureFormat.RGBA32, true, false);
         tex.name = name;
         tex.wrapMode = TextureWrapMode.Clamp;
@@ -188,7 +188,7 @@ public static class EnvironmentBuilder
         tex.anisoLevel = 8;
         var cols = new Color[n * n];
 
-        // Slightly thicker lines so they survive mipmaps + distance
+        // Трохи товстіші лінії, щоб виживали mipmaps + відстань
         const float wRing = 0.010f;
         const float wCross = 0.0075f;
 
@@ -207,7 +207,7 @@ public static class EnvironmentBuilder
                 continue;
             }
 
-            // ── Base deck: darker even gray under harsh lunar sun ──
+            // ── Базова палуба: рівномірніший темніший сірий під жорстким місячним сонцем ──
             float g0 = 0.14f
                      + PadHash(u * 9f, v * 9f) * 0.015f
                      + PadHash(u * 24f, v * 24f) * 0.008f;
@@ -221,10 +221,10 @@ public static class EnvironmentBuilder
             g0 -= Mathf.SmoothStep(0.88f, 1f, r) * 0.03f;
             g0 = Mathf.Clamp(g0, 0.08f, 0.22f);
 
-            // Cool dark gray
+            // Холодний темно-сірий
             float rr = g0 * 0.97f, gg = g0 * 0.99f, bb = g0 * 1.03f;
 
-            // ── Rich LZ line art ──
+            // ── Насичений line art LZ ──
             float line = 0f;
             float[] rings = { 0.97f, 0.88f, 0.78f, 0.66f, 0.54f, 0.42f, 0.30f, 0.20f, 0.12f, 0.06f };
             for (int ri = 0; ri < rings.Length; ri++)
@@ -233,13 +233,13 @@ public static class EnvironmentBuilder
                 line = Mathf.Max(line, RingLine(r, rings[ri], w));
             }
 
-            // Primary + secondary cross
+            // Основний + вторинний хрест
             if (r < 0.96f)
             {
                 line = Mathf.Max(line, AxisLine(u, wCross * 1.15f));
                 line = Mathf.Max(line, AxisLine(v, wCross * 1.15f));
             }
-            // Full diagonals (not only stubs)
+            // Повні діагоналі (не лише заглушки)
             if (r < 0.9f)
             {
                 float d1 = Mathf.Abs(u - v) * 0.7071f;
@@ -248,7 +248,7 @@ public static class EnvironmentBuilder
                 line = Mathf.Max(line, 1f - Mathf.SmoothStep(wCross * 0.3f, wCross * 0.95f, d2));
             }
 
-            // 16 azimuth ticks on outer + mid rings
+            // 16 азимутальних рисок на зовнішньому + середньому кільцях
             float angDeg = ang * Mathf.Rad2Deg;
             for (int t = 0; t < 16; t++)
             {
@@ -257,7 +257,7 @@ public static class EnvironmentBuilder
                 bool major = (t % 2) == 0;
                 bool cardinal = (t % 4) == 0;
                 float angW = cardinal ? 1.7f : (major ? 1.2f : 0.85f);
-                // Outer ticks
+                // Зовнішні риски
                 float r0 = cardinal ? 0.84f : (major ? 0.88f : 0.91f);
                 if (da < angW && r > r0 && r < 0.985f)
                 {
@@ -266,12 +266,12 @@ public static class EnvironmentBuilder
                                 * (1f - Mathf.SmoothStep(0.96f, 0.985f, r));
                     line = Mathf.Max(line, aFade * rFade);
                 }
-                // Mid-ring ticks (TDZ)
+                // Риски середнього кільця (TDZ)
                 if (cardinal && da < 1.4f && r > 0.48f && r < 0.58f)
                     line = Mathf.Max(line, (1f - da / 1.4f) * 0.9f);
             }
 
-            // Inner chevrons at 45° on TDZ (short arcs)
+            // Внутрішні шеврони під 45° на TDZ (короткі дуги)
             for (int c = 0; c < 4; c++)
             {
                 float cAng = -135f + c * 90f;
@@ -284,7 +284,7 @@ public static class EnvironmentBuilder
                 }
             }
 
-            // Soft radial hatch near center (same tone family, no filled blot)
+            // М’яка радіальна штриховка біля центру (та сама родина тонів, без залитих плям)
             if (r > 0.08f && r < 0.22f)
             {
                 float spokeH = Mathf.Abs(a01 * 16f - Mathf.Round(a01 * 16f));
@@ -294,7 +294,7 @@ public static class EnvironmentBuilder
 
             if (line > 0.02f)
             {
-                // Medium-light paint (readable on darker deck)
+                // Середньо-світла фарба (читабельна на темнішій палубі)
                 rr = Mathf.Lerp(rr, 0.72f, line);
                 gg = Mathf.Lerp(gg, 0.74f, line);
                 bb = Mathf.Lerp(bb, 0.78f, line);
@@ -308,7 +308,7 @@ public static class EnvironmentBuilder
 
         var mat = new Material(VisualMaterials.LitShader);
         mat.name = name;
-        // Slight gray multiply so deck stays dark even if sun is harsh
+        // Легке сіре множення, щоб палуба лишалась темною навіть за жорсткого сонця
         var tint = new Color(0.75f, 0.76f, 0.78f, 1f);
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tint);
         if (mat.HasProperty("_Color")) mat.SetColor("_Color", tint);
@@ -373,8 +373,8 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>
-    /// Approach cues only — no paved strip (it sank into terrain and broke the lunar look).
-    /// Short posts sit on terrain with a safety lift; palette matches regolith + pad gray.
+    /// Лише підхідні маркери — без мощеної смуги (тонула в рельєфі й псувала місячний вигляд).
+    /// Короткі стійки на рельєфі з safety lift; палітра як реголіт + сірий pad.
     /// </summary>
     static void BuildApproachLights(Transform parent)
     {
@@ -386,7 +386,7 @@ public static class EnvironmentBuilder
         var root = new GameObject("ApproachMarkers");
         root.transform.SetParent(parent, false);
 
-        // Same materials + geometry as pad corner beacons
+        // Ті самі матеріали + геометрія, що кутові маяки pad
         GetBeaconMaterials(out var baseMat, out var poleMat, out var lampMat);
 
         const float xOff = 22f;
@@ -396,7 +396,7 @@ public static class EnvironmentBuilder
             foreach (float x in new[] { -xOff, xOff })
             {
                 float ground = SampleTerrainSurfaceY(x, z);
-                // Small lift so base never clips terrain undulation
+                // Невеликий lift, щоб база ніколи не кліпала хвилястість рельєфу
                 float y = ground + 0.25f;
                 PlaceBeacon(root.transform, $"AppBeacon_{i}_{x}",
                     new Vector3(x, 0f, z), y, baseMat, poleMat, lampMat);
@@ -405,8 +405,8 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>
-    /// Same height model as LunarTerrainMesh.SampleHeight (no craters) so props sit on mesh.
-    /// PadHash ≡ terrain Noise2 (range −1…1).
+    /// Та сама модель висоти, що LunarTerrainMesh.SampleHeight (без кратерів), щоб props сідали на меш.
+    /// PadHash ≡ terrain Noise2 (діапазон −1…1).
     /// </summary>
     static float SampleTerrainSurfaceY(float x, float z)
     {
@@ -432,7 +432,7 @@ public static class EnvironmentBuilder
 
     static Material MakePadCollarMaterial(string name)
     {
-        // Darker gray ring under deck — matches pit wall / regolith
+        // Темніше сіре кільце під палубою — узгоджено зі стіною ями / реголітом
         var mat = VisualMaterials.Lit(new Color(0.16f, 0.165f, 0.18f), 0.02f, 0.04f);
         mat.name = name;
         return mat;
@@ -487,7 +487,7 @@ public static class EnvironmentBuilder
 
     static Material MakeHorizonMaterial()
     {
-        // Slightly deeper than the main disk — depth without looking black
+        // Трохи глибше за основний диск — глибина без «чорного» вигляду
         var mat = VisualMaterials.Lit(new Color(0.32f, 0.325f, 0.34f), 0f, 0.02f);
         mat.name = "HorizonDisk_SolidGray";
         return mat;
@@ -510,21 +510,21 @@ public static class EnvironmentBuilder
             sun.type = LightType.Directional;
         }
         sun.name = "Sun";
-        // Lunar sun: slightly softer so pad gray isn't crushed to white
+        // Місячне сонце: трохи м’якше, щоб сірий pad не випалювався в білий
         sun.color = new Color(1f, 0.98f, 0.94f);
         sun.intensity = 2.35f;
-        // Hard shadows — soft filter grows in world space when zoomed out and looks blurry
+        // Hard shadows — soft filter росте у world space при віддаленні й виглядає розмито
         sun.shadows = LightShadows.Hard;
         sun.shadowStrength = 0.9f;
-        // Bias tuned for large pad + thin legs (less acne, less peter-panning)
+        // Bias підібрано під великий pad + тонкі ноги (менше acne, менше peter-panning)
         sun.shadowBias = 0.03f;
         sun.shadowNormalBias = 0.35f;
         sun.shadowNearPlane = 0.15f;
         sun.shadowResolution = UnityEngine.Rendering.LightShadowResolution.VeryHigh;
-        // ~28° elevation — longer readable shadows of rocket on pad
+        // ~28° elevation — довші читабельні тіні ракети на pad
         sun.transform.rotation = Quaternion.Euler(28f, -42f, 0f);
 
-        // Soft fill + rim — vacuum still dark, white booster reads cleanly
+        // М’яка заливка + край — вакуум темний, білий booster читається чисто
         EnsureDir("FillLight", new Color(0.5f, 0.52f, 0.58f), 0.18f, Quaternion.Euler(200f, 55f, 0f));
         EnsureDir("RimLight", new Color(0.4f, 0.44f, 0.52f), 0.12f, Quaternion.Euler(-8f, 145f, 0f));
 
@@ -532,13 +532,13 @@ public static class EnvironmentBuilder
         RenderSettings.ambientLight = new Color(0.07f, 0.072f, 0.082f);
         RenderSettings.reflectionIntensity = 0.03f;
 
-        // Baseline; CameraFollow.FitShadows keeps cascades sharp when orbit-zooming
+        // Базовий рівень; CameraFollow.FitShadows тримає cascades чіткими під час orbit-zoom
         FitShadowsToFocusDepth(120f);
     }
 
     /// <summary>
-    /// Keep directional shadow cascades dense around the orbit focus so zooming out
-    /// does not push the rocket/pad into a low-res far cascade (blurry silhouettes).
+    /// Тримати directional shadow cascades щільними навколо orbit focus, щоб при віддаленні
+    /// не штовхає ракету/pad у low-res far cascade (розмиті силуети).
     /// </summary>
     public static void FitShadowsToFocusDepth(float focusDepth)
     {
@@ -546,11 +546,11 @@ public static class EnvironmentBuilder
                    || QualitySettings.GetQualityLevel() <= 1;
 
         focusDepth = Mathf.Max(8f, focusDepth);
-        // Shadow volume just past the subject — not a fixed 1400 m that dilutes texels when close
+        // Об’єм тіні трохи за об’єктом — не фіксовані 1400 м, що розріджують texels зблизька
         float shadowDist = Mathf.Clamp(focusDepth * 1.55f + 90f, low ? 180f : 220f, low ? 900f : 2200f);
 
-        // Put cascade boundaries so the focus depth sits near the end of cascade 2/3
-        // (highest useful density on the rocket + pad, not only near the camera lens).
+        // Розставити межі cascade так, щоб глибина focus була біля кінця cascade 2/3
+        // (найвища корисна щільність на ракеті + pad, не лише біля об’єктива камери).
         float f = Mathf.Clamp(focusDepth / shadowDist, 0.2f, 0.88f);
         var split4 = new Vector3(
             Mathf.Clamp(f * 0.28f, 0.04f, 0.18f),
@@ -561,7 +561,7 @@ public static class EnvironmentBuilder
         QualitySettings.shadowCascades = 4;
         QualitySettings.shadowCascade4Split = split4;
         QualitySettings.shadowResolution = low ? ShadowResolution.High : ShadowResolution.VeryHigh;
-        // Disable soft shadow filter (Hard) — Soft blurs more as cascade texels grow
+        // Вимкнути soft shadow filter (Hard) — Soft сильніше милить, коли texels cascade ростуть
         QualitySettings.shadows = ShadowQuality.HardOnly;
         QualitySettings.shadowProjection = ShadowProjection.StableFit;
         QualitySettings.shadowNearPlaneOffset = 2f;
@@ -576,14 +576,14 @@ public static class EnvironmentBuilder
         TrySetProp(pipe, t, "shadowDistance", distance);
         TrySetProp(pipe, t, "shadowCascadeCount", 4);
         TrySetProp(pipe, t, "cascade4Split", cascade4Split);
-        // Minimal cascade blend — large border looks like soft blur when zooming
+        // Мінімальний cascade blend — великий border виглядає як soft blur при zoom
         TrySetProp(pipe, t, "cascadeBorder", 0.02f);
         TrySetProp(pipe, t, "shadowDepthBias", 0.5f);
         TrySetProp(pipe, t, "shadowNormalBias", 0.4f);
         TrySetProp(pipe, t, "mainLightShadowmapResolution", low ? 2048 : 4096);
         TrySetProp(pipe, t, "additionalLightsShadowmapResolution", low ? 1024 : 2048);
         TrySetProp(pipe, t, "supportsMainLightShadows", true);
-        // Soft filter off at pipeline level when possible
+        // Soft filter вимкнено на рівні pipeline, коли можливо
         TrySetProp(pipe, t, "supportsSoftShadows", false);
         TrySetProp(pipe, t, "softShadowQuality", 0);
     }

@@ -1,51 +1,51 @@
-# Betelgeuse — How to run (defense / demo)
+# Betelgeuse — Як запустити (захист / демо)
 
 ## Unity Editor
 
-1. Install **Unity 6000.x** with **URP**.
-2. Open project folder `Betelgeuse`.
-3. Scene: `Assets/Scenes/SampleScene.unity` → **Play**.
-4. Wait for splash (procedural moon + rocket build).
+1. Встановити **Unity 6000.x** з **URP**.
+2. Відкрити теку проєкту `Betelgeuse`.
+3. Сцена: `Assets/Scenes/SampleScene.unity` → **Play**.
+4. Дочекатися splash (процедурний Місяць + побудова ракети).
 
-## Defense demo (one click)
+## Демо для захисту (одним натиском)
 
-| Step | Action |
-|------|--------|
-| 1 | Press **`D`** or button **ДЕМО ЗАХИСТУ** (right panel) |
-| 2 | Auto: Hybrid → Ideal → Start landing |
-| 3 | After touchdown: trajectory overview |
-| 4 | Optional: **`E`** export landing pack |
-| 5 | Optional: **`P`** Monte-Carlo compare (DefenseBaseline, paired) |
+| Крок | Дія |
+|------|-----|
+| 1 | Натиснути **`D`** або кнопку **ДЕМО ЗАХИСТУ** (права панель) |
+| 2 | Автоматично: Hybrid → Ideal → старт посадки |
+| 3 | Після touchdown: огляд траєкторії |
+| 4 | Опційно: **`E`** — експорт пакета посадки |
+| 5 | Опційно: **`P`** — порівняння Monte-Carlo (DefenseBaseline, paired) |
 
-Help overlay anytime: **F1** / **?** or top-bar **HELP** (right after Export).
+Довідка в будь-який момент: **F1** / **?** або кнопка **HELP** у топ-барі (одразу після Export).
 
-## Reproducible Monte-Carlo
+## Відтворюваний Monte-Carlo
 
-Protocol **`DefenseBaseline` v2** applies automatically on Compare:
+Протокол **`DefenseBaseline` v2** застосовується автоматично при Порівнянні:
 
-- seed **42** · N **15** · wind **8** · jitter **±18 m** · noise **ON**
-- **paired seeds** — trial `i` identical for PID / Fuzzy / Neural / Hybrid
-- fixed NN weights, training OFF · Hybrid residual ON
+- seed **42** · N **15** · вітер **8** · jitter **±18 м** · шум **УВІМК**
+- **paired seeds** — trial `i` однаковий для PID / Fuzzy / Neural / Hybrid
+- фіксовані ваги NN, навчання ВИМК · residual Hybrid УВІМК
 
-1. Press **P** or button **ПОРІВНЯТИ** (UI sliders sync to baseline).
-2. Wait for A→D → `SimulationLogs/Comparison_*`.
-3. Re-run **P** → same pack statistics (SimRng + paired protocol).
+1. Натиснути **P** або кнопку **ПОРІВНЯТИ** (слайдери UI синхронізуються з baseline).
+2. Дочекатися A→D → `SimulationLogs/Comparison_*`.
+3. Повтор **P** → та сама статистика пакета (SimRng + paired-протокол).
 
-### Ablation (thesis)
+### Ablation (для тези)
 
-Toggle **Hybrid residual NN** OFF → Hybrid becomes Fuzzy-only leave-one-out.  
-Re-run Compare and contrast success % / Score±σ in `01_SUMMARY.md`.
+Вимкнути **Hybrid residual NN** → Hybrid стає leave-one-out лише Fuzzy.  
+Повторити Порівняння і зіставити success % / Score±σ у `01_SUMMARY.md`.
 
-## Standalone build (optional)
+## Standalone-збірка (опційно)
 
 1. **File → Build Settings → PC, Mac & Linux Standalone** (Windows x86_64).
-2. Add `SampleScene`, **Build**.
-3. Run the `.exe` — same keys as Editor (no Unity required for commission).
+2. Додати `SampleScene`, **Build**.
+3. Запустити `.exe` — ті самі клавіші, що в Editor (Unity для комісії не потрібен).
 
-## Soft-landing criteria
+## Критерії soft-landing
 
-|Vy| &lt; 3.5 m/s · tilt &lt; 7° · miss &lt; 25 m · |Vh| &lt; 5 m/s
+|Vy| &lt; 3.5 м/с · нахил &lt; 7° · промах &lt; 25 м · |Vh| &lt; 5 м/с
 
-## Hotkeys (short)
+## Гарячі клавіші (коротко)
 
-`1–4` mode · `Space` start · `Esc` stop · `I` ideal · `D` demo · `P`/`X` compare · `E`/`O` export · `F1` help · `H` UI · `G` lang · `Y` theme
+`1–4` режим · `Space` старт · `Esc` стоп · `I` ідеал · `D` демо · `P`/`X` порівняти · `E`/`O` експорт · `F1` довідка · `H` UI · `G` мова · `Y` тема

@@ -3,40 +3,40 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-/// ÐœÐµÐ½ÐµÐ´Ð¶ÐµÑ€ Ð¿Ð¾Ñ€Ñ–Ð²Ð½ÑÐ»ÑŒÐ½Ð¸Ñ… Monte-Carlo ÐµÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚Ñ–Ð².
-/// ÐÐ• ÑÑ‚Ð°Ñ€Ñ‚ÑƒÑ” ÑÐ°Ð¼ â€” Ð»Ð¸ÑˆÐµ Ñ‡ÐµÑ€ÐµÐ· RequestFullExperiment() Ð· UI.
-/// ÐŸÐ¾ÑÐ»Ñ–Ð´Ð¾Ð²Ð½Ð¾: PID â†’ Fuzzy â†’ Neural â†’ Hybrid (N Ð·Ð°Ð¿ÑƒÑÐºÑ–Ð² ÐºÐ¾Ð¶ÐµÐ½),
-/// Ð· Ð²Ð¸Ð¿Ð°Ð´ÐºÐ¾Ð²Ð¸Ð¼ Ð²Ñ–Ñ‚Ñ€Ð¾Ð¼/Ð¼Ð°ÑÐ¾ÑŽ/ÐºÑƒÑ‚Ð¾Ð¼. Ð ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð¸ â†’ UI + ResearchExporter.
+/// Менеджер порівняльних Monte-Carlo експериментів.
+/// НЕ стартує сам — лише через RequestFullExperiment() з UI.
+/// Послідовно: PID → Fuzzy → Neural → Hybrid (N запусків кожен),
+/// з випадковим вітром/масою/кутом. Результати → UI + ResearchExporter.
 /// </summary>
 public class SimulationManager : MonoBehaviour
 {
-    [Header("ÐžÑÐ½Ð¾Ð²Ð½Ñ– Ð¿Ð¾ÑÐ¸Ð»Ð°Ð½Ð½Ñ")]
+    [Header("Основні посилання")]
     public RocketPhysics rocketPhysics;
     public ExperimentDashboard dashboard;
 
-    [Header("ÐÐ°Ð»Ð°ÑˆÑ‚ÑƒÐ²Ð°Ð½Ð½Ñ ÐµÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚Ñƒ")]
+    [Header("Налаштування експерименту")]
     public int testsPerAlgorithm = 15;
     public float delayBetweenTests = 0.05f;
     public bool includeHybrid = true;
     [Range(1f, 50f)] public float experimentTimeScale = 20f;
 
-    [Header("ÐÐµÐ²Ð¸Ð·Ð½Ð°Ñ‡ÐµÐ½Ñ–ÑÑ‚ÑŒ (Monte-Carlo)")]
+    [Header("Невизначеність (Monte-Carlo)")]
     public bool enableNoise = true;
-    // Differentiated A–D rates (too harsh → universal timeout/0%; too soft → all 100%)
+    // Диференційовані ставки A–D (надто жорстко → універсальний timeout/0%; надто м’яко → усі 100%)
     [Range(0f, 25f)] public float windStrength = 10f;
     [Range(0f, 20f)] public float massVariationPercent = 8f;
     [Range(0f, 15f)] public float angleVariationDegrees = 8f;
     [Range(0f, 80f)] public float positionJitterMeters = 22f;
     public bool continuousWind = true;
-    /// <summary>Fixed seed → identical Comparison packs (defense reproducibility).</summary>
+    /// <summary>Фіксований seed → ідентичні Comparison-пакети (відтворюваність на захисті).</summary>
     public int experimentSeed = 42;
 
-    [Header("Initial conditions (from UI)")]
+    [Header("Початкові умови (з UI)")]
     public float startHeight = 1800f;
     public float startDescentSpeed = 72f;
     public float startTiltDeg = 3.5f;
 
-    // Internal flag â€” never leave true in inspector permanently
+    // Внутрішній прапорець — ніколи не лишати true в inspector назавжди
     [HideInInspector] public bool runFullExperiment;
 
     public bool IsExperimentRunning { get; private set; }
@@ -60,7 +60,7 @@ public class SimulationManager : MonoBehaviour
 
     void Awake()
     {
-        // CRITICAL: never auto-start from a checked inspector box
+        // КРИТИЧНО: ніколи не автозапускати з увімкненого прапорця в inspector
         runFullExperiment = false;
         IsExperimentRunning = false;
 
@@ -81,7 +81,7 @@ public class SimulationManager : MonoBehaviour
         running = StartCoroutine(RunFullComparisonExperiment());
     }
 
-    /// <summary>Ð„Ð´Ð¸Ð½Ð¸Ð¹ Ð¿Ñ€Ð°Ð²Ð¸Ð»ÑŒÐ½Ð¸Ð¹ ÑÐ¿Ð¾ÑÑ–Ð± ÑÑ‚Ð°Ñ€Ñ‚Ñƒ Ð· UI.</summary>
+    /// <summary>Єдиний правильний спосіб старту з UI.</summary>
     public void RequestFullExperiment()
     {
         if (IsExperimentRunning) return;
@@ -96,7 +96,7 @@ public class SimulationManager : MonoBehaviour
             runFullExperiment = false;
             return;
         }
-        // Coroutine checks cancelRequested each loop
+        // Корутина перевіряє cancelRequested на кожній ітерації
     }
 
     IEnumerator RunFullComparisonExperiment()
@@ -114,12 +114,12 @@ public class SimulationManager : MonoBehaviour
         float prevFixed = Time.fixedDeltaTime;
         rocketPhysics.batchDrivenTicks = true;
 
-        // Fair paired Monte-Carlo protocol (seeded, same IC/disturbances for A–D)
+        // Справедливий paired Monte-Carlo протокол (seeded, однакові ПУ/збурення для A–D)
         DefenseBaseline.ApplyTo(this);
         if (rocketPhysics.hybridController != null)
             rocketPhysics.hybridController.useNeuralResidual = DefenseBaseline.HybridResidualOn;
 
-        // Clamp disturbance into a workable band (saved prefs can be extreme → universal 0%)
+        // Обмежити збурення робочою смугою (збережені prefs можуть бути екстремальними → універсальні 0%)
         windStrength = Mathf.Clamp(windStrength, 0f, 18f);
         massVariationPercent = Mathf.Clamp(massVariationPercent, 0f, 12f);
         angleVariationDegrees = Mathf.Clamp(angleVariationDegrees, 0f, 12f);
@@ -129,7 +129,7 @@ public class SimulationManager : MonoBehaviour
 
         SimRng.Reseed(experimentSeed);
 
-        // Monte-Carlo uses DefenseBaseline IC (not leftover Ideal [I] gentleness)
+        // Monte-Carlo бере ПУ DefenseBaseline (не залишкову «м’якість» Ideal [I])
         RestoreHardInitialConditions();
         IdealLandingPresets.ApplyDefaultControllerTuning(
             rocketPhysics,
@@ -137,22 +137,22 @@ public class SimulationManager : MonoBehaviour
             rocketPhysics.neuralController,
             rocketPhysics.hybridController);
 
-        // Stable NN weights for fair A–D comparison (no ES drift mid-pack)
+        // Стабільні ваги NN для справедливого порівняння A–D (без ES drift mid-pack)
         if (rocketPhysics.neuralController != null)
         {
             rocketPhysics.neuralController.enableTraining = false;
-            // Always pin deterministic weights for reproducible Comparison packs
+            // Завжди фіксувати детерміновані ваги для відтворюваних Comparison-пакетів
             rocketPhysics.neuralController.InstallIdealWeights();
         }
 
-        // Keep realtime clock; speed comes from SimulationTick burst (not timeScale).
+        // Тримати realtime clock; швидкість з burst SimulationTick (не timeScale).
         float step = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
         step = Mathf.Clamp(step, 0.002f, 0.02f);
         Time.timeScale = 1f;
         Time.fixedDeltaTime = step;
 
-        // Hide landing result popups during batch
-        // Path line must stay off/cleared during batch — enabling it mid-pack freezes
+        // Ховати попапи результату посадки під час batch
+        // Лінія шляху має лишатись вимк/очищеною під час batch — увімкнення mid-pack зависає
         visualizer?.Clear();
         visualizer?.SetVisible(false);
 
@@ -203,7 +203,7 @@ public class SimulationManager : MonoBehaviour
         }
 
         cleanup:
-        // Restore user's chosen algorithm and idle state
+        // Відновити обраний користувачем алгоритм і idle-стан
         if (rocketPhysics != null)
             rocketPhysics.batchDrivenTicks = false;
         if (rocketPhysics != null)
@@ -243,13 +243,13 @@ public class SimulationManager : MonoBehaviour
             if (rocketPhysics.parameters != null)
             {
                 rocketPhysics.parameters.fuelMass = originalFuelMass;
-                // Keep step stable for RK4 burst
+                // Тримати крок стабільним для RK4 burst
                 if (rocketPhysics.parameters.fixedTimeStep < 0.001f
                     || rocketPhysics.parameters.fixedTimeStep > 0.02f)
                     rocketPhysics.parameters.fixedTimeStep = 0.005f;
             }
 
-            // Paired seed: trial i uses the SAME disturbances for every algorithm
+            // Paired seed: trial i використовує ТІ САМІ збурення для кожного алгоритму
             SimRng.Reseed(SimRng.DeriveSeed(experimentSeed, i));
 
             rocketPhysics.ResetSimulation();
@@ -258,13 +258,13 @@ public class SimulationManager : MonoBehaviour
             rocketPhysics.simulationArmed = true;
             rocketPhysics.simulationPaused = false;
 
-            // Wind + mass/angle/offset (identical across A–D for this trial index)
+            // Вітер + маса/кут/offset (ідентично для A–D на цьому індексі trial)
             ApplyRandomNoiseToState();
 
             float dt = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
             dt = Mathf.Clamp(dt, 0.002f, 0.02f);
             int maxSteps = Mathf.CeilToInt(maxT / dt) + 128;
-            // Large burst — finish each trial in few frames (logger disabled in batch)
+            // Великий burst — завершити кожен trial за кілька кадрів (logger вимкнено в batch)
             int burst = Mathf.Clamp(Mathf.RoundToInt(experimentTimeScale * 8f), 40, 400);
             int steps = 0;
             while (!rocketPhysics.state.simulationFinished && steps < maxSteps)
@@ -275,14 +275,14 @@ public class SimulationManager : MonoBehaviour
                     rocketPhysics.SimulationTick();
                     steps++;
                 }
-                // Yield occasionally so UI progress updates (not every micro-burst)
+                // Періодичний yield, щоб UI progress оновлювався (не кожен micro-burst)
                 if ((steps / burst) % 2 == 0)
                     yield return null;
             }
 
             if (!rocketPhysics.state.simulationFinished)
             {
-                // Near pad surface without finish flag → count as touchdown, not timeout
+                // Біля поверхні pad без finish-прапорця → рахувати touchdown, не timeout
                 float ground = EnvironmentBuilder.PadSurfaceY;
                 bool nearPad = rocketPhysics.state.position.y < ground + 2f;
                 rocketPhysics.ForceFinish(asTimeout: !nearPad);
@@ -321,7 +321,7 @@ public class SimulationManager : MonoBehaviour
         };
     }
 
-    /// <summary>IC from UI sliders (flexible experiment setup).</summary>
+    /// <summary>ПУ зі слайдерів UI (гнучке налаштування експерименту).</summary>
     void RestoreHardInitialConditions()
     {
         if (rocketPhysics?.parameters == null) return;
@@ -335,7 +335,7 @@ public class SimulationManager : MonoBehaviour
         p.dryMass = 25600f;
         p.fuelMass = 14000f;
         p.maxThrust = 845000f;
-        // Keep soft-landing gates consistent with LandingCriteria defaults
+        // Тримати soft-landing gates узгодженими з defaults LandingCriteria
         p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
         p.maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
         p.maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
@@ -347,13 +347,13 @@ public class SimulationManager : MonoBehaviour
     {
         if (rocketPhysics?.state == null) return;
 
-        // Wind always part of MC protocol when strength > 0 (not gated by noise toggle)
+        // Вітер завжди в протоколі MC, коли strength > 0 (не gated toggle шуму)
         float w = Mathf.Max(windStrength, 0f);
         Vector3 windKick = new Vector3(
             SimRng.Range(-w, w),
             0f,
             SimRng.Range(-w * 0.55f, w * 0.55f));
-        // Mild kick + light continuous wind — recoverable; still stresses weak lateral (PID)
+        // М’який kick + легкий постійний вітер — відновлювано; все ще тисне слабкий lateral (PID)
         rocketPhysics.state.velocity += windKick * 0.45f;
         rocketPhysics.windVelocity = continuousWind && w > 0.05f ? windKick * 0.1f : Vector3.zero;
         rocketPhysics.applyContinuousWind = continuousWind && w > 0.05f;
@@ -368,7 +368,7 @@ public class SimulationManager : MonoBehaviour
             rocketPhysics.state.rotation = Quaternion.Normalize(
                 rocketPhysics.state.rotation * Quaternion.Euler(ax, 0f, az));
 
-            // Lateral offset — main differentiator (PID weak / Hybrid strong lateral)
+            // Бічний offset — головний диференціатор (PID слабкий / Hybrid сильний lateral)
             float jit = Mathf.Max(0f, positionJitterMeters);
             if (jit > 0.1f)
             {
@@ -382,7 +382,7 @@ public class SimulationManager : MonoBehaviour
 
     void ShowFinalComparison()
     {
-        Debug.Log("â”€â”€ Ð¤Ñ–Ð½Ð°Ð»ÑŒÐ½Ðµ Ð¿Ð¾Ñ€Ñ–Ð²Ð½ÑÐ½Ð½Ñ â”€â”€");
+        Debug.Log("── Фінальне порівняння ──");
         PrintStats("PID", pidResults);
         PrintStats("Fuzzy Sugeno", fuzzyResults);
         PrintStats("Neural ES", neuralResults);
@@ -395,7 +395,7 @@ public class SimulationManager : MonoBehaviour
         float successRate = GetSuccessRate(list);
         Debug.Log($"{name.ToUpperInvariant()} | success={successRate:F1}% | " +
                   $"V={GetAverage(list, m => m.touchdownVelocity):F2} | " +
-                  $"âˆ ={GetAverage(list, m => m.landingAngleError):F2}Â° | " +
+                  $"∠={GetAverage(list, m => m.landingAngleError):F2}° | " +
                   $"miss={GetAverage(list, m => m.horizontalMiss):F1}m | " +
                   $"score={GetAverage(list, m => m.SuccessScore):F1}");
     }
@@ -408,7 +408,7 @@ public class SimulationManager : MonoBehaviour
         return sum / list.Count;
     }
 
-    /// <summary>ÐŸÐ¾Ð²Ð½Ð¸Ð¹ ÐµÐºÑÐ¿Ð¾Ñ€Ñ‚ Ð¿Ð¾Ñ€Ñ–Ð²Ð½ÑÐ½Ð½Ñ Ð² Ð¾ÐºÑ€ÐµÐ¼Ð¸Ð¹ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³ Comparison_*.</summary>
+    /// <summary>Повний експорт порівняння в окремий каталог Comparison_*.</summary>
     public string SaveComparisonReports()
     {
         var data = BuildComparisonExportData();
@@ -446,7 +446,7 @@ public class SimulationManager : MonoBehaviour
         return data;
     }
 
-    /// <summary>Ð”Ð¾ÑÑ‚ÑƒÐ¿ Ð´Ð¾ Ð¾ÑÑ‚Ð°Ð½Ð½Ñ–Ñ… Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ñ–Ð² (Ð´Ð»Ñ UI-ÐµÐºÑÐ¿Ð¾Ñ€Ñ‚Ñƒ / Ñ‚ÐµÑÑ‚Ñ–Ð²).</summary>
+    /// <summary>Доступ до останніх результатів (для UI-експорту / тестів).</summary>
     public IReadOnlyList<LandingMetrics> PidResults => pidResults;
     public IReadOnlyList<LandingMetrics> FuzzyResults => fuzzyResults;
     public IReadOnlyList<LandingMetrics> NeuralResults => neuralResults;

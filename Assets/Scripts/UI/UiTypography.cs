@@ -42,7 +42,7 @@ public static class UiTypography
     public static Color BtnActive => UiTheme.Current.BtnActive;
     public static Color Edge => UiTheme.Current.Edge;
 
-    const int Sampling = 48; // TMP UI sweet-spot (large sampling blurs small HUD sizes)
+    const int Sampling = 48; // Sweet-spot TMP UI (великий sampling милить малі розміри HUD)
     const int Padding = 5;
 
     static TMP_FontAsset BuildFont()
@@ -54,7 +54,7 @@ public static class UiTypography
             {
                 Prefill(fa);
                 TuneMaterial(fa.material);
-                // LiberationSans as last-resort for rare glyphs only
+                // LiberationSans лише як last-resort для рідкісних гліфів
                 var lib = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
                 if (lib != null)
                 {
@@ -138,7 +138,7 @@ public static class UiTypography
     {
         if (mat == null) return;
 
-        // Must equal atlas padding + 1 for crisp SDF edges
+        // Має дорівнювати atlas padding + 1 для чітких SDF-країв
         if (mat.HasProperty(ShaderUtilities.ID_GradientScale))
             mat.SetFloat(ShaderUtilities.ID_GradientScale, Padding + 1f);
 
@@ -148,7 +148,7 @@ public static class UiTypography
             mat.SetFloat(ShaderUtilities.ID_WeightNormal, 0f);
         if (mat.HasProperty(ShaderUtilities.ID_WeightBold))
             mat.SetFloat(ShaderUtilities.ID_WeightBold, 0.3f);
-        // Slight positive sharpness helps Overlay canvas readability
+        // Легка додатна різкість покращує читабельність Overlay canvas
         if (mat.HasProperty(ShaderUtilities.ID_Sharpness))
             mat.SetFloat(ShaderUtilities.ID_Sharpness, 0.35f);
 
@@ -181,7 +181,7 @@ public static class UiTypography
             "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя" +
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" +
             "0123456789.,;:!?%/+-*=()[]{}<>|@#_'\" " +
-            "\u2007" + // figure space for tabular slider values
+            "\u2007" + // figure space для табличних значень слайдера
             "м/с кг кН % с т /100 зап. x # " +
             "ГОТОВООЧІК.СТАРТСПУСКУСПІХЗБІЙСТОПТЕСТСХОВАТИПОКАЗАТИПАУЗАДАЛІ" +
             "READYWAITSTARTDOWNOKFAILSTOPTESTHIDEUISHOWUIPAUSERESUMEPAUSED" +
@@ -200,7 +200,7 @@ public static class UiTypography
                 tmp.fontSharedMaterial = f.material;
         }
 
-        // Integer sizes only
+        // Лише цілі розміри
         float s = Mathf.Max(12f, Mathf.Round(size));
         tmp.fontSize = Mathf.Clamp(s, 12f, 32f);
 
@@ -209,7 +209,7 @@ public static class UiTypography
             color = Color.Lerp(color, Color.white, 0.45f);
 
         tmp.color = color;
-        // Synthetic Bold softens SDF — prefer Normal + slightly larger size for "bold" look
+        // Synthetic Bold пом’якшує SDF — краще Normal + трохи більший size для вигляду «bold»
         if (style == FontStyles.Bold)
         {
             tmp.fontStyle = FontStyles.Normal;
@@ -217,7 +217,7 @@ public static class UiTypography
             if (tmp.fontSharedMaterial != null &&
                 tmp.fontSharedMaterial.HasProperty(ShaderUtilities.ID_FaceDilate))
             {
-                // keep shared mat clean; weight via size only
+                // тримати shared mat чистим; вага лише через size
             }
         }
         else

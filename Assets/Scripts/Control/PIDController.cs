@@ -25,7 +25,7 @@ public class PIDController
         if (dt <= 0f) return 0f;
         float error = setpoint - currentValue;
         integral += error * dt;
-        integral = Mathf.Clamp(integral, -15f, 15f); // Anti-Windup
+        integral = Mathf.Clamp(integral, -15f, 15f); // Анти-windup
         float derivative = (error - previousError) / dt;
         previousError = error;
         return Kp * error + Ki * integral + Kd * derivative;

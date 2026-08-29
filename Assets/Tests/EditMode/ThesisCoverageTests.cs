@@ -91,7 +91,7 @@ public class ThesisCoverageTests
                 Assert.LessOrEqual(Mathf.Abs(cmd.GimbalEuler.z), 25f);
             }
 
-            // Hybrid must actually use fuzzy+neural paths (thrust near hover band)
+            // Hybrid має реально використовувати шляхи fuzzy+neural (тяга біля hover-смуги)
             float hover = 38000f * AtmosphereModel.GetGravity(800f);
             var hCmd = hybrid.Evaluate(in ctx);
             Assert.Greater(hCmd.Thrust, hover * 0.5f);
@@ -146,7 +146,7 @@ public class ThesisCoverageTests
             float vy = -45f;
             float profile = SoftLandingGuidance.ProfileThrust(h, vy, mass);
             float sugeno = fuzzy.EvaluateSugenoThrust(h, vy, mass);
-            // Aggressive low-alt high-speed: Sugeno table should push above hover-ish profile band
+            // Агресивний низький h і висока швидкість: таблиця Sugeno має штовхати вище hover-смуги профілю
             Assert.Greater(sugeno, mass * AtmosphereModel.GetGravity(h) * 1.1f);
             Assert.Greater(Mathf.Abs(profile - sugeno), 100f);
         }

@@ -78,7 +78,7 @@ public class RocketEngineFX : MonoBehaviour
                 smoothThrust * 0.85f);
         }
 
-        // Only startSpeed / startSize (single-axis) — never mix curve modes on VOL axes
+        // Лише startSpeed / startSize (single-axis) — ніколи не змішувати curve modes на осях VOL
         if (flame != null && on)
         {
             var main = flame.main;

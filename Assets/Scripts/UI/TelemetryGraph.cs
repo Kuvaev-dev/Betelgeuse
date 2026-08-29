@@ -4,8 +4,8 @@ using TMPro;
 using System.Collections.Generic;
 
 /// <summary>
-/// Real-time strip chart. Labels are siblings on <see cref="labelRoot"/> (not children of RawImage)
-/// so they always draw on top and stay readable.
+/// Стрічковий графік real-time. Підписи — siblings на <see cref="labelRoot"/> (не діти RawImage),
+/// щоб завжди малювались зверху й лишались читабельними.
 /// </summary>
 [RequireComponent(typeof(RawImage))]
 public class TelemetryGraph : MonoBehaviour
@@ -27,7 +27,7 @@ public class TelemetryGraph : MonoBehaviour
     public float? thresholdY;
     public string valueFormat = "F1";
 
-    /// <summary>Parent for TMP labels (usually graph frame root). If null, uses this.transform.</summary>
+    /// <summary>Parent для TMP-підписів (зазвичай корінь frame графіка). Якщо null — this.transform.</summary>
     public RectTransform labelRoot;
 
     RawImage image;
@@ -55,7 +55,7 @@ public class TelemetryGraph : MonoBehaviour
     public void BindLabelRoot(RectTransform root)
     {
         labelRoot = root != null ? root : transform as RectTransform;
-        // Recreate labels under the correct parent
+        // Перестворити підписи під правильним parent
         DestroyLabels();
         EnsureLabels();
         dirty = true;
@@ -110,7 +110,7 @@ public class TelemetryGraph : MonoBehaviour
         lblCur.fontStyle = FontStyles.Bold;
         Stretch(lblCur.rectTransform, -8f, -2f, 130f, 18f, 1f, 1f, 1f, 1f);
 
-        // Y scale: max top, mid center, min bottom — left side
+        // Шкала Y: max зверху, mid у центрі, min знизу — лівий бік
         lblMax = MakeLabel(p, "GMax", 10f, labelColor, TextAlignmentOptions.MidlineLeft);
         Stretch(lblMax.rectTransform, 6f, -20f, 70f, 14f, 0f, 1f, 0f, 1f);
 
@@ -120,7 +120,7 @@ public class TelemetryGraph : MonoBehaviour
         lblMin = MakeLabel(p, "GMin", 10f, labelColor, TextAlignmentOptions.MidlineLeft);
         Stretch(lblMin.rectTransform, 6f, 4f, 70f, 14f, 0f, 0f, 0f, 0f);
 
-        // Always draw above plot texture
+        // Завжди малювати над текстурою графіка
         if (labelRoot != null)
         {
             if (lblTitle) lblTitle.transform.SetAsLastSibling();
@@ -131,7 +131,7 @@ public class TelemetryGraph : MonoBehaviour
         }
 
         ApplyLabelStyle();
-        // Immediate placeholder so user always sees something
+        // Миттєвий placeholder, щоб користувач завжди щось бачив
         if (lblTitle) lblTitle.text = title;
         if (lblCur) lblCur.text = "—";
         if (lblMax) lblMax.text = "—";
@@ -250,7 +250,7 @@ public class TelemetryGraph : MonoBehaviour
         EnsureLabels();
         if (image == null) return;
 
-        // Keep labels on top every frame (scroll rebuilds can reorder)
+        // Тримати підписи зверху щокадру (scroll rebuild може змінити порядок)
         if (lblMin) lblMin.transform.SetAsLastSibling();
         if (lblMid) lblMid.transform.SetAsLastSibling();
         if (lblMax) lblMax.transform.SetAsLastSibling();
@@ -289,7 +289,7 @@ public class TelemetryGraph : MonoBehaviour
             pixels[y * w + w - 1] = borderColor;
         }
 
-        // Always show a scale even with few samples
+        // Завжди показувати шкалу, навіть за малої кількості samples
         float lo = 0f, hi = 1f;
         if (samples.Count > 0)
         {
@@ -321,7 +321,7 @@ public class TelemetryGraph : MonoBehaviour
         DisplayMin = lo;
         DisplayMax = hi;
 
-        // Left margin for Y labels (plot starts later)
+        // Лівий відступ для Y-підписів (графік стартує пізніше)
         int plotL = 48;
         int plotR = w - 3;
         int plotB = 3;
@@ -329,7 +329,7 @@ public class TelemetryGraph : MonoBehaviour
         int plotH = Mathf.Max(1, plotT - plotB);
         int plotW = Mathf.Max(1, plotR - plotL);
 
-        // Soft left gutter
+        // М’який лівий gutter
         Color gut = Color.Lerp(bgColor, borderColor, 0.12f);
         for (int y = 1; y < h - 1; y++)
         for (int x = 1; x < plotL; x++)
@@ -337,7 +337,7 @@ public class TelemetryGraph : MonoBehaviour
         for (int y = 1; y < h - 1; y++)
             pixels[y * w + plotL] = Color.Lerp(borderColor, axisColor, 0.4f);
 
-        // Grid 4 bands
+        // Сітка з 4 смуг
         for (int i = 1; i <= 3; i++)
         {
             int gy = plotB + plotH * i / 4;
@@ -406,7 +406,7 @@ public class TelemetryGraph : MonoBehaviour
         tex.SetPixels(pixels);
         tex.Apply(false);
 
-        // Labels — always filled
+        // Підписи — завжди заповнені
         float mid = (lo + hi) * 0.5f;
         if (lblMax) lblMax.text = Fmt(hi);
         if (lblMid) lblMid.text = Fmt(mid);

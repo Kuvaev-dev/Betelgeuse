@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 
-/// <summary>Reproducibility + Hybrid residual ablation (thesis leave-one-out).</summary>
+/// <summary>Відтворюваність + ablation Hybrid residual (leave-one-out для тези).</summary>
 public class SimRngAndHybridAblationTests
 {
     [Test]
@@ -46,8 +46,8 @@ public class SimRngAndHybridAblationTests
         hybrid.CalculateControl(h, vy, mass, fThrust, 2f, -1f, 0f, 0f, 3f,
             out float hybThrust, out _);
 
-        // Without residual, smart path is pure fuzzy before profile blend —
-        // still blended with soft-landing, so stay near fuzzy order of magnitude.
+        // Без residual smart-шлях — чистий fuzzy до blend з профілем —
+        // все ще blended з soft-landing, тож лишатись біля порядку величини fuzzy.
         Assert.Greater(hybThrust, 1000f);
         Assert.Less(Mathf.Abs(hybThrust - fThrust) / Mathf.Max(1f, Mathf.Abs(fThrust)), 0.85f);
 
@@ -69,7 +69,7 @@ public class SimRngAndHybridAblationTests
     [Test]
     public void SimRng_PairedTrialSalt_IndependentOfAlgorithm()
     {
-        // Trial i must share one seed across A–D (no algoIndex in salt)
+        // Trial i має ділити один seed між A–D (без algoIndex у salt)
         int seed0 = SimRng.DeriveSeed(42, 0);
         int seed1 = SimRng.DeriveSeed(42, 1);
         Assert.AreNotEqual(seed0, seed1);
@@ -115,7 +115,7 @@ public class SimRngAndHybridAblationTests
             new LandingMetrics { touchdownVelocity = 4f, landingAngleError = 8f, fuelRemaining = 500f,
                 horizontalMiss = 30f, horizontalSpeed = 6f, totalFlightTime = 50f, isSuccessfulLanding = false },
         };
-        // Force scores to differ via fields used by SuccessScore
+        // Змусити scores відрізнятись через поля, які використовує SuccessScore
         var s = ResearchExporter.ComputeStats("T", list);
         Assert.AreEqual(3, s.tests);
         Assert.AreEqual(2, s.successCount);

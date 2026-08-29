@@ -10,7 +10,7 @@ public class AttitudeGimbalSignTests
     [Test]
     public void QuaternionGimbal_RestoresPositiveZTilt()
     {
-        // Euler Z > 0: body tips, axisBody.z > 0 ⇒ cmdZ > 0 ⇒ td.x < 0 ⇒ τz < 0
+        // Euler Z > 0: корпус нахиляється, axisBody.z > 0 ⇒ cmdZ > 0 ⇒ td.x < 0 ⇒ τz < 0
         var rot = Quaternion.Euler(0f, 0f, 8f);
         Vector3 g = SoftLandingGuidance.AttitudeGimbal(rot, Vector3.zero);
         Assert.Greater(g.z, 0.5f, "cmdZ must be >0 for +Z tilt (restoring TVC)");
@@ -27,7 +27,7 @@ public class AttitudeGimbalSignTests
     [Test]
     public void QuaternionGimbal_MatchesErrorApi_Sign_IndependentAxes()
     {
-        // Pitch-only tip (Euler X)
+        // Лише pitch tip (Euler X)
         {
             float tip = 10f;
             var rot = Quaternion.Euler(tip, 0f, 0f);
@@ -38,7 +38,7 @@ public class AttitudeGimbalSignTests
             Assert.AreEqual(Mathf.Sign(fromErr.x), Mathf.Sign(fromQuat.x),
                 "Pitch channel signs must agree");
         }
-        // Yaw-only tip (Euler Z)
+        // Лише yaw tip (Euler Z)
         {
             float tip = -8f;
             var rot = Quaternion.Euler(0f, 0f, tip);

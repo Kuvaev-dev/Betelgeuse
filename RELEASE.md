@@ -1,55 +1,55 @@
-# Betelgeuse v1.2.0 — Release notes
+# Betelgeuse v1.2.0 — Нотатки релізу
 
-**Date:** 2026-03-28  
-**Status:** Diploma-ready GNC simulator (defense pack)  
+**Дата:** 2026-03-28  
+**Статус:** GNC-симулятор, готовий до захисту диплома  
 **Unity:** 6000.x URP  
 
-## Theme coverage
+## Покриття теми
 
-| Requirement | Deliverable |
-|-------------|-------------|
-| Autonomous first-stage landing | RK4 + soft-landing criteria (`LandingCriteria`) |
-| Fuzzy logic | Zero-order Sugeno 5×5 |
-| Machine learning | MLP 5→8→2 + ES(1+λ) |
-| Hybrid intelligent system | Neuro-Fuzzy residual (cap before blend) + **ablation toggle** |
-| Comparison research | DefenseBaseline v2 paired Monte-Carlo + ResearchExporter (Score ±σ) |
-| Demo presentation | Mission Control HUD UA/EN · 8 themes · 3D · Defense Demo · Help |
+| Вимога | Результат |
+|--------|-----------|
+| Автономна посадка 1-го ступеня | RK4 + критерії soft-landing (`LandingCriteria`) |
+| Нечітка логіка | Zero-order Sugeno 5×5 |
+| Машинне навчання | MLP 5→8→2 + ES(1+λ) |
+| Гібридна інтелектуальна система | Neuro-Fuzzy residual (cap перед blend) + **toggle ablation** |
+| Порівняльне дослідження | DefenseBaseline v2 paired Monte-Carlo + ResearchExporter (Score ±σ) |
+| Демо-презентація | Mission Control HUD UA/EN · 8 тем · 3D · Defense Demo · Help |
 
-## v1.2.0 highlights
+## Основне у v1.2.0
 
-### Defense / reproducibility
-- **`SimRng`** — seeded disturbances (single flight + Monte-Carlo)
-- **`DefenseBaseline` v2** — auto-applied on Compare: seed 42, N=15, wind 8, jitter ±18 m, noise ON
-- **Paired seeds** — trial `i` identical across PID/Fuzzy/Neural/Hybrid (fair ranking)
-- Stronger lateral GNC (scale: PID weak → Hybrid strong) so MC is not universal 0%
+### Захист / відтворюваність
+- **`SimRng`** — seeded-збурення (одиночний політ + Monte-Carlo)
+- **`DefenseBaseline` v2** — автозастосування при Порівнянні: seed 42, N=15, вітер 8, jitter ±18 м, шум УВІМК
+- **Paired seeds** — trial `i` однаковий для PID/Fuzzy/Neural/Hybrid (справедливе ранжування)
+- Посилене бічне GNC (масштаб: PID слабкий → Hybrid сильний), щоб MC не був універсальним 0%
 - **Defense Demo** — Hybrid → Ideal → Start → overview
-- **Help overlay** — hotkeys, criteria, research toggles
-- **Hybrid residual ON/OFF** — thesis ablation (leave-one-out NN)
-- Export includes seed, jitter, paired flag, protocol version, residual, Score ±σ
+- **Help overlay** — гарячі клавіші, критерії, research-перемикачі
+- **Hybrid residual УВІМК/ВИМК** — ablation для тези (leave-one-out NN)
+- Експорт містить seed, jitter, paired-прапорець, версію протоколу, residual, Score ±σ
 
-### Performance
-- Faster cold start: lower lunar mesh/albedo cost, smaller tank skins, no artificial bootstrap delays
+### Продуктивність
+- Швидший cold start: менша вартість lunar mesh/albedo, менші tank skins, без штучних bootstrap-затримок
 
-### Architecture
-- Domain Strategy GNC path unchanged (`ILandingController` / Resolver)
+### Архітектура
+- Domain Strategy GNC-шлях без змін (`ILandingController` / Resolver)
 
-## Defense script (live)
+## Сценарій захисту (наживо)
 
-1. **F1** — show help briefly  
-2. **D** — Defense Demo (Hybrid Ideal landing)  
-3. After result: **T** overview if needed · **E** export  
-4. **P** Monte-Carlo (DefenseBaseline paired) · open `SimulationLogs/Comparison_*`  
-5. Optional: residual **OFF**, re-run **P** — ablation slide  
+1. **F1** — коротко показати довідку  
+2. **D** — Defense Demo (посадка Hybrid Ideal)  
+3. Після результату: **T** overview за потреби · **E** експорт  
+4. **P** Monte-Carlo (DefenseBaseline paired) · відкрити `SimulationLogs/Comparison_*`  
+5. Опційно: residual **ВИМК**, повторити **P** — слайд ablation  
 
-See also [`HOW_TO_RUN.md`](HOW_TO_RUN.md).
+Див. також [`HOW_TO_RUN.md`](HOW_TO_RUN.md).
 
-## Baseline protocol (cite in thesis)
+## Протокол baseline (цитувати в тезі)
 
 ```
 DefenseBaseline v1
   seed                  = 42
   testsPerAlgorithm     = 15
-  windStrength          = 10 m/s
+  windStrength          = 10 м/с
   massVariationPercent  = 8
   angleVariationDegrees = 8
   positionJitterMeters  = 22
@@ -57,27 +57,27 @@ DefenseBaseline v1
   hybridResidual        = true
 ```
 
-**Expected ranking (qualitative under this protocol):**  
-`Hybrid ≥ Fuzzy` and `Hybrid ≥ PID` on success % (Score ±σ in export).
+**Очікуване ранжування (якісно за цим протоколом):**  
+`Hybrid ≥ Fuzzy` і `Hybrid ≥ PID` за success % (Score ±σ в експорті).
 
-After the defense Compare run on the presentation PC, cite the generated pack:
+Після Compare-прогону на ПК презентації цитувати згенерований пакет:
 
 `SimulationLogs/Comparison_<timestamp>/01_SUMMARY.md`
 
-(Do not hard-code machine-specific % here — seed+protocol make the pack the source of truth.)
+(Не хардкодити машинно-залежні % тут — seed+протокол роблять пакет джерелом істини.)
 
-## Limits (honest)
+## Межі (чесно)
 
-Not industrial avionics: no Kalman/INS, CFD thrusters, or flight-software certification.  
-Sufficient for МКР as a reproducible GNC research simulator with full thesis export.
+Не industrial avionics: немає Kalman/INS, CFD thrusters чи сертифікації бортового ПЗ.  
+Достатньо для МКР як відтворюваного GNC research simulator із повним thesis-експортом.
 
-## How to run
+## Як запустити
 
 1. Unity **6000.x** (URP) → `Assets/Scenes/SampleScene.unity` → **Play**  
-2. Or standalone build — [`HOW_TO_RUN.md`](HOW_TO_RUN.md)  
-3. Specs: `README.md` · `DOCS.md` · `ARCHITECTURE.md`
+2. Або standalone-збірка — [`HOW_TO_RUN.md`](HOW_TO_RUN.md)  
+3. Специфікації: `README.md` · `DOCS.md` · `ARCHITECTURE.md`
 
-## Version
+## Версія
 
-- App / docs: **1.2.0**  
-- Prior: `v1.1.0` (2026-08-22) · `v1.0.0` (2026-08-15)
+- Додаток / документація: **1.2.0**  
+- Попередні: `v1.1.0` (2026-08-22) · `v1.0.0` (2026-08-15)

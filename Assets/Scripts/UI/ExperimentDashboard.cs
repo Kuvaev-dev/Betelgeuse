@@ -37,7 +37,7 @@ public class ExperimentDashboard : MonoBehaviour
 
     void Start()
     {
-        // Full HUD is built by MissionControlUI — do not spawn old theme skin.
+        // Повний HUD будує MissionControlUI — не створювати старий theme skin.
         ensureTheme = false;
 
         if (simulationManager == null)
@@ -45,7 +45,7 @@ public class ExperimentDashboard : MonoBehaviour
         if (rocketPhysics == null)
             rocketPhysics = FindAnyObjectByType<RocketPhysics>();
 
-        // If modern UI is active, never wire legacy scene buttons (they caused "random" mode switches)
+        // Якщо активний сучасний UI, ніколи не підключати legacy-кнопки сцени (давали «випадкові» зміни режиму)
         if (FindAnyObjectByType<MissionControlUI>() != null)
         {
             if (btnRunPID) btnRunPID.interactable = false;
@@ -77,7 +77,7 @@ public class ExperimentDashboard : MonoBehaviour
             });
         }
 
-        // Labels if empty
+        // Підписи, якщо порожні
         SetIfEmpty(pidStatsText, "PID     —");
         SetIfEmpty(fuzzyStatsText, "FUZZY   —");
         SetIfEmpty(neuralStatsText, "NEURAL  —");
@@ -102,7 +102,7 @@ public class ExperimentDashboard : MonoBehaviour
     void RunFullExperiment()
     {
         if (simulationManager == null) return;
-        // DefenseBaseline is re-applied inside SimulationManager; keep dashboard path consistent
+        // DefenseBaseline повторно застосовується в SimulationManager; тримати шлях dashboard узгодженим
         DefenseBaseline.ApplyTo(simulationManager);
         if (testsCountInput)
             testsCountInput.text = DefenseBaseline.TestsPerAlgorithm.ToString();

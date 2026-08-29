@@ -116,29 +116,19 @@ public static class UiTheme
     public static Color ActionBtnText(Color bg) => LabelOnFill(bg);
 
     /// <summary>
-    /// Button/chip label that tracks theme text like panel body copy,
-    /// while keeping WCAG-ish contrast on dark or pale fills.
+    /// Підпис кнопки за яскравістю заливки. Бліді чіпи (вкл. active mode на light-темі)
+    /// отримують темне body-чорнило — ніколи white-on-white. Темні/насичені заливки — білий.
     /// </summary>
     public static Color LabelOnFill(Color bg)
     {
         float bgL = 0.2126f * bg.r + 0.7152f * bg.g + 0.0722f * bg.b;
-        Color themeText = Current.Text;
-        float textL = 0.2126f * themeText.r + 0.7152f * themeText.g + 0.0722f * themeText.b;
 
-        if (bgL < 0.55f)
-        {
-            // Dark / saturated fill → light label with theme hue (not pure generic white)
-            if (textL >= 0.72f)
-                return Color.Lerp(themeText, TextOnDark, 0.2f);
-            // Light themes still need light ink on green/red action buttons
-            return Color.Lerp(themeText, TextOnDark, 0.82f);
-        }
+        // Бліда / mid-light заливка (mode chips, сірі кнопки, light-blue active) → темне чорнило
+        if (bgL >= 0.52f)
+            return Current.Text;
 
-        // Pale chip → body ink (same as panels)
-        if (textL <= 0.45f)
-            return themeText;
-        // Safety: if theme text is light but fill is pale, darken
-        return Color.Lerp(themeText, new Color(0.08f, 0.1f, 0.14f, 1f), 0.75f);
+        // Темні або насичені Start/Stop/Demo/тощо → білий
+        return TextOnDark;
     }
 
     /// <summary>Картка результату / overlay.</summary>
@@ -235,20 +225,21 @@ public static class UiTheme
             gB: new Color(0.95f, 0.6f, 0.3f),
             gC: new Color(0.6f, 0.9f, 0.5f)),
 
-        // 3 Light — paper UI; darker ink for readability; blue accent (not green)
+        // 3 Light — paper UI; темніше чорнило для читабельності; синій акцент (не зелений)
         new(
             text: new Color(0.04f, 0.06f, 0.1f, 1f),
-            muted: new Color(0.28f, 0.3f, 0.36f, 1f),
+            muted: new Color(0.2f, 0.24f, 0.32f, 1f),
             accent: new Color(0.05f, 0.32f, 0.58f, 1f),
             amber: new Color(0.7f, 0.36f, 0.02f, 1f),
             ok: new Color(0.02f, 0.4f, 0.22f, 1f),
             alert: new Color(0.7f, 0.06f, 0.1f, 1f),
             panel: new Color(0.995f, 0.995f, 1f, 0.96f),
             panelSoft: new Color(0.93f, 0.94f, 0.96f, 0.97f),
-            btn: new Color(0.82f, 0.86f, 0.92f, 1f),
-            btnActive: new Color(0.55f, 0.7f, 0.88f, 1f),
+            btn: new Color(0.88f, 0.9f, 0.94f, 1f),
+            // М’який sky highlight — світле виділення, темне чорнило тексту
+            btnActive: new Color(0.72f, 0.82f, 0.94f, 1f),
             edge: new Color(0.48f, 0.54f, 0.64f, 0.7f),
-            btnHover: new Color(0.76f, 0.82f, 0.9f, 1f),
+            btnHover: new Color(0.8f, 0.86f, 0.93f, 1f),
             gA: new Color(0.1f, 0.34f, 0.65f),
             gB: new Color(0.72f, 0.38f, 0.04f),
             gC: new Color(0.04f, 0.48f, 0.28f)),
@@ -307,20 +298,20 @@ public static class UiTheme
             gB: new Color(1f, 0.75f, 0.35f),
             gC: new Color(0.55f, 0.9f, 0.6f)),
 
-        // 7 Ice — cold paper; darker body ink
+        // 7 Ice — холодний paper; темніше чорнило тексту
         new(
             text: new Color(0.03f, 0.08f, 0.14f, 1f),
-            muted: new Color(0.26f, 0.34f, 0.42f, 1f),
+            muted: new Color(0.18f, 0.28f, 0.36f, 1f),
             accent: new Color(0.04f, 0.38f, 0.52f, 1f),
             amber: new Color(0.58f, 0.34f, 0.04f, 1f),
             ok: new Color(0.02f, 0.38f, 0.3f, 1f),
             alert: new Color(0.68f, 0.06f, 0.12f, 1f),
             panel: new Color(0.97f, 0.985f, 1f, 0.96f),
             panelSoft: new Color(0.9f, 0.93f, 0.96f, 0.97f),
-            btn: new Color(0.78f, 0.86f, 0.92f, 1f),
-            btnActive: new Color(0.55f, 0.75f, 0.88f, 1f),
+            btn: new Color(0.86f, 0.91f, 0.95f, 1f),
+            btnActive: new Color(0.7f, 0.84f, 0.94f, 1f),
             edge: new Color(0.42f, 0.56f, 0.68f, 0.65f),
-            btnHover: new Color(0.72f, 0.82f, 0.9f, 1f),
+            btnHover: new Color(0.78f, 0.88f, 0.94f, 1f),
             gA: new Color(0.06f, 0.4f, 0.58f),
             gB: new Color(0.62f, 0.38f, 0.06f),
             gC: new Color(0.04f, 0.48f, 0.38f)),

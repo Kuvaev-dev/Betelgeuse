@@ -2,8 +2,8 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Trajectory ribbon. During flight the past is immutable (append-only) so the line
-/// never rebuilds/flickers; only the tip tracks the rocket each frame.
+/// Стрічка траєкторії. Під час польоту минуле незмінне (append-only), тож лінія
+/// ніколи не rebuild/мерехтить; лише tip стежить за ракетою щокадру.
 /// </summary>
 public class TrajectoryVisualizer : MonoBehaviour
 {
@@ -27,7 +27,7 @@ public class TrajectoryVisualizer : MonoBehaviour
     Vector3 tipSmoothed;
     bool hasTip;
 
-    // Reused buffer — no per-frame alloc
+    // Повторно використаний буфер — без alloc щокадру
     Vector3[] uploadBuf = new Vector3[64];
 
     public int PointCount => pts.Count;
@@ -126,7 +126,7 @@ public class TrajectoryVisualizer : MonoBehaviour
 
         if (InFlight())
         {
-            // Tip follows rocket every frame (smooth), history stays fixed
+            // Tip стежить за ракетою щокадру (плавно), історія фіксована
             Vector3 tip = rocketPhysics.state.position;
             if (tip.y < groundY + 0.12f) tip.y = groundY + 0.12f;
 
@@ -137,12 +137,12 @@ public class TrajectoryVisualizer : MonoBehaviour
             }
             else
             {
-                // Fast but stable tip tracking (no overshoot)
+                // Швидке, але стабільне стеження tip (без overshoot)
                 float k = 1f - Mathf.Exp(-18f * Time.deltaTime);
                 tipSmoothed = Vector3.Lerp(tipSmoothed, tip, k);
             }
 
-            SampleCommit(tip); // may append a committed knot
+            SampleCommit(tip); // може додати committed-вузол
             PushLive(tipSmoothed);
         }
         else if (pts.Count >= 2 && lineRenderer.positionCount != pts.Count)
@@ -150,7 +150,7 @@ public class TrajectoryVisualizer : MonoBehaviour
             PushCommittedOnly();
         }
 
-        // Slow width adaptation — never snap (snapping caused flicker)
+        // Повільна адаптація ширини — ніколи snap (snap давав мерехтіння)
         if (pts.Count > 1 && Camera.main != null)
         {
             Vector3 mid = pts[pts.Count / 2];
@@ -178,7 +178,7 @@ public class TrajectoryVisualizer : MonoBehaviour
         SampleCommit(rocketPhysics.state.position, force);
     }
 
-    /// <summary>Append a stable history knot when the rocket moved far enough.</summary>
+    /// <summary>Додати стабільний вузол історії, коли ракета змістилась достатньо далеко.</summary>
     void SampleCommit(Vector3 p, bool force = false)
     {
         if (finished && !force) return;
@@ -189,7 +189,7 @@ public class TrajectoryVisualizer : MonoBehaviour
         if (p.y < 60f) minDist = 0.65f;
         if (p.y < 15f) minDist = 0.35f;
 
-        // Near capacity: thin NEW samples only — never chop the start of the path
+        // Близько до ємності: лише проріджувати NEW samples — ніколи не різати початок шляху
         if (!force && pts.Count > maxPoints * 3 / 4)
         {
             float fill = pts.Count / (float)maxPoints;
@@ -199,11 +199,11 @@ public class TrajectoryVisualizer : MonoBehaviour
         if (!force && hasCommitted && (p - lastCommitted).sqrMagnitude < minDist * minDist)
             return;
 
-        // Hard cap: keep full history; skip further commits (tip still tracks in PushLive)
+        // Жорсткий ліміт: тримати повну історію; далі не commit (tip і далі стежить у PushLive)
         if (!force && pts.Count >= maxPoints)
             return;
 
-        // Light one-step smooth on NEW knot only (never rewrite past knots)
+        // Легке one-step згладжування лише NEW-вузла (ніколи не переписувати минулі)
         if (hasCommitted && !force)
             p = Vector3.Lerp(lastCommitted, p, 0.82f);
 
@@ -212,14 +212,14 @@ public class TrajectoryVisualizer : MonoBehaviour
         hasCommitted = true;
     }
 
-    /// <summary>History + live tip (tip not committed until SampleCommit).</summary>
+    /// <summary>Історія + live tip (tip не commit, доки SampleCommit).</summary>
     void PushLive(Vector3 tip)
     {
         EnsureLine();
         int nHist = pts.Count;
         if (nHist == 0)
         {
-            // Bootstrap with two points so LineRenderer can draw
+            // Bootstrap з двома точками, щоб LineRenderer міг малювати
             EnsureBuf(2);
             uploadBuf[0] = tip;
             uploadBuf[1] = tip + Vector3.up * 0.25f;
@@ -229,7 +229,7 @@ public class TrajectoryVisualizer : MonoBehaviour
             return;
         }
 
-        // tip replaces last committed visually if very close; else append as ephemeral end
+        // tip візуально замінює останній committed, якщо дуже близько; інакше append як ephemeral end
         bool tipIsNew = (tip - pts[nHist - 1]).sqrMagnitude > 0.0004f;
         int n = tipIsNew ? nHist + 1 : nHist;
         EnsureBuf(n);
@@ -238,15 +238,15 @@ public class TrajectoryVisualizer : MonoBehaviour
         if (tipIsNew)
             uploadBuf[nHist] = tip;
         else
-            uploadBuf[nHist - 1] = tip; // slide last knot to tip without changing count
+            uploadBuf[nHist - 1] = tip; // зсунути останній вузол до tip без зміни count
 
-        // Only grow positionCount; shrinking causes flicker
+        // Лише збільшувати positionCount; зменшення дає мерехтіння
         if (lineRenderer.positionCount < n)
             lineRenderer.positionCount = n;
         else if (lineRenderer.positionCount > n + 2)
-            lineRenderer.positionCount = n; // rare shrink when tip merges
+            lineRenderer.positionCount = n; // рідкісне зменшення, коли tip зливається
 
-        // Upload only used prefix
+        // Вивантажувати лише використаний prefix
         if (lineRenderer.positionCount != n)
             lineRenderer.positionCount = n;
         lineRenderer.SetPositions(Slice(n));
@@ -279,7 +279,7 @@ public class TrajectoryVisualizer : MonoBehaviour
 
     Vector3[] Slice(int n)
     {
-        // SetPositions needs exact length array on some Unity versions
+        // SetPositions потребує масив точної довжини на деяких версіях Unity
         if (uploadBuf.Length == n) return uploadBuf;
         var exact = new Vector3[n];
         System.Array.Copy(uploadBuf, exact, n);

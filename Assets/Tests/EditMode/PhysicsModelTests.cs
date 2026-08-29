@@ -21,7 +21,7 @@ public class PhysicsModelTests
         float mass = 39600f;
         float hover = mass * AtmosphereModel.GetGravity(0f);
         Assert.AreEqual(mass * 9.80665f, hover, 1f);
-        // Max thrust 845 kN > hover for this mass class
+        // Max thrust 845 кН > hover для цього класу маси
         Assert.Greater(845000f, hover);
     }
 
@@ -39,7 +39,7 @@ public class PhysicsModelTests
     [Test]
     public void DensityScaleHeight_MatchesExponential()
     {
-        // ρ = 1.225 * exp(-h * 0.0001184) → H ≈ 8446 m
+        // ρ = 1.225 * exp(-h * 0.0001184) → H ≈ 8446 м
         float d0 = AtmosphereModel.GetDensity(0f);
         float dH = AtmosphereModel.GetDensity(8446f);
         Assert.AreEqual(d0 / Mathf.Exp(1f), dH, 0.02f);

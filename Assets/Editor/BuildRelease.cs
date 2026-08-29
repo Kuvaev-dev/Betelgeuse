@@ -6,9 +6,9 @@ using UnityEditor.Build.Reporting;
 using UnityEngine;
 
 /// <summary>
-/// Menu + CLI: builds Windows x86_64 standalone release to Desktop (or -outputPath).
+/// Menu + CLI: збирає Windows x86_64 standalone release на Desktop (або -outputPath).
 /// CLI: Unity -batchmode -quit -projectPath ... -executeMethod BuildRelease.BuildFromCommandLine
-/// Optional: -outputPath "C:\Users\...\Desktop\Betelgeuse_v1.2.0"
+/// Опційно: -outputPath "C:\Users\...\Desktop\Betelgeuse_v1.2.0"
 /// </summary>
 public static class BuildRelease
 {
@@ -23,7 +23,7 @@ public static class BuildRelease
         BuildTo(outDir, openFolder: true);
     }
 
-    /// <summary>Batchmode entry.</summary>
+    /// <summary>Точка входу batchmode.</summary>
     public static void BuildFromCommandLine()
     {
         string outDir = null;
@@ -67,7 +67,7 @@ public static class BuildRelease
             return 2;
         }
 
-        // Ensure scene in build settings
+        // Переконатись, що сцена в build settings
         var scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
         EditorBuildSettings.scenes = scenes;
 
@@ -89,7 +89,7 @@ public static class BuildRelease
             return 3;
         }
 
-        // Sidecar files next to exe (runtime paths use Application.dataPath/..)
+        // Sidecar-файли поруч з exe (runtime-шляхи через Application.dataPath/..)
         string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         CopyIfExists(Path.Combine(projectRoot, "BestWeights_Neural.json"),
             Path.Combine(outputDirectory, "BestWeights_Neural.json"));
@@ -121,17 +121,17 @@ public static class BuildRelease
     {
         string path = Path.Combine(dir, "00_START_HERE.txt");
         File.WriteAllText(path,
-            "Betelgeuse v1.2.0 — Autonomous rocket landing GNC simulator\r\n" +
+            "Betelgeuse v1.2.0 — GNC-симулятор автономної посадки ракети\r\n" +
             "============================================================\r\n\r\n" +
-            "Run:  Betelgeuse.exe\r\n\r\n" +
-            "Quick defense demo:\r\n" +
-            "  D  — Defense demo (Hybrid + Ideal + Start)\r\n" +
-            "  P  — Compare algorithms (Monte-Carlo)\r\n" +
-            "  E  — Export reports  →  SimulationLogs/ next to this exe\r\n" +
-            "  F1 — Help\r\n" +
+            "Запуск:  Betelgeuse.exe\r\n\r\n" +
+            "Швидке демо для захисту:\r\n" +
+            "  D  — Демо захисту (Hybrid + Ideal + Start)\r\n" +
+            "  P  — Порівняти алгоритми (Monte-Carlo)\r\n" +
+            "  E  — Експорт звітів  →  SimulationLogs/ поруч з exe\r\n" +
+            "  F1 — Довідка\r\n" +
             "  1-4 — PID / Fuzzy / Neural / Hybrid\r\n" +
-            "  Space — Start landing\r\n\r\n" +
-            "See HOW_TO_RUN.md and RELEASE.md for full notes.\r\n");
+            "  Space — Старт посадки\r\n\r\n" +
+            "Див. HOW_TO_RUN.md і RELEASE.md для повних нотаток.\r\n");
     }
 }
 #endif

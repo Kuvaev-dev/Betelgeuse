@@ -3,7 +3,7 @@ using NUnit.Framework;
 using UnityEngine;
 
 /// <summary>
-/// Fairness + recoverability of Monte-Carlo comparison protocol (no PlayMode required).
+/// Справедливість + відновлюваність протоколу порівняння Monte-Carlo (PlayMode не потрібен).
 /// </summary>
 public class MonteCarloFairnessTests
 {
@@ -17,7 +17,7 @@ public class MonteCarloFairnessTests
         p.fuelMass = 14000f;
         p.maxThrust = 845000f;
         p.isp = 311f;
-        p.fixedTimeStep = 0.01f; // slightly coarser for test speed
+        p.fixedTimeStep = 0.01f; // трохи грубше заради швидкості тестів
         p.maxSimulationTime = 400f;
         p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
         p.maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
@@ -59,7 +59,7 @@ public class MonteCarloFairnessTests
         rp.simulationArmed = true;
         rp.simulationPaused = false;
 
-        // Same disturbance recipe as SimulationManager.ApplyRandomNoiseToState
+        // Той самий рецепт збурень, що SimulationManager.ApplyRandomNoiseToState
         float w = DefenseBaseline.WindStrength;
         Vector3 windKick = new Vector3(
             SimRng.Range(-w, w), 0f, SimRng.Range(-w * 0.55f, w * 0.55f));
@@ -106,7 +106,7 @@ public class MonteCarloFairnessTests
     [Test]
     public void PairedDisturbances_SameTrial_SameInitialState()
     {
-        // Two independent streams from same (seed, trial) must match first samples
+        // Два незалежні потоки з одного (seed, trial) мають збігатись на перших samples
         SimRng.Reseed(SimRng.DeriveSeed(42, 3));
         float a0 = SimRng.Range(-8f, 8f);
         float a1 = SimRng.Range(-8f, 8f);
@@ -145,18 +145,18 @@ public class MonteCarloFairnessTests
             Debug.Log($"[MC-test] success% PID={rPid:F0} Fuzzy={rFz:F0} NN={rNn:F0} Hybrid={rHy:F0} | " +
                       $"miss PID={AvgMiss(pid):F1} Hybrid={AvgMiss(hybrid):F1}");
 
-            // Not a universal zero — at least one algorithm lands sometimes
+            // Не універсальний нуль — хоча б один алгоритм інколи сідає
             Assert.Greater(Mathf.Max(rPid, Mathf.Max(rFz, Mathf.Max(rNn, rHy))), 0.1f,
                 "All algorithms 0% — lateral GNC / protocol still too harsh");
 
-            // Hybrid should beat or match PID on success rate (or mean miss if both zero-ish)
+            // Hybrid має перевершити або зрівнятись з PID за success rate (або mean miss, якщо обидва ~0)
             if (rHy + rPid > 0.1f)
             {
                 Assert.GreaterOrEqual(rHy + 1e-3f, rPid - 15f,
                     $"Hybrid ({rHy:F0}%) should be competitive with PID ({rPid:F0}%)");
             }
 
-            // Mean miss: Hybrid should not be drastically worse than PID
+            // Mean miss: Hybrid не має бути різко гіршим за PID
             Assert.LessOrEqual(AvgMiss(hybrid), AvgMiss(pid) * 1.35f + 15f);
         }
         finally

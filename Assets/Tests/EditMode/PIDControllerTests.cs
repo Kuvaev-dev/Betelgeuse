@@ -33,7 +33,7 @@ public class PIDControllerTests
         var pid = new PIDController { Kp = 0f, Ki = 100f, Kd = 0f };
         for (int i = 0; i < 100; i++)
             pid.Calculate(100f, 0f, 0.1f);
-        // integral clamped to ±15 → output = Ki * integral ∈ [-1500, 1500]
+        // інтеграл обмежено ±15 → output = Ki * integral ∈ [-1500, 1500]
         float u = pid.Calculate(100f, 0f, 0.1f);
         Assert.LessOrEqual(Mathf.Abs(u), 1500f + 1e-2f);
     }
@@ -53,7 +53,7 @@ public class PIDControllerTests
     {
         var pid = new PIDController { Kp = 0f, Ki = 0f, Kd = 1f };
         pid.Calculate(0f, 0f, 0.1f);
-        float u = pid.Calculate(0f, -1f, 0.1f); // error goes 0 → 1, dError/dt = 10
+        float u = pid.Calculate(0f, -1f, 0.1f); // помилка йде 0 → 1, dError/dt = 10
         Assert.AreEqual(10f, u, 1e-3f);
     }
 }

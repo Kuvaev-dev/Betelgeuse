@@ -58,7 +58,7 @@ public static class VisualMaterials
     {
         var mat = new Material(ParticleShader);
         SetColor(mat, tint);
-        // Transparent alpha for smoke/dust
+        // Прозорий alpha для диму/пилу
         if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
         if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f); // alpha
         if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -69,13 +69,13 @@ public static class VisualMaterials
         return mat;
     }
 
-    /// <summary>Additive particles for engine plume (bright core + sheath).</summary>
+    /// <summary>Адитивні частинки для струменя двигуна (яскраве ядро + оболонка).</summary>
     public static Material ParticleAdditive(Color tint)
     {
         var mat = new Material(ParticleShader);
         SetColor(mat, tint);
         if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
-        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 1f); // additive
+        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 1f); // адитивний
         if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
         if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
         if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);

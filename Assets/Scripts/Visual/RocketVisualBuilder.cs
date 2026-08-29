@@ -6,7 +6,7 @@ using UnityEngine;
 /// </summary>
 public static class RocketVisualBuilder
 {
-    public const float Height = 39.2f; // 1st-stage stack (interstage dome, no tall fairing)
+    public const float Height = 39.2f; // стек 1-го ступеня (купол interstage, без високого обтічника)
     public const float Radius = 1.85f;
 
     public static void Build(RocketPhysics rocket)
@@ -14,7 +14,7 @@ public static class RocketVisualBuilder
         LunarTerrainMesh.Drain(BuildRoutine(rocket));
     }
 
-    /// <summary>Stepped build — yields between heavy skins so splash spinner keeps spinning.</summary>
+    /// <summary>Покрокова збірка — yield між важкими skins, щоб splash-спінер крутився.</summary>
     public static IEnumerator BuildRoutine(RocketPhysics rocket)
     {
         if (rocket == null) yield break;
@@ -43,99 +43,105 @@ public static class RocketVisualBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(root, false);
 
-        // ── Palette — flight-hardware look: cooler white, sharper metal, deeper CFRP ──
-        var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.055f, seed: 11);
-        var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.28f, panelContrast: 0.06f, seed: 29);
+        // ── Палітра — вигляд flight-hardware: холодніший білий, різкіший метал, глибший CFRP ──
+        // Чистіший білий стек — м’якші шви панелей, світліша кіптява
+        var white = MakeTankSkin("TankWhite", sootAmount: 0.0f, panelContrast: 0.032f, seed: 11);
+        var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.14f, panelContrast: 0.038f, seed: 29);
         yield return null;
         var black = VisualMaterials.Lit(new Color(0.028f, 0.03f, 0.034f), 0.58f, 0.42f);
-        var metal = VisualMaterials.Lit(new Color(0.82f, 0.84f, 0.88f), 0.96f, 0.88f);
-        var titanium = VisualMaterials.Lit(new Color(0.7f, 0.72f, 0.76f), 0.94f, 0.78f);
-        var carbon = VisualMaterials.Lit(new Color(0.045f, 0.048f, 0.052f), 0.42f, 0.52f);
-        var silver = VisualMaterials.Lit(new Color(0.93f, 0.94f, 0.97f), 0.96f, 0.9f);
+        var metal = VisualMaterials.Lit(new Color(0.86f, 0.88f, 0.92f), 0.96f, 0.9f);
+        var titanium = VisualMaterials.Lit(new Color(0.74f, 0.76f, 0.8f), 0.94f, 0.8f);
+        var carbon = VisualMaterials.Lit(new Color(0.05f, 0.052f, 0.056f), 0.4f, 0.5f);
+        var silver = VisualMaterials.Lit(new Color(0.94f, 0.95f, 0.98f), 0.97f, 0.92f);
         var heat = MakeNozzleSkin("NozzleHeat", seed: 7);
         var copper = VisualMaterials.Lit(new Color(0.68f, 0.48f, 0.34f), 0.94f, 0.62f);
-        var darkMetal = VisualMaterials.Lit(new Color(0.12f, 0.13f, 0.15f), 0.92f, 0.55f);
-        var stripe = VisualMaterials.Lit(new Color(0.03f, 0.03f, 0.035f), 0.4f, 0.35f);
-        var accent = VisualMaterials.Lit(new Color(0.1f, 0.48f, 0.88f), 0.28f, 0.62f);
-        var hydra = VisualMaterials.Lit(new Color(0.88f, 0.9f, 0.94f), 0.9f, 0.68f);
-        var whitePaint = VisualMaterials.Lit(new Color(0.98f, 0.985f, 0.995f), 0.06f, 0.84f);
-        var goldFoil = VisualMaterials.Lit(new Color(0.78f, 0.62f, 0.28f), 0.85f, 0.55f);
+        var darkMetal = VisualMaterials.Lit(new Color(0.14f, 0.15f, 0.17f), 0.9f, 0.55f);
+        var hydra = VisualMaterials.Lit(new Color(0.9f, 0.92f, 0.95f), 0.88f, 0.7f);
+        var goldFoil = VisualMaterials.Lit(new Color(0.8f, 0.66f, 0.32f), 0.88f, 0.58f);
         var interstageMat = MakeInterstageSkin("InterstageCFRP", seed: 41);
         yield return null;
 
-        // ── Aft (octaweb + TPS skirt) — more layered, readable from camera ──
+        // ── Корма (octaweb + TPS skirt) ──
         SmoothCyl("Octaweb", visual.transform, 0.82f, Radius * 2.42f, 0.88f, black);
         SmoothCyl("OctawebLip", visual.transform, 0.22f, Radius * 2.52f, 0.04f, titanium);
         SmoothCyl("OctawebRing", visual.transform, 1.55f, Radius * 2.36f, 0.035f, metal);
         SmoothCyl("AftSkirt", visual.transform, 2.65f, Radius * 2.16f, 0.78f, carbon);
-        SmoothCyl("AftSkirtBand", visual.transform, 2.9f, Radius * 2.18f, 0.06f, darkMetal);
-        SmoothCyl("AftSkirtRim", visual.transform, 3.48f, Radius * 2.18f, 0.045f, darkMetal);
-        SmoothCyl("AftJoin", visual.transform, 3.62f, Radius * 2.06f, 0.08f, silver);
+        SmoothCyl("AftSkirtBand", visual.transform, 2.9f, Radius * 2.18f, 0.05f, darkMetal);
+        SmoothCyl("AftSkirtRim", visual.transform, 3.48f, Radius * 2.18f, 0.04f, titanium);
+        SmoothCyl("AftJoin", visual.transform, 3.62f, Radius * 2.06f, 0.07f, silver);
 
-        // ── Body stack ──
-        SmoothCyl("LowerTank", visual.transform, 8.40f, Radius * 2.0f, 4.70f, whiteLower);
-        SmoothCyl("CommonDome", visual.transform, 13.25f, Radius * 2.06f, 0.15f, silver);
-        SmoothCyl("Stripe1", visual.transform, 13.50f, Radius * 2.09f, 0.1f, stripe);
-        SmoothCyl("MidTank", visual.transform, 21.20f, Radius * 2.0f, 7.60f, white);
-        SmoothCyl("Stripe2", visual.transform, 28.95f, Radius * 2.09f, 0.13f, stripe);
-        SmoothCyl("UpperTank", visual.transform, 32.80f, Radius * 2.0f, 3.70f, white);
+        // ── Стек корпусу: неперервні стиковані циліндри (без «висячих» щілин) ──
+        // Одиниця MakeCylinder — висота 2 → повна висота = 2 * halfH; легкий overlap закриває шви.
+        float dBody = Radius * 2.0f;
+        float dBand = Radius * 2.02f;
+        const float seam = 0.06f; // overlap між сусідами, щоб ступені ніколи не «висіли» окремо
 
-        // Bright weld rings + secondary micro-rings
-        float[] ringYs = { 5.9f, 8.05f, 10.2f, 15.0f, 17.2f, 20.7f, 24.2f, 27.7f, 31.2f, 33.9f, 35.6f };
-        for (int i = 0; i < ringYs.Length; i++)
-            SmoothCyl($"Ring_{i}", visual.transform, ringYs[i], Radius * 2.04f, 0.012f, silver);
+        // Курсор = низ наступної секції (world Y)
+        float yBot = 3.70f; // стоїть на верху AftJoin (~3.62+0.07)
 
-        // Soft residual soot only at very bottom of white stack
-        SmoothCyl("SootBand", visual.transform, 4.95f, Radius * 2.018f, 0.6f,
-            VisualMaterials.Lit(new Color(0.16f, 0.155f, 0.15f), 0.38f, 0.26f));
-        SmoothCyl("SootFade", visual.transform, 5.7f, Radius * 2.01f, 0.28f,
-            VisualMaterials.Lit(new Color(0.55f, 0.54f, 0.53f), 0.2f, 0.4f));
+        void StackCyl(string name, float height, float diameter, Material mat)
+        {
+            float half = height * 0.5f;
+            float center = yBot + half;
+            SmoothCyl(name, visual.transform, center, diameter, half, mat);
+            yBot += height - seam; // наступна секція стартує з overlap
+        }
 
-        // ── Head: black CFRP interstage + closed booster nose ──
-        float top = 36.50f;
+        // М’яка кіптява біля основи білого стека
+        SmoothCyl("SootFade", visual.transform, yBot + 0.55f, Radius * 2.012f, 0.55f,
+            VisualMaterials.Lit(new Color(0.78f, 0.77f, 0.76f), 0.16f, 0.45f));
 
-        SmoothCyl("UpperCrown", visual.transform, top + 0.05f, Radius * 2.03f, 0.055f, silver);
-        top += 0.10f;
+        float lowerBot = yBot;
+        StackCyl("LowerTank", 8.6f, dBody, whiteLower);
+        float lowerTop = yBot + seam;
 
-        float interH = 1.55f;
-        SmoothCyl("Interstage", visual.transform, top + interH * 0.5f, Radius * 2.0f, interH * 0.5f, interstageMat);
-        SmoothCyl("InterLip", visual.transform, top + 0.04f, Radius * 2.05f, 0.045f, titanium);
-        SmoothCyl("InterGold", visual.transform, top + interH * 0.55f, Radius * 2.015f, 0.08f, goldFoil);
-        float interstageMidY = top + interH * 0.5f;
-        top += interH;
+        float yBandLo = yBot + 0.36f;
+        StackCyl("StationLo", 0.72f, dBand, interstageMat);
+        SmoothCyl("StationLoGold", visual.transform, yBandLo, Radius * 2.005f, 0.045f, goldFoil);
 
-        SmoothCyl("SepRing", visual.transform, top + 0.025f, Radius * 2.06f, 0.028f, silver);
-        top += 0.05f;
-        SmoothCyl("Bulkhead", visual.transform, top + 0.10f, Radius * 2.0f, 0.10f, darkMetal);
-        top += 0.20f;
+        float midBot = yBot;
+        StackCyl("MidTank", 13.6f, dBody, white);
+        float midTop = yBot + seam;
+
+        float yBandHi = yBot + 0.36f;
+        StackCyl("StationHi", 0.72f, dBand, interstageMat);
+        SmoothCyl("StationHiGold", visual.transform, yBandHi, Radius * 2.005f, 0.045f, goldFoil);
+
+        float upperBot = yBot;
+        StackCyl("UpperTank", 6.8f, dBody, white);
+        float upperTop = yBot + seam;
+
+        // Волосинні срібні зварні кільця лише всередині білих ділянок
+        void RingsIn(float a, float b, int n, int id0)
+        {
+            if (b <= a + 0.2f) return;
+            for (int i = 0; i < n; i++)
+            {
+                float t = (i + 1f) / (n + 1f);
+                float y = Mathf.Lerp(a + 0.15f, b - 0.15f, t);
+                SmoothCyl($"Ring_{id0 + i}", visual.transform, y, Radius * 2.022f, 0.008f, silver);
+            }
+        }
+        RingsIn(lowerBot, lowerTop, 4, 0);
+        RingsIn(midBot, midTop, 6, 10);
+        RingsIn(upperBot, upperTop, 3, 20);
+
+        // ── Голова: чорний «капелюх» впритул на верхньому баку ──
+        float interH = 1.65f;
+        float interCenter = yBot + interH * 0.5f;
+        SmoothCyl("Interstage", visual.transform, interCenter, dBody, interH * 0.5f, interstageMat);
+        float interstageMidY = interCenter;
+        yBot += interH - seam;
+
+        SmoothCyl("Bulkhead", visual.transform, yBot + 0.07f, dBody, 0.07f, carbon);
+        yBot += 0.14f;
         SmoothMesh.MakeFrustum("NoseShoulder", visual.transform,
-            new Vector3(0f, top + 0.32f, 0f),
-            Radius * 2.0f, 0.32f, topRatio: 0.48f, titanium);
-        top += 0.64f;
+            new Vector3(0f, yBot + 0.34f, 0f),
+            Radius * 2.0f, 0.34f, topRatio: 0.44f, carbon);
+        yBot += 0.68f;
         SmoothMesh.MakeOgive("NoseTip", visual.transform,
-            new Vector3(0f, top + 0.42f, 0f),
-            Radius * 0.98f, 0.42f, metal, tipBlunt: 0.15f);
-
-        // Raceway + conduit + sensor packs
-        SmoothCylAt("Raceway", visual.transform,
-            new Vector3(Radius + 0.12f, 20.5f, 0f), 0.2f, 14.4f, carbon);
-        SmoothCylAt("RacewayEdge", visual.transform,
-            new Vector3(Radius + 0.22f, 20.5f, 0f), 0.055f, 14.2f, darkMetal);
-        SmoothCylAt("RacewayHi", visual.transform,
-            new Vector3(Radius + 0.16f, 28.2f, 0f), 0.08f, 3.2f, titanium);
-        // Opposite-side LOX sensor rail
-        SmoothCylAt("SensorRail", visual.transform,
-            new Vector3(-(Radius + 0.1f), 18.5f, 0f), 0.1f, 6.5f, darkMetal);
-
-        // Brand panel: black plate + white field + blue accent bar + hairline frame
-        Prim(PrimitiveType.Cube, "LogoBack", visual.transform,
-            new Vector3(0f, 24.2f, Radius + 0.025f), new Vector3(1.95f, 2.85f, 0.024f), black);
-        Prim(PrimitiveType.Cube, "LogoField", visual.transform,
-            new Vector3(0f, 24.28f, Radius + 0.042f), new Vector3(1.5f, 1.95f, 0.018f), whitePaint);
-        Prim(PrimitiveType.Cube, "LogoBar", visual.transform,
-            new Vector3(0f, 23.22f, Radius + 0.05f), new Vector3(1.25f, 0.14f, 0.016f), accent);
-        Prim(PrimitiveType.Cube, "LogoHair", visual.transform,
-            new Vector3(0f, 25.05f, Radius + 0.05f), new Vector3(1.35f, 0.04f, 0.014f), silver);
+            new Vector3(0f, yBot + 0.44f, 0f),
+            Radius * 0.92f, 0.44f, black, tipBlunt: 0.1f);
 
         yield return null;
         BuildGridFins(visual.transform, titanium, silver, darkMetal, carbon, interstageMidY);
@@ -158,12 +164,12 @@ public static class RocketVisualBuilder
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Procedural cylindrical skins (U=angle, V=height) — no warping
+    // Процедурні циліндричні skins (U=кут, V=висота) — без warping
     // ─────────────────────────────────────────────────────────────
 
     static Material MakeTankSkin(string name, float sootAmount, float panelContrast, int seed)
     {
-        // Half previous atlas — 4× fewer texels, still sharp on a ~42 m body
+        // Половина попереднього atlas — у 4× менше texels, досі чітко на корпусі ~42 м
         const int tw = 512;
         const int th = 1024;
         var tex = new Texture2D(tw, th, TextureFormat.RGB24, true, false);
@@ -183,13 +189,13 @@ public static class RocketVisualBuilder
         var cols = new Color[tw * th];
         var nrmCols = new Color[tw * th];
         var rng = new System.Random(seed);
-        // Pre-hash offsets
+        // Попередні hash-зсуви
         float ox = (float)rng.NextDouble() * 40f;
         float oy = (float)rng.NextDouble() * 40f;
 
-        // Panel grid in UV space
-        int nVert = 12;   // vertical stringer count around
-        int nHoriz = 28;  // horizontal bay count along height
+        // Сітка панелей у UV-просторі
+        int nVert = 12;   // кількість вертикальних stringers по колу
+        int nHoriz = 28;  // кількість горизонтальних відсіків уздовж висоти
 
         for (int y = 0; y < th; y++)
         {
@@ -199,56 +205,42 @@ public static class RocketVisualBuilder
                 float u = x / (float)tw;
                 int idx = y * tw + x;
 
-                // Clean presentation white — minimal noise, crisp panels
-                float g = 0.965f;
-                g += HashNoise(u * 36f + ox, v * 72f + oy) * 0.006f;
-                g += HashNoise(u * 90f - ox, v * 140f + oy) * 0.003f;
+                // Premium flight-white — м’які лінії відсіків, без темної «смуги» stringer
+                float g = 0.978f;
+                g += HashNoise(u * 36f + ox, v * 72f + oy) * 0.004f;
+                g += HashNoise(u * 90f - ox, v * 140f + oy) * 0.002f;
 
-                // Horizontal bay seams
+                // Горизонтальні шви відсіків (стримані)
                 float hCell = v * nHoriz;
                 float hEdge = Mathf.Abs(hCell - Mathf.Round(hCell));
-                float hSeam = 1f - Mathf.SmoothStep(0f, 0.038f, hEdge);
-                g -= hSeam * panelContrast * 0.70f;
+                float hSeam = 1f - Mathf.SmoothStep(0f, 0.045f, hEdge);
+                g -= hSeam * panelContrast * 0.48f;
 
-                // Vertical stringers (narrow)
+                // Вертикальні stringers — дуже м’які, щоб ніколи не читались як чорна лінія
                 float vCell = u * nVert;
                 float vEdge = Mathf.Abs(vCell - Mathf.Round(vCell));
-                float vSeam = 1f - Mathf.SmoothStep(0f, 0.014f, vEdge);
-                g -= vSeam * panelContrast * 0.42f;
+                float vSeam = 1f - Mathf.SmoothStep(0f, 0.022f, vEdge);
+                g -= vSeam * panelContrast * 0.22f;
 
-                // Sparse rivets — only on seams, tiny
-                if (hSeam > 0.45f || vSeam > 0.45f)
-                {
-                    float rivU = u * nVert * 6f;
-                    float rivV = v * nHoriz * 3f;
-                    float rd = Mathf.Min(
-                        Mathf.Abs(rivU - Mathf.Round(rivU)),
-                        Mathf.Abs(rivV - Mathf.Round(rivV)));
-                    if (rd < 0.06f)
-                        g -= (1f - rd / 0.06f) * 0.025f;
-                }
-
-                // Soft soot wash (lower tanks only) — cool charcoal, not brown
+                // М’який wash кіптяви (лише нижні баки)
                 if (sootAmount > 0.01f)
                 {
-                    float sootV = Mathf.Clamp01(1f - v * 1.55f);
-                    sootV = sootV * sootV * sootV;
-                    float blot = 0.60f + 0.40f * HashNoise(u * 5f + 3f, v * 8f - 2f);
-                    float side = 0.70f + 0.30f * Mathf.Sin(u * Mathf.PI * 2f + 0.7f);
-                    g -= sootAmount * sootV * blot * side * 0.48f;
+                    float sootV = Mathf.Clamp01(1f - v * 1.7f);
+                    sootV = sootV * sootV;
+                    float blot = 0.72f + 0.28f * HashNoise(u * 5f + 3f, v * 8f - 2f);
+                    g -= sootAmount * sootV * blot * 0.28f;
                 }
 
-                // Very light micro grain
-                g += HashNoise(u * 280f, v * 520f) * 0.004f;
-                g = Mathf.Clamp(g, 0.55f, 0.995f);
+                g += HashNoise(u * 280f, v * 520f) * 0.003f;
+                g = Mathf.Clamp(g, 0.72f, 0.995f);
 
-                // Cool pure white (slight blue, premium paint)
-                float rC = Mathf.Clamp01(g * 0.992f);
-                float gC = Mathf.Clamp01(g * 0.998f);
-                float bC = Mathf.Clamp01(g * 1.012f);
+                // Холодний чистий білий (легка синява, premium-фарба)
+                float rC = Mathf.Clamp01(g * 0.994f);
+                float gC = Mathf.Clamp01(g * 0.999f);
+                float bC = Mathf.Clamp01(g * 1.01f);
                 cols[idx] = new Color(rC, gC, bC, 1f);
 
-                // Soft panel normals
+                // М’які normals панелей
                 float du = (SampleGray(u + 1f / tw, v, nVert, nHoriz, sootAmount, panelContrast, ox, oy)
                           - SampleGray(u - 1f / tw, v, nVert, nHoriz, sootAmount, panelContrast, ox, oy)) * 4.2f;
                 float dv = (SampleGray(u, v + 1f / th, nVert, nHoriz, sootAmount, panelContrast, ox, oy)
@@ -267,9 +259,9 @@ public static class RocketVisualBuilder
         mat.name = name;
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
         if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.04f);
-        // Glossy aerospace paint on clean tanks; matte where sooted
-        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", sootAmount > 0.15f ? 0.48f : 0.82f);
+        if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.03f);
+        // Глянцева аерокосмічна фарба на чистих баках; трохи м’якше на закіптюжених
+        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", sootAmount > 0.1f ? 0.62f : 0.88f);
         if (mat.HasProperty("_BaseMap"))
         {
             mat.SetTexture("_BaseMap", tex);
@@ -281,7 +273,7 @@ public static class RocketVisualBuilder
         {
             mat.SetTexture("_BumpMap", nrm);
             mat.EnableKeyword("_NORMALMAP");
-            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.38f);
+            if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.22f);
         }
         return mat;
     }
@@ -290,19 +282,19 @@ public static class RocketVisualBuilder
     {
         u = u - Mathf.Floor(u);
         v = Mathf.Clamp01(v);
-        float g = 0.965f;
-        g += HashNoise(u * 36f + ox, v * 72f + oy) * 0.006f;
+        float g = 0.978f;
+        g += HashNoise(u * 36f + ox, v * 72f + oy) * 0.004f;
         float hCell = v * nHoriz;
         float hEdge = Mathf.Abs(hCell - Mathf.Round(hCell));
-        g -= (1f - Mathf.SmoothStep(0f, 0.038f, hEdge)) * panelContrast * 0.70f;
+        g -= (1f - Mathf.SmoothStep(0f, 0.045f, hEdge)) * panelContrast * 0.48f;
         float vCell = u * nVert;
         float vEdge = Mathf.Abs(vCell - Mathf.Round(vCell));
-        g -= (1f - Mathf.SmoothStep(0f, 0.014f, vEdge)) * panelContrast * 0.42f;
+        g -= (1f - Mathf.SmoothStep(0f, 0.022f, vEdge)) * panelContrast * 0.22f;
         if (sootAmount > 0.01f)
         {
-            float sootV = Mathf.Clamp01(1f - v * 1.55f);
-            sootV = sootV * sootV * sootV;
-            g -= sootAmount * sootV * 0.32f;
+            float sootV = Mathf.Clamp01(1f - v * 1.7f);
+            sootV = sootV * sootV;
+            g -= sootAmount * sootV * 0.22f;
         }
         return g;
     }
@@ -328,7 +320,7 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Deep CFRP weave with subtle sheen bands
+                // Глибоке плетиво CFRP з легкими смугами блиску
                 float g = 0.055f;
                 float weaveU = Mathf.Abs((u * 40f) - Mathf.Round(u * 40f));
                 float weaveV = Mathf.Abs((v * 22f) - Mathf.Round(v * 22f));
@@ -337,7 +329,7 @@ public static class RocketVisualBuilder
                 g += HashNoise(u * 48f + ox, v * 48f) * 0.012f;
                 float band = Mathf.Abs((v * 5f) - Mathf.Round(v * 5f));
                 g += (1f - Mathf.SmoothStep(0f, 0.07f, band)) * 0.045f;
-                // Slight vertical gloss gradient
+                // Легкий вертикальний градієнт блиску
                 g += (0.5f - Mathf.Abs(v - 0.5f)) * 0.02f;
                 g = Mathf.Clamp01(g);
                 cols[y * tw + x] = new Color(g * 0.92f, g * 0.95f, g * 1.08f, 1f);
@@ -388,17 +380,17 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Clean fairing: subtle micro-noise + 2 longitudinal half-seams only
+                // Чистий обтічник: легкий micro-noise + лише 2 поздовжні half-seams
                 float g = 0.94f;
                 g += HashNoise(u * 28f + ox, v * 36f) * 0.008f;
-                float petal = u * 2f; // two fairing halves
+                float petal = u * 2f; // дві половини обтічника
                 float seam = Mathf.Abs(petal - Mathf.Round(petal));
                 float seamW = 1f - Mathf.SmoothStep(0f, 0.012f, seam);
                 g -= seamW * 0.06f;
-                // one access ring near base only
+                // лише одне access-кільце біля основи
                 float h = Mathf.Abs(v - 0.12f);
                 g -= (1f - Mathf.SmoothStep(0f, 0.025f, h)) * 0.03f;
-                // tip slightly brighter (smooth paint)
+                // tip трохи світліший (гладка фарба)
                 g *= Mathf.Lerp(0.97f, 1.0f, v);
                 g = Mathf.Clamp01(g);
                 cols[y * tw + x] = new Color(g * 0.995f, g, g * 1.01f, 1f);
@@ -455,7 +447,7 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Regen-cooled niobium bell: dark exit → bronze mid → steel throat
+                // Регенеративно охолоджене ніобієве сопло: темний exit → бронза mid → сталевий throat
                 float mid = Mathf.Sin(v * Mathf.PI);
                 float body = Mathf.Lerp(0.12f, 0.28f, mid);
                 float ring = Mathf.Abs((v * 26f) - Mathf.Round(v * 26f));
@@ -468,7 +460,7 @@ public static class RocketVisualBuilder
                 float rC = body * (0.48f + 0.42f * mid);
                 float gC = body * (0.34f + 0.22f * mid);
                 float bC = body * (0.28f + 0.10f * mid);
-                // Sooted exit lip
+                // Закіптюжена кромка exit
                 if (v < 0.12f)
                 {
                     float t = 1f - v / 0.12f;
@@ -476,7 +468,7 @@ public static class RocketVisualBuilder
                     gC = Mathf.Lerp(gC, 0.08f, t * 0.7f);
                     bC = Mathf.Lerp(bC, 0.09f, t * 0.7f);
                 }
-                // Bright metallic throat
+                // Яскраве металеве горло сопла
                 if (v > 0.80f)
                 {
                     float t = (v - 0.80f) / 0.20f;
@@ -531,46 +523,129 @@ public static class RocketVisualBuilder
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Subassemblies
+    // Підвузли
     // ─────────────────────────────────────────────────────────────
 
     static void BuildGridFins(Transform visual, Material frame, Material lattice, Material hub, Material carbon,
         float mountY = 37.2f)
     {
+        // Титанові grid fins у стилі Falcon: щільна решітка, подвійна рама, чиста штанга привода.
+        // Локально: +Z outboard, +Y up, +X tangent. Пластина повністю outboard від корпусу.
+        const float armLen = 1.05f;
+        const float plateT = 0.055f;
+        const float plateH = 2.55f;
+        const float plateW = 3.25f;
+        const float frameW = 0.07f;
+        float hullR = Radius + 0.06f;
+
+        // Трохи холодніші металеві акценти для решітки
+        var cellMat = lattice;
+        var edgeMat = frame;
+        var dark = carbon;
+
         for (int i = 0; i < 4; i++)
         {
             float a = i * 90f * Mathf.Deg2Rad;
-            float r = Radius + 1.48f;
+            Vector3 radial = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+
             var fin = new GameObject($"GridFin_{i}");
             fin.transform.SetParent(visual, false);
-            fin.transform.localPosition = new Vector3(Mathf.Sin(a) * r, mountY, Mathf.Cos(a) * r);
-            fin.transform.localRotation = Quaternion.Euler(0f, i * 90f, 1.5f);
+            fin.transform.localPosition = radial * hullR + Vector3.up * mountY;
+            // Кут 8° — вигляд у розкритому стані, ловить світло
+            fin.transform.localRotation = Quaternion.LookRotation(radial, Vector3.up)
+                * Quaternion.Euler(0f, 0f, i % 2 == 0 ? 6f : -6f);
 
-            // Deeper frame + denser lattice — reads as real grid fin from orbit cam
-            Prim(PrimitiveType.Cube, "Plate", fin.transform, Vector3.zero,
-                new Vector3(0.04f, 2.55f, 3.35f), carbon);
-            Prim(PrimitiveType.Cube, "RimT", fin.transform, new Vector3(0.045f, 1.26f, 0f),
-                new Vector3(0.1f, 0.06f, 3.3f), lattice);
-            Prim(PrimitiveType.Cube, "RimB", fin.transform, new Vector3(0.045f, -1.26f, 0f),
-                new Vector3(0.1f, 0.06f, 3.3f), frame);
-            Prim(PrimitiveType.Cube, "RimL", fin.transform, new Vector3(0.045f, 0f, 1.62f),
-                new Vector3(0.1f, 2.42f, 0.06f), frame);
-            Prim(PrimitiveType.Cube, "RimR", fin.transform, new Vector3(0.045f, 0f, -1.62f),
-                new Vector3(0.1f, 2.42f, 0.06f), frame);
+            // ── Стек кріплення до корпусу ──
+            SmoothSphere("Hub", fin.transform, new Vector3(0f, 0f, 0.05f), Vector3.one * 0.38f, hub);
+            var basePad = SmoothCylAt("BasePad", fin.transform, new Vector3(0f, 0f, 0.07f), 0.55f, 0.055f, edgeMat);
+            basePad.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var baseRing = SmoothCylAt("BaseRing", fin.transform, new Vector3(0f, 0f, 0.11f), 0.42f, 0.03f, hub);
+            baseRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
 
-            for (int g = 0; g < 6; g++)
-                Prim(PrimitiveType.Cube, $"H_{g}", fin.transform,
-                    new Vector3(0.06f, -1.05f + g * 0.42f, 0f),
-                    new Vector3(0.016f, 0.02f, 3.15f), lattice);
-            for (int g = 0; g < 7; g++)
-                Prim(PrimitiveType.Cube, $"V_{g}", fin.transform,
-                    new Vector3(0.06f, 0f, -1.4f + g * 0.47f),
-                    new Vector3(0.016f, 2.35f, 0.02f), lattice);
+            // Корпус привода + конусна штанга
+            float armEnd = armLen - 0.1f;
+            SmoothCylAt("Actuator", fin.transform, new Vector3(0f, 0f, 0.28f), 0.28f, 0.16f, dark);
+            var act = fin.transform.Find("Actuator");
+            if (act != null) act.localRotation = Quaternion.Euler(90f, 0f, 0f);
 
-            SmoothSphere("Hub", fin.transform, new Vector3(-0.3f, 0f, 0f), Vector3.one * 0.48f, hub);
-            SmoothCylAt("Actuator", fin.transform, new Vector3(-0.55f, 0f, 0f), 0.16f, 0.26f, carbon);
-            SmoothCylAt("Mount", fin.transform, new Vector3(-0.78f, 0f, 0f), 0.24f, 0.11f, frame);
-            SmoothCylAt("MountCollar", fin.transform, new Vector3(-0.95f, 0f, 0f), 0.32f, 0.06f, lattice);
+            Strut(fin.transform, "Arm", new Vector3(0f, 0f, 0.22f), new Vector3(0f, 0f, armEnd),
+                0.16f, dark);
+            Strut(fin.transform, "ArmCore", new Vector3(0f, 0f, 0.24f), new Vector3(0f, 0f, armEnd - 0.02f),
+                0.08f, edgeMat);
+            // Дві тонкі напрямні вздовж штанги
+            Strut(fin.transform, "RailA", new Vector3(0.07f, 0.06f, 0.26f), new Vector3(0.07f, 0.06f, armEnd),
+                0.035f, hub);
+            Strut(fin.transform, "RailB", new Vector3(-0.07f, -0.06f, 0.26f), new Vector3(-0.07f, -0.06f, armEnd),
+                0.035f, hub);
+
+            SmoothSphere("Wrist", fin.transform, new Vector3(0f, 0f, armEnd + 0.03f),
+                Vector3.one * 0.3f, hub);
+            var wristRing = SmoothCylAt("WristRing", fin.transform,
+                new Vector3(0f, 0f, armEnd + 0.06f), 0.36f, 0.025f, edgeMat);
+            wristRing.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            // ── Решітчаста пластина (outboard) ──
+            float z = armLen + plateT * 0.5f;
+            // Підкладка — темний лист CFRP позаду решітки
+            Prim(PrimitiveType.Cube, "Backing", fin.transform, new Vector3(0f, 0f, z - plateT * 0.15f),
+                new Vector3(plateW - 0.12f, plateH - 0.12f, plateT * 0.35f), dark);
+
+            // Зовнішня титанова рама (товща)
+            float hw = plateW * 0.5f;
+            float hh = plateH * 0.5f;
+            float zF = z + plateT * 0.15f;
+            float ft = plateT + 0.03f;
+            Prim(PrimitiveType.Cube, "RimT", fin.transform, new Vector3(0f, hh - frameW * 0.5f, zF),
+                new Vector3(plateW, frameW, ft), edgeMat);
+            Prim(PrimitiveType.Cube, "RimB", fin.transform, new Vector3(0f, -(hh - frameW * 0.5f), zF),
+                new Vector3(plateW, frameW, ft), edgeMat);
+            Prim(PrimitiveType.Cube, "RimL", fin.transform, new Vector3(-(hw - frameW * 0.5f), 0f, zF),
+                new Vector3(frameW, plateH - frameW * 2f, ft), edgeMat);
+            Prim(PrimitiveType.Cube, "RimR", fin.transform, new Vector3(hw - frameW * 0.5f, 0f, zF),
+                new Vector3(frameW, plateH - frameW * 2f, ft), edgeMat);
+
+            // Внутрішня кромка (трохи врізана, світліша)
+            float inset = frameW + 0.02f;
+            float ft2 = plateT + 0.01f;
+            Prim(PrimitiveType.Cube, "LipT", fin.transform, new Vector3(0f, hh - inset - 0.015f, zF + 0.01f),
+                new Vector3(plateW - inset * 2f, 0.03f, ft2), cellMat);
+            Prim(PrimitiveType.Cube, "LipB", fin.transform, new Vector3(0f, -(hh - inset - 0.015f), zF + 0.01f),
+                new Vector3(plateW - inset * 2f, 0.03f, ft2), cellMat);
+
+            // Щільна стільникова решітка (8 × 10 комірок)
+            const int nH = 8;
+            const int nV = 10;
+            float innerW = plateW - frameW * 2.4f;
+            float innerH = plateH - frameW * 2.4f;
+            float bar = 0.028f;
+            float zL = z + plateT * 0.05f;
+
+            for (int gy = 0; gy <= nH; gy++)
+            {
+                float yy = -innerH * 0.5f + gy * (innerH / nH);
+                Prim(PrimitiveType.Cube, $"H_{gy}", fin.transform,
+                    new Vector3(0f, yy, zL),
+                    new Vector3(innerW, bar, plateT * 0.7f), cellMat);
+            }
+            for (int gx = 0; gx <= nV; gx++)
+            {
+                float xx = -innerW * 0.5f + gx * (innerW / nV);
+                Prim(PrimitiveType.Cube, $"V_{gx}", fin.transform,
+                    new Vector3(xx, 0f, zL),
+                    new Vector3(bar, innerH, plateT * 0.7f), cellMat);
+            }
+
+            // Кутові накладки (як механічно оброблені титанові стики)
+            float c = 0.11f;
+            float cz = zF + 0.01f;
+            Prim(PrimitiveType.Cube, "C_TL", fin.transform, new Vector3(-(hw - c * 0.55f), hh - c * 0.55f, cz),
+                new Vector3(c, c, ft + 0.01f), hub);
+            Prim(PrimitiveType.Cube, "C_TR", fin.transform, new Vector3(hw - c * 0.55f, hh - c * 0.55f, cz),
+                new Vector3(c, c, ft + 0.01f), hub);
+            Prim(PrimitiveType.Cube, "C_BL", fin.transform, new Vector3(-(hw - c * 0.55f), -(hh - c * 0.55f), cz),
+                new Vector3(c, c, ft + 0.01f), hub);
+            Prim(PrimitiveType.Cube, "C_BR", fin.transform, new Vector3(hw - c * 0.55f, -(hh - c * 0.55f), cz),
+                new Vector3(c, c, ft + 0.01f), hub);
         }
     }
 
@@ -588,7 +663,7 @@ public static class RocketVisualBuilder
             Vector3 foot = new Vector3(
                 Mathf.Sin(a) * (Radius + 6.45f), 0.06f, Mathf.Cos(a) * (Radius + 6.45f));
 
-            // Hinge fairing + primary boom + secondary A-frame
+            // Обтічник шарніра + основна балка + вторинна A-frame
             SmoothSphere("Hinge", legRoot.transform, hinge, Vector3.one * 0.56f, titanium);
             SmoothCylAt("HingeCap", legRoot.transform, hinge + Vector3.up * 0.16f, 0.58f, 0.09f, darkMetal);
             SmoothCylAt("HingeFair", legRoot.transform, hinge + Vector3.up * 0.35f, 0.42f, 0.2f, carbon);
@@ -609,7 +684,7 @@ public static class RocketVisualBuilder
             SmoothSphere("HydJoint", legRoot.transform, bodyAnchor, Vector3.one * 0.26f, metal);
             SmoothSphere("HydKnee", legRoot.transform, boomMid, Vector3.one * 0.2f, titanium);
 
-            // Landing foot stack — crush core + wide pad + traction ring
+            // Стек посадкової ноги — crush core + широка підошва + traction ring
             SmoothCylAt("Crush", legRoot.transform, foot + Vector3.up * 0.42f, 0.78f, 0.28f, carbon);
             SmoothCylAt("CrushLip", legRoot.transform, foot + Vector3.up * 0.22f, 0.95f, 0.05f, darkMetal);
             SmoothCylAt("Foot", legRoot.transform, foot + Vector3.up * 0.12f, 1.95f, 0.08f, metal);
@@ -674,9 +749,9 @@ public static class RocketVisualBuilder
 
     static void BuildEngineFX(Transform visual)
     {
-        // Nozzle exit lip is near y≈0 (center bell s=1.2). Emit just below the exit, not into the tank.
+        // Кромка exit сопла біля y≈0 (center bell s=1.2). Емісія одразу під exit, не в бак.
         const float exitY = -0.08f;
-        // Default PS emits along +Z; pitch 90° → exhaust goes down (−Y).
+        // За замовчуванням PS летить уздовж +Z; pitch 90° → вихлоп униз (−Y).
         var down = Quaternion.Euler(90f, 0f, 0f);
 
         var flameGo = new GameObject("EngineFlame");
@@ -733,12 +808,12 @@ public static class RocketVisualBuilder
         fx.engineLight = light;
     }
 
-    /// <summary>Unity requires ALL velocityOverLifetime axes in the same MinMaxCurve mode.</summary>
+    /// <summary>Unity вимагає, щоб УСІ осі velocityOverLifetime були в одному режимі MinMaxCurve.</summary>
     static void DisableVelocityOverLifetime(ParticleSystem ps)
     {
         var vel = ps.velocityOverLifetime;
         vel.enabled = false;
-        // Force identical Constant mode on every axis (prevents runtime error spam)
+        // Форсувати однаковий Constant mode на кожній осі (запобігає spam runtime-помилок)
         vel.x = new ParticleSystem.MinMaxCurve(0f);
         vel.y = new ParticleSystem.MinMaxCurve(0f);
         vel.z = new ParticleSystem.MinMaxCurve(0f);
@@ -747,7 +822,7 @@ public static class RocketVisualBuilder
 
     static void ConfigureFlameOuter(ParticleSystem ps)
     {
-        // Warm sheath from nozzle exit — billboard, world-space, no broken VOL curves
+        // Тепла оболонка з exit сопла — billboard, world-space, без зламаних VOL curves
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
@@ -772,7 +847,7 @@ public static class RocketVisualBuilder
         shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Cone;
         shape.angle = 7f;
-        shape.radius = 1.15f; // ≈ center nozzle exit radius
+        shape.radius = 1.15f; // ≈ радіус exit центрального сопла
         shape.radiusThickness = 0.55f;
         shape.arc = 360f;
         shape.alignToDirection = false;
@@ -827,7 +902,7 @@ public static class RocketVisualBuilder
 
     static void ConfigureFlameCore(ParticleSystem ps)
     {
-        // Bright core jet from throat/exit center
+        // Яскравий струмінь ядра з центру throat/exit
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
@@ -969,7 +1044,7 @@ public static class RocketVisualBuilder
         rot.enabled = true;
         rot.separateAxes = false;
         rot.z = new ParticleSystem.MinMaxCurve(-0.6f, 0.6f);
-        // Keep x/y same mode as z when separateAxes is false — Unity uses z only
+        // Тримати x/y у тому ж mode, що z, коли separateAxes=false — Unity використовує лише z
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;

@@ -15,7 +15,7 @@ public static class SceneBootstrap
     }
 }
 
-/// <summary>Runs heavy bootstrap across frames so splash can animate.</summary>
+/// <summary>Важкий bootstrap рознесено по кадрах, щоб splash міг анімуватись.</summary>
 [DefaultExecutionOrder(-100)]
 public class BootstrapRunner : MonoBehaviour
 {
@@ -30,17 +30,17 @@ public class BootstrapRunner : MonoBehaviour
                 splash.SetProgress(t, UILocale.IsUK ? uk : en);
         }
 
-        // One frame so splash paints before heavy work
+        // Один кадр, щоб splash встиг намалюватись до важкої роботи
         yield return null;
 
-        // Lightweight defaults
+        // Легкі defaults
         Application.targetFrameRate = 60;
         QualitySettings.vSyncCount = 0;
         BorderlessWindow.ApplyBorderlessChrome();
         if (SystemInfo.systemMemorySize > 0 && SystemInfo.systemMemorySize < 9000)
             QualitySettings.SetQualityLevel(Mathf.Min(QualitySettings.GetQualityLevel(), 1), true);
-        // Do not clamp shadowDistance here — CameraFollow.FitShadows scales it with zoom.
-        // A fixed 400 m cap made far orbit views drop into blurry far cascades.
+        // Не обмежувати shadowDistance тут — CameraFollow.FitShadows масштабує його з zoom.
+        // Фіксований ліміт 400 м скидав далекі orbit-ракурси в розмиті far-cascades.
 
         Prog(0.08f, "Пошук ракети…", "Finding rocket…");
         yield return null;
@@ -143,7 +143,7 @@ public class BootstrapRunner : MonoBehaviour
         rocket.neuralController = rocket.GetComponent<NeuralController>();
         rocket.hybridController = rocket.GetComponent<HybridController>();
 
-        // Hybrid wiring + stable NN weights for presentation
+        // Обв’язка Hybrid + стабільні ваги NN для презентації
         if (rocket.hybridController != null)
         {
             rocket.hybridController.fuzzy = rocket.fuzzyController;
@@ -155,7 +155,7 @@ public class BootstrapRunner : MonoBehaviour
             if (rocket.neuralController.generation <= 0
                 && rocket.neuralController.bestCost >= float.MaxValue * 0.5f)
                 rocket.neuralController.InstallIdealWeights();
-            // Demo-safe default; UI «Train» can re-enable ES
+            // Безпечний для демо default; UI «Train» може знову ввімкнути ES
             if (!UserSettings.Train)
                 rocket.neuralController.enableTraining = false;
         }

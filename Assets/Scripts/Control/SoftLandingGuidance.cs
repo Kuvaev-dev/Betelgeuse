@@ -41,7 +41,7 @@ public static class SoftLandingGuidance
 
         if (h < 25f)
         {
-            // Stronger terminal brake so Fuzzy/Hybrid stay under 3.5 m/s gate
+            // Сильніше terminal-гальмування, щоб Fuzzy/Hybrid лишались під gate 3.5 м/с
             if (v < -3.2f) mult = Mathf.Max(mult, 1.35f);
             else if (v < -2.2f) mult = Mathf.Max(mult, 1.22f);
         }
@@ -62,7 +62,7 @@ public static class SoftLandingGuidance
 
     /// <summary>
     /// TVC-стабілізація: τ ∝ (−td.z, td.x), td = R(cmd)·up.
-    /// Cross(worldUp, bodyUp) &gt; 0 ⇒ cmd &gt; 0 (restoring).
+    /// Cross(worldUp, bodyUp) &gt; 0 ⇒ cmd &gt; 0 (відновлювальний момент).
     /// </summary>
     public static Vector3 AttitudeGimbal(
         Quaternion rotation, Vector3 angularVelocityBody,

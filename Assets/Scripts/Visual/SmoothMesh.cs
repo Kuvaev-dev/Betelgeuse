@@ -243,7 +243,7 @@ public static class SmoothMesh
         if (cachedCapsule != null && cachedCapsule.name == $"SmoothCap_{segments}_{hemiRings}")
             return cachedCapsule;
 
-        // height 2, radius 0.5 → body height 1 (−0.5..+0.5), hemispheres radius 0.5
+        // висота 2, радіус 0.5 → висота корпусу 1 (−0.5..+0.5), півсфери радіус 0.5
         float R = 0.5f;
         float halfBody = 0.5f;
 
@@ -269,7 +269,7 @@ public static class SmoothMesh
             }
         }
 
-        // Bottom hemisphere: south pole → equator at y = -halfBody
+        // Нижня півсфера: південний полюс → екватор на y = -halfBody
         for (int ring = 0; ring <= hemiRings; ring++)
         {
             float t = ring / (float)hemiRings;
@@ -280,7 +280,7 @@ public static class SmoothMesh
             AddRing(y, rr, Vector3.up * sy, t * 0.3f);
         }
 
-        // Cylindrical body (skip duplicate bottom equator)
+        // Циліндричний корпус (без дубльованого нижнього екватора)
         const int bodySteps = 2;
         for (int b = 1; b <= bodySteps; b++)
         {
@@ -289,7 +289,7 @@ public static class SmoothMesh
             AddRing(y, R, Vector3.zero, 0.3f + t * 0.4f);
         }
 
-        // Top hemisphere (skip equator already added as body end)
+        // Верхня півсфера (екватор уже додано як кінець корпусу — пропустити)
         for (int ring = 1; ring <= hemiRings; ring++)
         {
             float t = ring / (float)hemiRings;
@@ -404,7 +404,7 @@ public static class SmoothMesh
 
     /// <summary>
     /// Дзвін сопла з криволінійним профілем (кілька кілець) — без «прямого конуса».
-    /// height 2 (−1..1), exit r=0.5, throat r≈0.20.
+    /// висота 2 (−1..1), exit r=0.5, throat r≈0.20.
     /// </summary>
     public static Mesh Bell(int segments = 64, int rings = 14)
     {
@@ -418,28 +418,28 @@ public static class SmoothMesh
         var norms = new Vector3[vCount];
         var uvs = new Vector2[vCount];
 
-        // Smooth bell radius: t=0 exit (bottom) → t=1 throat (top)
+        // Гладкий радіус bell: t=0 exit (низ) → t=1 throat (верх)
         float RadiusAt(float t)
         {
             t = Mathf.Clamp01(t);
             float exitR = 0.50f;
             float throatR = 0.195f;
-            // Flare wider near exit; gentle neck toward throat
+            // Ширший flare біля exit; м’яке звуження до throat
             float flare = Mathf.Pow(1f - t, 1.55f);
             return Mathf.Lerp(throatR, exitR, flare);
         }
 
         for (int r = 0; r <= rings; r++)
         {
-            float t = r / (float)rings;          // 0 bottom .. 1 top
+            float t = r / (float)rings;          // 0 низ .. 1 верх
             float y = Mathf.Lerp(-1f, 1f, t);
             float rad = RadiusAt(t);
-            // d(radius)/d(t): negative (shrinks upward)
+            // d(radius)/d(t): від’ємне (звужується вгору)
             float t0 = Mathf.Max(0f, t - 0.02f);
             float t1 = Mathf.Min(1f, t + 0.02f);
             float drDt = (RadiusAt(t1) - RadiusAt(t0)) / Mathf.Max(1e-4f, t1 - t0);
-            // Profile tangent in (radial, y): (drDt, 2) since y spans 2 over t∈[0,1]
-            // Outward normal ⊥ tangent: (2, -drDt) in (radial, y)
+            // Дотична профілю в (radial, y): (drDt, 2), бо y охоплює 2 при t∈[0,1]
+            // Зовнішня нормаль ⊥ дотичної: (2, -drDt) у (radial, y)
             float nRad = 2f;
             float nY = -drDt;
 
@@ -513,9 +513,9 @@ public static class SmoothMesh
 
         float rBot = 0.5f;
         float rTop = 0.5f * topRatio;
-        float dr = rTop - rBot; // over t 0→1
+        float dr = rTop - rBot; // по t 0→1
         float nRad = 2f;
-        float nY = -dr; // outward normal component
+        float nY = -dr; // компонента зовнішньої нормалі
 
         for (int r = 0; r <= rings; r++)
         {
@@ -559,8 +559,8 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Tangent ogive nose: base r=0.5 at y=-1, smooth spherical tip at y=+1.
-    /// Single continuous profile (no stacked spheres). tipBlunt = tip radius / base R.
+    /// Нос tangent ogive: base r=0.5 при y=-1, гладкий сферичний tip при y=+1.
+    /// Єдиний неперервний профіль (без накладених сфер). tipBlunt = tip radius / base R.
     /// </summary>
     public static Mesh Ogive(float tipBlunt = 0.06f, int segments = 96, int rings = 36)
     {
@@ -569,21 +569,21 @@ public static class SmoothMesh
         tipBlunt = Mathf.Clamp(tipBlunt, 0.02f, 0.14f);
         var mesh = new Mesh { name = $"SmoothOgive_{segments}x{rings}" };
 
-        // Unit: height H=2 (−1..+1), base R=0.5
+        // Одиниця: висота H=2 (−1..+1), base R=0.5
         const float H = 2f;
         const float R = 0.5f;
         float tipR = R * tipBlunt;
-        // Classic tangent-ogive sphere radius for full height, then we cut early for tip sphere
+        // Класичний радіус tangent-ogive на повну висоту, далі раннє обрізання під tip-сферу
         float rho = (R * R + H * H) / (2f * R);
 
-        // Join ogive → spherical tip where slopes match (approx at tipR radius)
-        // x from base: r(x) = sqrt(rho^2 - (H-x)^2) + R - rho
-        // Tip sphere center sits on axis so it is tangent to ogive at join.
-        float joinR = tipR * 1.15f; // slightly above tip radius on ogive
+        // Стик ogive → сферичний tip, де збігаються нахили (приблизно на радіусі tipR)
+        // x від основи: r(x) = sqrt(rho^2 - (H-x)^2) + R - rho
+        // Центр tip-сфери на осі, щоб бути дотичною до ogive на стику.
+        float joinR = tipR * 1.15f; // трохи вище tip radius на ogive
         float joinX = 0f;
         for (int iter = 0; iter < 24; iter++)
         {
-            // binary-ish search x where ogive r ≈ joinR
+            // приблизно бінарний пошук x, де ogive r ≈ joinR
             float lo = 0f, hi = H * 0.98f;
             for (int k = 0; k < 20; k++)
             {
@@ -597,10 +597,10 @@ public static class SmoothMesh
         joinX = Mathf.Clamp(joinX, H * 0.55f, H * 0.92f);
         float underJ = rho * rho - (H - joinX) * (H - joinX);
         float rJoin = underJ > 0f ? Mathf.Sqrt(underJ) + R - rho : joinR;
-        // Spherical tip center: on axis, radius tipR, passes through (rJoin, joinX) approx
+        // Центр сферичного tip: на осі, радіус tipR, приблизно через (rJoin, joinX)
         // (rJoin)^2 + (joinX - cY_from_base)^2 = tipR^2  → place center so apex is at H
-        float tipCenterFromBase = H - tipR; // apex at H
-        // Pull join to lie on that sphere if needed
+        float tipCenterFromBase = H - tipR; // верхівка на H
+        // Підтягнути стик на ту сферу за потреби
         float maxROnSphere = Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - (joinX - tipCenterFromBase) * (joinX - tipCenterFromBase)));
         if (maxROnSphere > 1e-4f && rJoin > maxROnSphere)
             rJoin = maxROnSphere;
@@ -608,12 +608,12 @@ public static class SmoothMesh
         float RadiusAt(float t)
         {
             t = Mathf.Clamp01(t);
-            float x = t * H; // from base
+            float x = t * H; // від основи
             if (x <= joinX)
             {
                 float under = rho * rho - (H - x) * (H - x);
                 float r = under > 0f ? Mathf.Sqrt(under) + R - rho : 0f;
-                // smooth blend into sphere near join
+                // плавний blend у сферу біля стику
                 float blendStart = joinX * 0.88f;
                 if (x > blendStart)
                 {
@@ -625,7 +625,7 @@ public static class SmoothMesh
                 }
                 return Mathf.Max(0.001f, r);
             }
-            // Spherical tip
+            // Сферичний tip
             float d = x - tipCenterFromBase;
             if (d >= tipR) return 0.001f;
             return Mathf.Max(0.001f, Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - d * d)));
@@ -663,7 +663,7 @@ public static class SmoothMesh
             }
         }
 
-        // True pole (sharp-free tip)
+        // Справжній полюс (tip без гостряка)
         verts[pole] = new Vector3(0f, 1f, 0f);
         norms[pole] = Vector3.up;
         uvs[pole] = new Vector2(0.5f, 1f);
@@ -679,7 +679,7 @@ public static class SmoothMesh
             tris.Add(i0); tris.Add(i2); tris.Add(i1);
             tris.Add(i1); tris.Add(i2); tris.Add(i3);
         }
-        // Cap last ring → pole (last ring is already at tip; fan improves tip)
+        // Замкнути останнє кільце → полюс (останнє кільце вже на кінці; fan покращує tip)
         int last = rings * stride;
         for (int i = 0; i < segments; i++)
         {
@@ -698,7 +698,7 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Frustum GO: diameter = base diameter, topRatio = top/base, halfHeight = half height.
+    /// Frustum GO: diameter = діаметр основи, topRatio = top/base, halfHeight = піввисота.
     /// </summary>
     public static GameObject MakeFrustum(string name, Transform parent, Vector3 pos,
         float baseDiameter, float halfHeight, float topRatio, Material mat)
@@ -717,7 +717,7 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Ogive GO: diameter = base diameter, halfHeight = half height of ogive.
+    /// Ogive GO: diameter = діаметр основи, halfHeight = піввисота ogive.
     /// </summary>
     public static GameObject MakeOgive(string name, Transform parent, Vector3 pos,
         float baseDiameter, float halfHeight, Material mat, float tipBlunt = 0.06f)

@@ -40,7 +40,7 @@ public class DataLogger : MonoBehaviour
     public void Initialize()
     {
         rocket = GetComponent<RocketPhysics>();
-        // Memory-only until export packs a run folder (no loose files in SimulationLogs root)
+        // Лише в пам’яті, доки export не збере папку запуску (без розкиданих файлів у корені SimulationLogs)
         filePath = null;
         data.Clear();
         samples.Clear();
@@ -49,7 +49,7 @@ public class DataLogger : MonoBehaviour
             "speed_mps,horizSpeed_mps,thrust_N,thrust_kN,mass_kg,fuel_kg,twr," +
             "tilt_deg,pitchRate_dps,yawRate_dps,gimbalX_deg,gimbalZ_deg,miss_m,controlMode");
         sampleCounter = 0;
-        logStride = 10; // ~20 Hz @ dt=0.005
+        logStride = 10; // ~20 Гц @ dt=0.005
     }
 
     public void Log(RocketState state)
@@ -65,7 +65,7 @@ public class DataLogger : MonoBehaviour
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, state.position.y));
         float twr = state.currentThrust / Mathf.Max(1f, state.TotalMass * g);
 
-        // Gimbal: thrustDirection relative to body up
+        // Gimbal: thrustDirection відносно body up
         Vector3 td = state.thrustDirection.normalized;
         float gimbX = Mathf.Atan2(-td.z, td.y) * Mathf.Rad2Deg;
         float gimbZ = Mathf.Atan2(td.x, td.y) * Mathf.Rad2Deg;
@@ -111,13 +111,13 @@ public class DataLogger : MonoBehaviour
     }
 
     /// <summary>
-    /// Optionally write timeseries into a run pack folder. No root-level scatter.
+    /// Опційно записати timeseries у теку run pack. Без розкидання файлів у корені.
     /// </summary>
     public void Save(string runDirectory = null)
     {
         if (data.Count <= 1) return;
         if (string.IsNullOrEmpty(runDirectory) || !Directory.Exists(runDirectory))
-            return; // kept in memory for ResearchExporter.ExportLanding
+            return; // тримається в пам’яті для ResearchExporter.ExportLanding
 
         filePath = Path.Combine(runDirectory, "03_timeseries.csv");
         File.WriteAllLines(filePath, data, Encoding.UTF8);

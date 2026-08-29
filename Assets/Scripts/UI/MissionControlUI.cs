@@ -36,7 +36,7 @@ public class MissionControlUI : MonoBehaviour
     Image trajToggleImg, hideBtnImg, viewToggleImg, pauseBtnImg;
     TMP_Text txtViewBtn, txtPauseBtn;
 
-    // Metric label texts (for language refresh)
+    // Тексти підписів метрик (для оновлення мови)
     readonly List<TMP_Text> metricLabels = new();
 
     Slider windSlider, testsSlider, timeScaleSlider, liveSpeedSlider, seedSlider;
@@ -45,8 +45,8 @@ public class MissionControlUI : MonoBehaviour
     Image thrBarFill, fuelBarFill, tiltBarFill, statusDot, progressFill, resultPanelBg;
     GameObject resultRoot, progressRoot, canvasRoot, stepBarGo, helpRoot;
     GameObject leftPanelGo, rightPanelGo, topBarGo, topMenuGo;
-    GameObject captionRoot; // separate canvas — no flicker on theme rebuild
-    /// <summary>Survives RebuildUi — condition sliders/inputs never destroyed → no NumField blink.</summary>
+    GameObject captionRoot; // окремий canvas — без мерехтіння при rebuild теми
+    /// <summary>Переживає RebuildUi — слайдери/інпути умов ніколи не знищуються → без миготіння NumField.</summary>
     GameObject conditionSectionGo;
     float conditionSectionHeight;
     readonly List<(TMP_Text label, TMP_Text unit, string labelKey, string unitKey)> conditionLabelBindings = new();
@@ -88,6 +88,17 @@ public class MissionControlUI : MonoBehaviour
     static Color C_Alert => UiTypography.Alert;
     static Color C_Text => UiTypography.Text;
     static Color C_Muted => UiTypography.Muted;
+    /// <summary>Вторинні підписи (результати, підказки) — чорнило теми, сильніше за muted.</summary>
+    static Color C_Secondary
+    {
+        get
+        {
+            // Підтягнути muted до body text, щоб сірий не вимивався на paper чи темних панелях
+            if (UiTheme.IsLightBackground)
+                return Color.Lerp(C_Text, C_Muted, 0.22f);
+            return Color.Lerp(C_Text, C_Muted, 0.38f);
+        }
+    }
     static Color C_Btn => UiTypography.Btn;
     static Color C_BtnActive => UiTypography.BtnActive;
     static Color C_BtnHover => UiTheme.Current.BtnHover;
@@ -96,16 +107,16 @@ public class MissionControlUI : MonoBehaviour
     static Color C_GraphC => UiTheme.Current.GraphC;
 
     /// <summary>
-    /// Section titles: theme text (not neon accent — avoids permanent green on Green theme).
+    /// Заголовки секцій: текст теми (не neon-акцент — уникає постійного зеленого на Green-темі).
     /// </summary>
     static Color C_Header
     {
         get
         {
-            // Soft blend of text + accent so headers track the theme without looking “always green”
+            // М’яке змішування text + accent, щоб заголовки стежили за темою без вигляду «завжди зелені»
             Color t = C_Text;
             Color a = C_Accent;
-            // Prefer text weight so Green/Cyan neon does not dominate labels
+            // Більша вага тексту, щоб neon Green/Cyan не домінував у підписах
             return Color.Lerp(t, a, UiTheme.IsLightBackground ? 0.22f : 0.28f);
         }
     }
@@ -172,7 +183,7 @@ public class MissionControlUI : MonoBehaviour
     void OnLanguageChanged()
     {
         if (!built || rebuilding) return;
-        // Rebuild chrome/left/labels, but condition NumFields stay alive (stashed)
+        // Перебудувати chrome/left/labels, але condition NumFields лишаються живими (stashed)
         StartCoroutine(RebuildUiSmooth());
     }
 
@@ -187,7 +198,7 @@ public class MissionControlUI : MonoBehaviour
     {
         if (rebuilding) yield break;
         rebuilding = true;
-        // Keep canvas visible — condition inputs are not destroyed, only chrome rebuilds
+        // Тримати canvas видимим — поля умов не знищуються, перебудовується лише chrome
         RebuildUiCore();
         Canvas.ForceUpdateCanvases();
         yield return null;
@@ -209,7 +220,7 @@ public class MissionControlUI : MonoBehaviour
         float[] snapAlt = graphAlt != null ? graphAlt.GetSamples() : null;
         float[] snapVel = graphVel != null ? graphVel.GetSamples() : null;
         float[] snapThr = graphThr != null ? graphThr.GetSamples() : null;
-        // Slider values live inside conditionSectionGo — keep them by detaching section
+        // Значення слайдерів живуть у conditionSectionGo — зберегти, від’єднавши секцію
         DetachConditionSection();
 
         bool hide = panelsHidden;
@@ -221,11 +232,11 @@ public class MissionControlUI : MonoBehaviour
         modeButtonImages.Clear();
         metricLabels.Clear();
         if (canvasRoot != null) Destroy(canvasRoot);
-        // conditionSectionGo is parented to this MonoBehaviour — survives Destroy(canvasRoot)
+        // conditionSectionGo прив’язано до цього MonoBehaviour — переживає Destroy(canvasRoot)
         Build();
         WireLegacyDashboard();
 
-        // Re-apply theme to reused condition controls + rest of new chrome
+        // Повторно застосувати тему до reused condition controls + решти нового chrome
         ApplyThemeInPlace();
         RefreshConditionLabels();
 
@@ -252,7 +263,7 @@ public class MissionControlUI : MonoBehaviour
     void DetachConditionSection()
     {
         if (conditionSectionGo == null) return;
-        // Park under MissionControlUI object so canvas destroy cannot wipe inputs
+        // Припаркувати під об’єкт MissionControlUI, щоб destroy canvas не стер інпути
         conditionSectionGo.transform.SetParent(transform, false);
         conditionSectionGo.SetActive(false);
     }
@@ -266,7 +277,7 @@ public class MissionControlUI : MonoBehaviour
                 b.label.text = UILocale.T(b.labelKey);
             if (b.unit != null && !string.IsNullOrEmpty(b.unitKey))
                 b.unit.text = UILocale.T(b.unitKey);
-            // Headers have no unit binding — same color as other section titles
+            // У заголовків немає binding одиниць — той самий колір, що в інших section titles
             if (b.label != null)
                 b.label.color = b.unit == null ? C_Header : C_Text;
             if (b.unit != null) b.unit.color = C_Muted;
@@ -299,8 +310,8 @@ public class MissionControlUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Recolor existing HUD without Destroy/Build — keeps TMP_InputField instances
-    /// so condition fields do not blink on theme cycle.
+    /// Перефарбувати наявний HUD без Destroy/Build — зберігає екземпляри TMP_InputField
+    /// щоб поля умов не миготіли при зміні теми.
     /// </summary>
     void ApplyThemeInPlace()
     {
@@ -311,7 +322,7 @@ public class MissionControlUI : MonoBehaviour
             if (img == null) continue;
             string n = img.gameObject.name;
 
-            // Skip fully transparent hit boxes
+            // Пропускати повністю прозорі hit boxes
             if (img.color.a < 0.01f && (n == "Row2" || n == "Row1" || n == "Viewport"
                 || n == "Content" || n == "LViewport" || n == "LContent"
                 || n.StartsWith("GraphRoot")))
@@ -407,7 +418,7 @@ public class MissionControlUI : MonoBehaviour
                     else if (n == "MBtn" || n == "Action" || n.EndsWith("Btn")
                              || n == "LangBtn" || n == "ThemeBtn" || n == "HideBtn")
                     {
-                        // Default chrome/action fill — specialized ones refined below
+                        // Базова заливка chrome/action — спеціалізовані нижче
                         if (img.GetComponent<Button>() != null)
                             img.color = C_Btn;
                     }
@@ -421,7 +432,7 @@ public class MissionControlUI : MonoBehaviour
             }
         }
 
-        // Also theme condition section (may be parked under this transform)
+        // Також темизувати секцію умов (може бути «припаркована» під цим transform)
         if (conditionSectionGo != null)
         {
             foreach (var img in conditionSectionGo.GetComponentsInChildren<Image>(true))
@@ -447,7 +458,7 @@ public class MissionControlUI : MonoBehaviour
                     img.color = HeaderLineColor;
                 else if (n == "SecHdr")
                 {
-                    // text is TMP, not Image
+                    // текст — TMP, не Image
                 }
             }
             foreach (var tmp in conditionSectionGo.GetComponentsInChildren<TMP_Text>(true))
@@ -457,7 +468,7 @@ public class MissionControlUI : MonoBehaviour
             }
         }
 
-        // Panel outlines
+        // Контури панелей
         void StyleOutlines(Transform root)
         {
             if (root == null) return;
@@ -481,7 +492,7 @@ public class MissionControlUI : MonoBehaviour
         StyleOutlines(canvasRoot.transform);
         if (conditionSectionGo != null) StyleOutlines(conditionSectionGo.transform);
 
-        // —— Buttons: solid fills + always-readable labels ——
+        // —— Кнопки: суцільні заливки + завжди читабельні підписи ——
         void PaintButton(Button btn, Color bg)
         {
             if (btn == null) return;
@@ -490,11 +501,21 @@ public class MissionControlUI : MonoBehaviour
             if (img != null) img.color = bg;
             var cb = btn.colors;
             cb.normalColor = Color.white;
-            cb.highlightedColor = new Color(1.12f, 1.12f, 1.14f, 1f);
-            cb.pressedColor = new Color(0.85f, 0.85f, 0.88f, 1f);
-            cb.selectedColor = Color.white;
+            if (UiTheme.IsLightBackground)
+            {
+                // Light-теми: піднімати на hover/press — ніколи не давити в темно-сірий
+                cb.highlightedColor = new Color(1.06f, 1.07f, 1.1f, 1f);
+                cb.pressedColor = new Color(0.94f, 0.96f, 1f, 1f);
+                cb.selectedColor = new Color(1.04f, 1.05f, 1.08f, 1f);
+            }
+            else
+            {
+                cb.highlightedColor = new Color(1.12f, 1.12f, 1.14f, 1f);
+                cb.pressedColor = new Color(0.85f, 0.85f, 0.88f, 1f);
+                cb.selectedColor = Color.white;
+            }
             btn.colors = cb;
-            // Title = contrast on fill; ModeSub = secondary readable line
+            // Title = контраст на заливці; ModeSub = вторинний читабельний рядок
             var tmps = btn.GetComponentsInChildren<TMP_Text>(true);
             for (int ti = 0; ti < tmps.Length; ti++)
             {
@@ -550,11 +571,11 @@ public class MissionControlUI : MonoBehaviour
         UpdateHideButtonVisual();
         UpdatePauseButtonVisual();
 
-        // —— Body text only (never overwrite button labels) ——
+        // —— Лише body-текст (ніколи не перезаписувати підписи кнопок) ——
         void FixTmp(TMP_Text t)
         {
             if (t == null) return;
-            if (t.GetComponentInParent<Button>() != null) return; // keep ButtonLabelOn
+            if (t.GetComponentInParent<Button>() != null) return; // тримати ButtonLabelOn
             if (t.GetComponentInParent<TMP_InputField>() != null)
             {
                 t.color = C_Text;
@@ -587,27 +608,27 @@ public class MissionControlUI : MonoBehaviour
             foreach (var tmp in conditionSectionGo.GetComponentsInChildren<TMP_Text>(true))
                 FixTmp(tmp);
 
-        // Section headers everywhere (including condition block)
+        // Заголовки секцій всюди (включно з блоком умов)
         foreach (var tmp in canvasRoot.GetComponentsInChildren<TMP_Text>(true))
         {
             if (tmp != null && tmp.gameObject.name == "SecHdr")
                 tmp.color = C_Header;
         }
 
-        // Known roles (override generic fix)
+        // Відомі ролі (перекривають generic fix)
         void T(TMP_Text t, Color c) { if (t != null) t.color = c; }
         T(txtTitle, C_Header);
         T(txtMode, C_Amber);
         T(txtTime, C_Text);
         T(txtInsight, C_Text);
-        T(txtInfo, C_Muted);
+        T(txtInfo, C_Secondary);
         T(txtWinner, C_Ok);
         T(txtCamMode, C_Cyan);
-        T(txtCamHelp, C_Muted);
-        T(txtGraphHint, C_Muted);
+        T(txtCamHelp, C_Secondary);
+        T(txtGraphHint, C_Secondary);
         T(txtProgress, UiTheme.ChromeText);
         T(txtStep, C_Text);
-        // Edge chips already painted above; force label ink again after FixTmp skip
+        // Краї чіпів уже розфарбовано вище; знову форсувати чорнило підпису після FixTmp skip
         if (txtLangBtn != null && hideBtnImg == null) { /* no-op */ }
         if (txtLangBtn != null)
         {
@@ -628,31 +649,41 @@ public class MissionControlUI : MonoBehaviour
                     ? txtHideBtn.transform.parent.GetComponent<Image>() : null);
             txtHideBtn.color = ButtonLabelOn(p != null ? p.color : C_Btn);
         }
-        foreach (var m in metricLabels) T(m, C_Muted);
+        foreach (var m in metricLabels) T(m, C_Secondary);
         if (txtStep != null) txtStep.color = C_Text;
+        // Вторинні підписи result / compare стежать за чорнилом теми
+        if (canvasRoot != null)
+        {
+            foreach (var img in canvasRoot.GetComponentsInChildren<Image>(true))
+            {
+                if (img == null) continue;
+                string n = img.gameObject.name;
+                if (n is not ("StatBadge" or "Metric_0" or "Metric_1" or "Metric_2" or "Metric_3"
+                    or "ScorePill")) continue;
+                var tmps = img.GetComponentsInChildren<TMP_Text>(true);
+                if (tmps == null || tmps.Length == 0) continue;
+                if (n == "StatBadge" && tmps.Length >= 1)
+                    tmps[0].color = C_Secondary;
+                if (n.StartsWith("Metric_") && tmps.Length >= 1)
+                    tmps[0].color = C_Secondary;
+                if (n == "ScorePill" && tmps.Length >= 2)
+                    tmps[1].color = C_Secondary;
+            }
+        }
+        if (txtResultBody != null)
+        {
+            bool likelyAlert = txtResultBody.color.r > txtResultBody.color.g + 0.15f
+                && txtResultBody.color.r > txtResultBody.color.b + 0.1f;
+            if (!likelyAlert)
+                txtResultBody.color = C_Secondary;
+        }
         RefreshConditionLabels();
 
         graphAlt?.ApplyThemeColors();
         graphVel?.ApplyThemeColors();
         graphThr?.ApplyThemeColors();
 
-        for (int i = 0; i < modeButtonImages.Count; i++)
-        {
-            if (modeButtonImages[i] == null) continue;
-            bool active = i < modeButtons.Count && modeButtons[i] != null
-                && rocket != null
-                && modeButtons[i].gameObject.name == "Mode_" + rocket.controlMode;
-            Color bg = active ? C_BtnActive : C_Btn;
-            modeButtonImages[i].color = bg;
-            if (modeButtons[i] == null) continue;
-            foreach (var tmp in modeButtons[i].GetComponentsInChildren<TMP_Text>(true))
-            {
-                if (tmp == null) continue;
-                tmp.color = tmp.gameObject.name == "ModeSub"
-                    ? ModeSubtitleOn(bg)
-                    : ButtonLabelOn(bg);
-            }
-        }
+        PaintModeButtons();
 
         RefreshSpeedLabel();
         if (rocket != null) UpdateFlightStep(rocket.state);
@@ -662,26 +693,40 @@ public class MissionControlUI : MonoBehaviour
 
     static float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 
-    /// <summary>NumField fill from theme (not fixed gray).</summary>
+    /// <summary>Заливка NumField — має контрастувати зі SliderBlock/panel на кожній темі.</summary>
     static Color NumFieldBg()
     {
         var p = UiTheme.Current;
         if (UiTheme.IsLightBackground)
         {
-            // Paper field with a hint of theme accent
-            Color bg = Color.Lerp(Color.white, p.PanelSoft, 0.35f);
-            bg = Color.Lerp(bg, p.Accent, 0.06f);
-            bg.a = 0.98f;
+            // Виразний холодний чіп на білій панелі (раніше майже невидимий)
+            Color bg = new Color(0.86f, 0.89f, 0.94f, 1f);
+            bg = Color.Lerp(bg, p.Btn, 0.35f);
+            bg = Color.Lerp(bg, p.Accent, 0.1f);
+            bg.a = 1f;
             return bg;
         }
-        // Dark themes: panel + btn + edge + accent so Cyan/Amber/Violet/Green differ
+        // Темні теми: panel + btn + edge + accent, щоб Cyan/Amber/Violet/Green відрізнялись
         Color baseBg = Color.Lerp(p.PanelSoft, p.Btn, 0.5f);
         baseBg = Color.Lerp(baseBg, p.Edge, 0.22f);
         baseBg = Color.Lerp(baseBg, p.Accent, 0.1f);
-        // Lift slightly so fields read as controls, not dead gray
         baseBg = Color.Lerp(baseBg, Color.white, 0.06f);
         baseBg.a = 1f;
         return baseBg;
+    }
+
+    static Color NumFieldEdge()
+    {
+        var e = UiTheme.Current.Edge;
+        if (UiTheme.IsLightBackground)
+        {
+            // Сильніша hairline, щоб поля читались як бокси на paper UI
+            e = Color.Lerp(e, UiTheme.Current.Accent, 0.25f);
+            e.a = 0.85f;
+        }
+        else
+            e.a = Mathf.Clamp(e.a, 0.55f, 0.9f);
+        return e;
     }
 
     static Color NumFieldFocusBg(Color fieldBg)
@@ -700,7 +745,7 @@ public class MissionControlUI : MonoBehaviour
         Color fieldBg = NumFieldBg();
         Color focusBg = NumFieldFocusBg(fieldBg);
 
-        // ColorTint multiplies graphic.color — keep white
+        // ColorTint множить graphic.color — лишати білим
         fieldImg.color = Color.white;
         if (input != null)
         {
@@ -725,8 +770,23 @@ public class MissionControlUI : MonoBehaviour
         var outline = fieldImg.GetComponent<UnityEngine.UI.Outline>();
         if (outline != null)
         {
-            var oc = UiTheme.Current.Accent; oc.a = 1f;
-            outline.effectColor = oc;
+            // Idle: видимий край; focused outline і далі з акцентом (увімк. при select)
+            bool focused = input != null && input.isFocused;
+            if (focused)
+            {
+                var oc = UiTheme.Current.Accent; oc.a = 1f;
+                outline.effectColor = oc;
+                outline.effectDistance = new Vector2(2.5f, -2.5f);
+                outline.enabled = true;
+            }
+            else
+            {
+                outline.effectColor = NumFieldEdge();
+                outline.effectDistance = UiTheme.IsLightBackground
+                    ? new Vector2(1.2f, -1.2f)
+                    : new Vector2(1f, -1f);
+                outline.enabled = true; // завжди показувати бокс на light-темах
+            }
         }
     }
 
@@ -767,23 +827,49 @@ public class MissionControlUI : MonoBehaviour
         if (sim != null) sim.experimentSeed = UserSettings.ExperimentSeed;
 
         ApplySettings();
-        // Restore last live speed; Monte-Carlo burst uses TimeScale slider separately
+        // Відновити останню live-швидкість; Monte-Carlo burst використовує слайдер TimeScale окремо
         ApplyLiveTimeScale(UserSettings.LiveTimeScale);
         loadingSettings = false;
     }
 
     void SelectModeVisualOnly(RocketPhysics.ControlMode mode)
     {
-        // Update mode pill + button colors without PrepareMode/reset
+        // Оновити mode pill + кольори кнопок без PrepareMode/reset
         if (txtMode != null)
             txtMode.text = UILocale.ModeNameShort(mode);
         for (int i = 0; i < modeButtons.Count && i < modeButtonImages.Count; i++)
         {
             var m = (RocketPhysics.ControlMode)i;
             bool active = m == mode;
+            Color bg = active ? C_BtnActive : C_Btn;
             if (modeButtonImages[i] != null)
+                modeButtonImages[i].color = bg;
+            if (modeButtons[i] == null) continue;
+            foreach (var tmp in modeButtons[i].GetComponentsInChildren<TMP_Text>(true))
             {
-                modeButtonImages[i].color = active ? C_BtnActive : C_Btn;
+                if (tmp == null) continue;
+                tmp.color = tmp.gameObject.name == "ModeSub"
+                    ? ModeSubtitleOn(bg)
+                    : ButtonLabelOn(bg);
+            }
+        }
+    }
+
+    void PaintModeButtons()
+    {
+        for (int i = 0; i < modeButtons.Count && i < modeButtonImages.Count; i++)
+        {
+            if (modeButtons[i] == null || modeButtonImages[i] == null) continue;
+            bool active = rocket != null
+                && modeButtons[i].gameObject.name == "Mode_" + rocket.controlMode;
+            Color bg = active ? C_BtnActive : C_Btn;
+            modeButtonImages[i].color = bg;
+            foreach (var tmp in modeButtons[i].GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (tmp == null) continue;
+                tmp.color = tmp.gameObject.name == "ModeSub"
+                    ? ModeSubtitleOn(bg)
+                    : ButtonLabelOn(bg);
             }
         }
     }
@@ -936,7 +1022,7 @@ public class MissionControlUI : MonoBehaviour
     void OnLiveSpeedChanged(float v)
     {
         if (loadingSettings) return;
-        // Slider stores 1..8 as integers; map 1→0.5 optional? Keep 1..8 as Time.timeScale
+        // Slider зберігає 1..8 як int; map 1→0.5 опційно? Лишити 1..8 як Time.timeScale
         float s = Mathf.Clamp(v, 0.25f, 8f);
         UserSettings.LiveTimeScale = s;
         UserSettings.Save();
@@ -1039,7 +1125,7 @@ public class MissionControlUI : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        // 0 = width: integer-friendlier scale on 16:9 desktop (sharper TMP)
+        // 0 = ширина: ціліші масштаби на 16:9 desktop (чіткіший TMP)
         scaler.matchWidthOrHeight = 0f;
         scaler.referencePixelsPerUnit = 100f;
         canvasGo.AddComponent<GraphicRaycaster>();
@@ -1055,7 +1141,7 @@ public class MissionControlUI : MonoBehaviour
         ApplyPanelsVisibility();
     }
 
-    /// <summary>1×1 white sprite for Simple UI images (avoids 9-slice thickness bugs).</summary>
+    /// <summary>Білий спрайт 1×1 для Simple UI (уникає артефактів товщини 9-slice).</summary>
     static Sprite UiWhite()
     {
         if (s_uiWhite != null) return s_uiWhite;
@@ -1085,7 +1171,7 @@ public class MissionControlUI : MonoBehaviour
         const float H = 84f;
         var chrome = CreatePanel("TopChrome", parent, C_Panel);
         topBarGo = chrome;
-        topMenuGo = chrome; // same root — always visible with top bar
+        topMenuGo = chrome; // той самий root — завжди видимий з top bar
         var rt = chrome.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0, 1);
         rt.anchorMax = new Vector2(1, 1);
@@ -1094,7 +1180,7 @@ public class MissionControlUI : MonoBehaviour
         rt.offsetMax = Vector2.zero;
         Outline(chrome, 1.2f);
 
-        // Bottom accent hairline
+        // Нижня акцентна волосина-лінія
         var accent = CreatePanel("TopAccent", chrome.transform, new Color(C_Edge.r, C_Edge.g, C_Edge.b, 0.5f));
         accent.GetComponent<Image>().raycastTarget = false;
         var art = accent.GetComponent<RectTransform>();
@@ -1104,19 +1190,19 @@ public class MissionControlUI : MonoBehaviour
         art.anchoredPosition = Vector2.zero;
         art.sizeDelta = new Vector2(0, 2);
 
-        // ── ROW 1: identity | mode+time | status | settings ──
+        // ── РЯД 1: identity | mode+time | status | settings ──
         var row1 = CreatePanel("Row1", chrome.transform, new Color(0, 0, 0, 0));
         row1.GetComponent<Image>().raycastTarget = false;
         var r1 = row1.GetComponent<RectTransform>();
         r1.anchorMin = new Vector2(0, 0.5f);
         r1.anchorMax = new Vector2(1, 1);
         r1.offsetMin = new Vector2(12, 2);
-        // Leave top-right free for caption (− □ ×)
+        // Лишити правий верх вільним для caption (− □ ×)
         const float capW = 46f;
         const float captionW = capW * 3f;
         r1.offsetMax = new Vector2(-(captionW + 10f), -4);
 
-        // Brand | mode | time
+        // Бренд | режим | час
         txtTitle = CreateText(row1.transform, UILocale.T("app_title"), 16, C_Accent, FontStyles.Bold);
         var trTitle = txtTitle.rectTransform;
         trTitle.anchorMin = new Vector2(0, 0);
@@ -1152,16 +1238,16 @@ public class MissionControlUI : MonoBehaviour
         txtTime.overflowMode = TextOverflowModes.Overflow;
         txtTime.raycastTarget = false;
 
-        // Caption lives on its own canvas (not destroyed with theme RebuildUi → no flicker)
+        // Caption на окремому canvas (не знищується з RebuildUi теми → без мерехтіння)
         EnsureCaptionBar();
         ApplyCaptionTheme();
 
-        // ── ROW 2 bottom: LEFT flight | RIGHT tools (Hide Theme Lang) ──
-        const float chipW = 78f; // Hide / Lang (same as Start)
-        const float themeW = 118f; // full theme name + " Y" without truncating
+        // ── РЯД 2 низ: ЛІВОРУЧ flight | ПРАВОРУЧ tools (Hide Theme Lang) ──
+        const float chipW = 78f; // Hide / Lang (як Start)
+        const float themeW = 118f; // повна назва теми + " Y" без обрізання
         const float gap = 5f;
         const float rightInset = 16f;
-        // Hide + Theme(wide) + Lang (Help lives after Export in flight row)
+        // Hide + Theme(wide) + Lang (Help стоїть після Export у flight-ряду)
         float toolsW = chipW * 2f + themeW + gap * 2f;
 
         var row2 = CreatePanel("Row2", chrome.transform, new Color(0, 0, 0, 0));
@@ -1199,7 +1285,7 @@ public class MissionControlUI : MonoBehaviour
         MenuBtn(row2.transform, (UILocale.T("top_export") + "  E").ToUpperInvariant(), OnExportResults, MenuBtnKind.Normal, chipW);
         MenuBtn(row2.transform, (UILocale.T("top_help") + "  F1").ToUpperInvariant(), ToggleHelp, MenuBtnKind.Normal, chipW);
 
-        // Right→left: Lang [G], Theme [Y] (wider), Hide [H]
+        // Справа→ліворуч: Lang [G], Theme [Y] (ширший), Hide [H]
         float xR = -rightInset;
         PlaceEdgeBtn(chrome.transform, "LangBtn", EdgeLangLabel(),
             ref xR, chipW, C_Btn, () => UILocale.Toggle(), out txtLangBtn);
@@ -1243,15 +1329,15 @@ public class MissionControlUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Edge tool chip: same visual size as Start (full bottom-row height), pinned from right.
-    /// xR = right edge of chip (negative from chrome right).
+    /// Крайовий tool-чіп: той самий візуальний розмір, що Start (повна висота нижнього ряду), притиснутий справа.
+    /// xR = правий край чіпа (від’ємно від правого краю chrome).
     /// </summary>
     void PlaceEdgeBtn(Transform chrome, string name, string label, ref float xR, float w,
         Color bg, UnityEngine.Events.UnityAction onClick, out TMP_Text labelTxt)
     {
         var go = CreatePanel(name, chrome, bg);
         var rt = go.GetComponent<RectTransform>();
-        // Stretch vertically across entire bottom half of chrome (same band as Start row)
+        // Розтягнути вертикально на всю нижню половину chrome (та сама смуга, що ряд Start)
         rt.anchorMin = new Vector2(1f, 0f);
         rt.anchorMax = new Vector2(1f, 0.5f);
         rt.pivot = new Vector2(1f, 0.5f);
@@ -1264,10 +1350,7 @@ public class MissionControlUI : MonoBehaviour
             var btn = go.AddComponent<Button>();
             btn.targetGraphic = go.GetComponent<Image>();
             var colors = btn.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.1f, 1.1f, 1.12f);
-            colors.pressedColor = new Color(0.85f, 0.85f, 0.88f);
-            colors.fadeDuration = 0.05f;
+            ApplyBtnColorBlock(ref colors);
             btn.colors = colors;
             btn.onClick.AddListener(onClick);
         }
@@ -1280,7 +1363,7 @@ public class MissionControlUI : MonoBehaviour
         labelTxt.raycastTarget = false;
     }
 
-    // Caption on dedicated overlay canvas (survives RebuildUi)
+    // Caption на окремому overlay canvas (переживає RebuildUi)
     Image capBarImg, capMinImg, capMaxImg, capCloseImg, capEdgeImg;
     TMP_Text capMinTxt, capMaxTxt, capCloseTxt;
     Button capMinBtn, capMaxBtn, capCloseBtn;
@@ -1293,7 +1376,7 @@ public class MissionControlUI : MonoBehaviour
         captionRoot.transform.SetParent(transform, false);
         var canvas = captionRoot.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 500; // above main HUD
+        canvas.sortingOrder = 500; // над основним HUD
         UiTypography.ConfigureCanvas(canvas);
         var scaler = captionRoot.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -1380,7 +1463,7 @@ public class MissionControlUI : MonoBehaviour
         label.raycastTarget = false;
     }
 
-    /// <summary>Recolor − □ × from current theme without destroying them (no flicker).</summary>
+    /// <summary>Перефарбувати − □ × з поточної теми без destroy (без мерехтіння).</summary>
     void ApplyCaptionTheme()
     {
         if (captionRoot == null) return;
@@ -1399,15 +1482,17 @@ public class MissionControlUI : MonoBehaviour
         void Paint(Image img, TMP_Text txt, Button btn, Color bg, Color fg, Color hi)
         {
             if (img == null || btn == null) return;
-            img.color = Color.white; // ColorTint multiplies this
+            img.color = Color.white; // ColorTint множить це
             var c = ColorBlock.defaultColorBlock;
             c.normalColor = bg;
             c.highlightedColor = hi;
-            c.pressedColor = Color.Lerp(bg, Color.black, 0.3f);
+            c.pressedColor = UiTheme.IsLightBackground
+                ? Color.Lerp(bg, Color.white, 0.35f)
+                : Color.Lerp(bg, Color.black, 0.3f);
             c.selectedColor = bg;
             c.disabledColor = new Color(bg.r, bg.g, bg.b, 0.35f);
             c.colorMultiplier = 1f;
-            c.fadeDuration = 0f; // no tween flash
+            c.fadeDuration = 0f; // без tween-спалаху
             btn.colors = c;
             if (txt != null) txt.color = fg;
         }
@@ -1431,7 +1516,7 @@ public class MissionControlUI : MonoBehaviour
         s = Mathf.Clamp(s, 0.25f, 8f);
         if (sim != null && sim.IsExperimentRunning) return;
         Time.timeScale = s;
-        // Keep fixed step close to base (don't explode fixedDt on high scale)
+        // Тримати fixed step близько до бази (не роздувати fixedDt на високому scale)
         float baseDt = rocket != null && rocket.parameters != null
             ? rocket.parameters.fixedTimeStep : 0.005f;
         Time.fixedDeltaTime = baseDt;
@@ -1481,15 +1566,12 @@ public class MissionControlUI : MonoBehaviour
         le.minWidth = width;
         le.flexibleWidth = 0f;
         le.preferredHeight = 28f;
-        le.flexibleHeight = 1f; // stretch with row like Start when HLG expands height
+        le.flexibleHeight = 1f; // розтягуватись з рядом як Start, коли HLG збільшує висоту
 
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = go.GetComponent<Image>();
         var colors = btn.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1.08f, 1.08f, 1.1f);
-        colors.pressedColor = new Color(0.88f, 0.88f, 0.9f);
-        colors.fadeDuration = 0.05f;
+        ApplyBtnColorBlock(ref colors);
         btn.colors = colors;
 
         labelTxt = CreateText(go.transform, label, 12, txtCol, FontStyles.Bold);
@@ -1594,7 +1676,7 @@ public class MissionControlUI : MonoBehaviour
         if (leftPanelGo) leftPanelGo.SetActive(show);
         if (rightPanelGo) rightPanelGo.SetActive(show);
         if (stepBarGo) stepBarGo.SetActive(show);
-        // top chrome always visible for settings / flight actions
+        // top chrome завжди видимий для налаштувань / дій польоту
         if (txtHideBtn != null)
             txtHideBtn.text = HideButtonLabel();
         if (txtLangBtn != null)
@@ -1631,10 +1713,7 @@ public class MissionControlUI : MonoBehaviour
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = go.GetComponent<Image>();
         var colors = btn.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1.08f, 1.08f, 1.1f);
-        colors.pressedColor = new Color(0.88f, 0.88f, 0.9f);
-        colors.fadeDuration = 0.05f;
+        ApplyBtnColorBlock(ref colors);
         btn.colors = colors;
 
         labelTxt = CreateText(go.transform, label, 11, UiTheme.ContrastOn(bg), FontStyles.Bold);
@@ -1657,9 +1736,9 @@ public class MissionControlUI : MonoBehaviour
     {
         if (txtStatus != null)
         {
-            // Same language as landing-gate badges: bold label + high-contrast ink on chip
+            // Та сама мова, що бейджі landing-gate: bold підпис + висококонтрастне чорнило на чіпі
             txtStatus.text = UILocale.T(key);
-            // On light themes keep deep ink (never pale neon on pale fill)
+            // На light-темах тримати глибоке чорнило (ніколи блідий neon на блідій заливці)
             txtStatus.color = UiTheme.IsLightBackground
                 ? Color.Lerp(accent, C_Text, 0.28f)
                 : accent;
@@ -1667,7 +1746,7 @@ public class MissionControlUI : MonoBehaviour
         }
         if (statusDot != null)
         {
-            // Soft fill: light themes stay pale so dark status ink stays readable
+            // М’яка заливка: light-теми лишаються блідими, щоб темне status-чорнило читалось
             float t = UiTheme.IsLightBackground ? 0.22f : 0.42f;
             Color c = Color.Lerp(C_PanelSoft, accent, t);
             c.a = 1f;
@@ -1677,7 +1756,7 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildLeftPanel(Transform parent)
     {
-        // Mission-control left column: GATE first → primary flight → rest → charts
+        // Ліва колонка mission-control: спочатку GATE → primary flight → решта → charts
         const float W = 338f;
         const float pad = 12f;
         const float inner = W - pad * 2f; // 314
@@ -1715,11 +1794,11 @@ public class MissionControlUI : MonoBehaviour
         Transform root = content.transform;
         float y = -10f;
 
-        // ── 1. LANDING GATE (always first — decision at a glance) ──
+        // ── 1. LANDING GATE (завжди перший — рішення з першого погляду) ──
         txtHdrCrit = Header(root, UILocale.T("h_crit"), ref y, pad, inner);
         BuildCriterionGrid(root, ref y, pad, inner);
 
-        // ── 2. GUIDANCE (one sentence, high value) ──
+        // ── 2. GUIDANCE (одне речення, висока цінність) ──
         y -= 4f;
         txtHdrInsight = Header(root, UILocale.T("h_insight"), ref y, pad, inner);
         var insightBg = CreatePanel("InsightBg", root, C_PanelSoft);
@@ -1732,7 +1811,7 @@ public class MissionControlUI : MonoBehaviour
         StretchFull(txtInsight.rectTransform, 10, 6, 10, 6);
         y -= 54f;
 
-        // ── 3. PRIMARY FLIGHT STATE ──
+        // ── 3. ОСНОВНИЙ СТАН ПОЛЬОТУ ──
         y -= 2f;
         txtHdrTelem = Header(root, UILocale.T("h_primary"), ref y, pad, inner);
         txtAlt = Metric(root, UILocale.T("m_alt"), UILocale.T("u_m"), ref y, pad, inner, primary: true);
@@ -1741,7 +1820,7 @@ public class MissionControlUI : MonoBehaviour
         tiltBarFill = MakeBar(root, ref y, C_Amber, pad, inner);
         txtMiss = Metric(root, UILocale.T("m_miss"), UILocale.T("u_m"), ref y, pad, inner, primary: true);
 
-        // ── 4. DYNAMICS ──
+        // ── 4. ДИНАМІКА ──
         y -= 4f;
         Header(root, UILocale.T("h_dyn"), ref y, pad, inner);
         txtHVel = Metric(root, UILocale.T("m_vh"), UILocale.T("u_ms"), ref y, pad, inner);
@@ -1752,17 +1831,17 @@ public class MissionControlUI : MonoBehaviour
         txtAcc = Metric(root, UILocale.T("m_acc"), UILocale.T("u_ms2"), ref y, pad, inner);
         txtEta = Metric(root, UILocale.T("m_eta"), UILocale.T("u_s"), ref y, pad, inner);
 
-        // ── 5. PROPULSION ──
+        // ── 5. РУШІЙНА УСТАНОВКА ──
         y -= 4f;
         Header(root, UILocale.T("h_prop"), ref y, pad, inner);
-        // Fuel as single row: kg value + % unit context via fuelPct text below bar
+        // Паливо одним рядом: значення кг + % через текст fuelPct під смугою
         txtFuel = Metric(root, UILocale.T("m_fuel"), UILocale.T("u_kg"), ref y, pad, inner);
         fuelBarFill = MakeBar(root, ref y, C_Ok, pad, inner);
         txtFuelPct = Metric(root, UILocale.T("m_fuel_pct"), UILocale.T("u_pct"), ref y, pad, inner);
         txtMass = Metric(root, UILocale.T("m_mass"), UILocale.T("u_t"), ref y, pad, inner);
         txtScore = Metric(root, UILocale.T("m_score"), UILocale.T("u_score"), ref y, pad, inner);
 
-        // ── 6. PEAKS / DELTA (compact) ──
+        // ── 6. ПІКИ / DELTA (компактно) ──
         y -= 4f;
         txtHdrLive = Header(root, UILocale.T("h_live"), ref y, pad, inner);
         txtPeakVy = Metric(root, UILocale.T("m_peak_vy"), UILocale.T("u_ms"), ref y, pad, inner);
@@ -1774,7 +1853,7 @@ public class MissionControlUI : MonoBehaviour
         PinTL(txtDeltaStrip.rectTransform, pad, y, inner, 32);
         y -= 36f;
 
-        // ── 7. CHARTS ──
+        // ── 7. ГРАФІКИ ──
         y -= 2f;
         txtHdrGraphs = Header(root, UILocale.T("h_graphs"), ref y, pad, inner);
         txtGraphHint = CreateText(root, UILocale.T("graph_hint"), 10, C_Muted);
@@ -1789,7 +1868,7 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildCriterionGrid(Transform root, ref float y, float pad, float inner)
     {
-        // 2×2 gate: name + live vs limit + clear status (OK / FAIL / WATCH)
+        // GATE 2×2: назва + live vs ліміт + статус (OK / FAIL / WATCH)
         float gap = 6f;
         float cellW = (inner - gap) * 0.5f;
         float cellH = 52f;
@@ -1803,7 +1882,7 @@ public class MissionControlUI : MonoBehaviour
         txtCritH = MakeCriterionBadge(root, pad + cellW + gap, row1, cellW, cellH, UILocale.T("crit_vh"));
         y -= cellH + 4f;
 
-        // One-line hint under the grid
+        // Однорядкова підказка під сіткою
         var hint = CreateText(root, UILocale.T("crit_gate_hint"), 10, C_Muted);
         hint.alignment = TextAlignmentOptions.MidlineLeft;
         hint.overflowMode = TextOverflowModes.Ellipsis;
@@ -1811,7 +1890,7 @@ public class MissionControlUI : MonoBehaviour
         PinTL(hint.rectTransform, pad, y, inner, 16);
         y -= 18f;
 
-        // Status strip — same badge family as criteria
+        // Смуга статусу — та сама родина бейджів, що критерії
         float statusH = 32f;
         var statusBg = CreatePanel("StatusBadge", root, C_PanelSoft);
         statusDot = statusBg.GetComponent<Image>();
@@ -1832,7 +1911,7 @@ public class MissionControlUI : MonoBehaviour
         bg.GetComponent<Image>().raycastTarget = false;
         PinTL(bg.GetComponent<RectTransform>(), x, y, w, h);
 
-        // 3 lines: name / value vs limit / status — no cryptic OK/NO/..
+        // 3 рядки: назва / значення vs ліміт / статус — без загадкових OK/NO/..
         string idle = title + "\n" + UILocale.T("crit_idle") + "\n—";
         var t = CreateText(bg.transform, idle, 11, C_Muted, FontStyles.Normal);
         t.alignment = TextAlignmentOptions.Center;
@@ -1845,7 +1924,7 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildRightPanel(Transform parent)
     {
-        // Control column: mode → test conditions → compare → results
+        // Колонка керування: режим → умови тесту → порівняння → результати
         const float W = 338f;
         const float pad = 12f;
         const float inner = W - pad * 2f; // 314
@@ -1884,7 +1963,7 @@ public class MissionControlUI : MonoBehaviour
         Transform root = content.transform;
         float y = -10f;
 
-        // ── 1. Algorithm 2x2 ──
+        // ── 1. Алгоритм 2x2 ──
         Header(root, UILocale.T("h_step1"), ref y, pad, inner);
         modeButtons.Clear();
         modeButtonImages.Clear();
@@ -1904,13 +1983,13 @@ public class MissionControlUI : MonoBehaviour
             UILocale.T("mode_btn_d"), UILocale.T("mode_sub_d"), RocketPhysics.ControlMode.Hybrid));
         y -= cellH + 8f;
 
-        // ── 2–3. Conditions (persistent section — NumFields never destroyed) ──
+        // ── 2–3. Умови (persistent-секція — NumFields ніколи не знищуються) ──
         PlaceConditionSection(root, ref y, pad, inner, gap);
 
-        // ── 4. Compare actions ──
+        // ── 4. Дії порівняння ──
         Header(root, UILocale.T("h_step2"), ref y, pad, inner);
         float btnH = 34f;
-        // Same tone/brightness family as top Start (green) / Stop (red) / Pause (blue)
+        // Та сама родина тону/яскравості, що top Start (зелений) / Stop (червоний) / Pause (синій)
         ActionButtonAt(root, pad, y, halfW, btnH, UILocale.T("btn_compare"),
             "Action_Compare", BtnViolet(), OnStartCompare);
         ActionButtonAt(root, pad + halfW + gap, y, halfW, btnH, UILocale.T("btn_cancel"),
@@ -1920,7 +1999,7 @@ public class MissionControlUI : MonoBehaviour
             "Action_Demo", BtnAmber(), OnDefenseDemo);
         y -= btnH + 10f;
 
-        // ── 4. Comparison results 2x2 ──
+        // ── 4. Результати порівняння 2x2 ──
         y -= 4f;
         Header(root, UILocale.T("h_results"), ref y, pad, inner);
         float statH = 40f;
@@ -1942,7 +2021,7 @@ public class MissionControlUI : MonoBehaviour
         StretchFull(txtWinner.rectTransform, 6, 4, 6, 4);
         y -= 34f;
 
-        // ── 5. Camera (above messages) ──
+        // ── 5. Камера (над повідомленнями) ──
         Header(root, UILocale.T("h_cam"), ref y, pad, inner);
         var camBg = CreatePanel("CamBg", root, C_PanelSoft);
         camBg.GetComponent<Image>().raycastTarget = false;
@@ -1968,7 +2047,7 @@ public class MissionControlUI : MonoBehaviour
         txtCamHelp.textWrappingMode = TextWrappingModes.Normal;
         y -= 54f;
 
-        // ── 6. Status / tips ──
+        // ── 6. Статус / підказки ──
         Header(root, UILocale.T("h_msg"), ref y, pad, inner);
         var infoBg = CreatePanel("InfoBox", root, C_PanelSoft);
         infoBg.GetComponent<Image>().raycastTarget = false;
@@ -1983,7 +2062,7 @@ public class MissionControlUI : MonoBehaviour
         crt.sizeDelta = new Vector2(0, Mathf.Max(180f, -y + 20f));
     }
 
-    // ─── User actions ───
+    // ─── Дії користувача ───
 
     void OnStartLanding()
     {
@@ -2001,9 +2080,9 @@ public class MissionControlUI : MonoBehaviour
         RefreshCamLabel();
         ApplySettings();
         ApplyExperimentInitialConditions();
-        // Deterministic single-run disturbances from current seed
+        // Детерміновані збурення одиночного запуску з поточного seed
         SimRng.Reseed(sim != null ? sim.experimentSeed : UserSettings.ExperimentSeed);
-        rocket.batchDrivenTicks = false; // ensure FixedUpdate + trajectory run
+        rocket.batchDrivenTicks = false; // гарантувати FixedUpdate + trajectory
         rocket.ResetSimulation();
         UpdatePauseButtonVisual();
         var tv = EnsureTrajectoryVisualizer();
@@ -2200,7 +2279,7 @@ public class MissionControlUI : MonoBehaviour
     void OnToggleTrajectoryView() => OnFullTrajectoryView();
 
     /// <summary>
-    /// Toggle full-trajectory overview. Press again (or F) to return to follow.
+    /// Toggle overview повної траєкторії. Ще раз (або F) — повернутись у follow.
     /// </summary>
     void OnFullTrajectoryView()
     {
@@ -2254,7 +2333,7 @@ public class MissionControlUI : MonoBehaviour
     {
         var cam = ResolveCamera();
         if (cam == null) return;
-        // Always leave overview and restore default follow orbit
+        // Завжди виходити з overview і відновлювати follow orbit за замовчуванням
         overviewCam = false;
         cam.userOrbitLock = false;
         cam.ResetManualOrbit();
@@ -2288,7 +2367,7 @@ public class MissionControlUI : MonoBehaviour
     {
         try
         {
-            // Prefer comparison export if available
+            // Віддавати перевагу comparison export, якщо доступний
             if (sim != null && sim.HasComparisonResults)
             {
                 lastExportPath = sim.SaveComparisonReports();
@@ -2395,7 +2474,7 @@ public class MissionControlUI : MonoBehaviour
         ClearGraphs();
         sampleTimer = 0f;
         ResetFlightPeaks();
-        // Lock fair paired Monte-Carlo protocol (same IC + disturbances for A–D)
+        // Зафіксувати справедливий paired Monte-Carlo протокол (однакові ПУ + збурення для A–D)
         DefenseBaseline.ApplyTo(sim);
         if (rocket?.hybridController != null)
             rocket.hybridController.useNeuralResidual = DefenseBaseline.HybridResidualOn;
@@ -2405,7 +2484,7 @@ public class MissionControlUI : MonoBehaviour
         NotifyInfo(UILocale.T("msg_compare"));
     }
 
-    /// <summary>Mirror DefenseBaseline constants onto sliders so export/UI match the run.</summary>
+    /// <summary>Віддзеркалити константи DefenseBaseline на слайдери, щоб export/UI збігались із запуском.</summary>
     void SyncUiFromDefenseBaseline()
     {
         loadingSettings = true;
@@ -2434,7 +2513,7 @@ public class MissionControlUI : MonoBehaviour
         UserSettings.HybridResidual = DefenseBaseline.HybridResidualOn;
         UserSettings.Train = false;
         UserSettings.Save();
-        // Slider value labels refresh via onValueChanged (SetValue path)
+        // Підписи значень слайдера оновлюються через onValueChanged (шлях SetValue)
     }
 
     void OnDefenseDemo()
@@ -2455,7 +2534,7 @@ public class MissionControlUI : MonoBehaviour
         SetHelpVisible(false);
         HideLandingResult();
 
-        // Hybrid + Ideal + Follow + Start (scripted defense path)
+        // Hybrid + Ideal + Follow + Start (скриптований шлях захисту)
         SelectMode(RocketPhysics.ControlMode.Hybrid);
         yield return null;
         OnApplyIdealPresets();
@@ -2464,7 +2543,7 @@ public class MissionControlUI : MonoBehaviour
         OnStartLanding();
         NotifyInfo(UILocale.T("msg_demo_flight"));
 
-        // Wait until landing finishes or timeout (~3 min wall)
+        // Чекати завершення посадки або timeout (~3 хв wall)
         float wall = 0f;
         while (rocket != null && rocket.simulationArmed && !rocket.state.simulationFinished && wall < 180f)
         {
@@ -2472,7 +2551,7 @@ public class MissionControlUI : MonoBehaviour
             yield return null;
         }
 
-        // Brief pause on result, then trajectory overview
+        // Коротка пауза на результаті, далі overview траєкторії
         yield return new WaitForSecondsRealtime(1.2f);
         if (rocket != null && rocket.state.simulationFinished)
         {
@@ -2503,15 +2582,15 @@ public class MissionControlUI : MonoBehaviour
         dimBtn.transition = Selectable.Transition.None;
         dimBtn.onClick.AddListener(() => SetHelpVisible(false));
 
-        // Compact card: title + body + button with tight gaps
+        // Компактна картка: title + body + кнопка з малими відступами
         const float cardW = 540f;
         const float cardH = 430f;
         const float titleH = 28f;
         const float titleTop = 14f;
-        const float bodyTop = titleTop + titleH + 8f; // gap under title
+        const float bodyTop = titleTop + titleH + 8f; // відступ під title
         const float btnH = 34f;
         const float btnBottom = 14f;
-        const float bodyBottom = btnBottom + btnH + 10f; // 10px between text and button
+        const float bodyBottom = btnBottom + btnH + 10f; // 10px між текстом і кнопкою
 
         var card = CreatePanel("HelpCard", helpRoot.transform, C_Panel);
         var crt = card.GetComponent<RectTransform>();
@@ -2562,7 +2641,7 @@ public class MissionControlUI : MonoBehaviour
     {
         if (txtInfo == null) return;
         txtInfo.text = msg;
-        // Success / compare-done lines must stay readable on light panel chips
+        // Рядки Success / compare-done мають лишатись читабельними на світлих panel chips
         bool successTone = !string.IsNullOrEmpty(msg) && (
             msg.IndexOf("успіх", System.StringComparison.OrdinalIgnoreCase) >= 0
             || msg.IndexOf("success", System.StringComparison.OrdinalIgnoreCase) >= 0
@@ -2582,25 +2661,25 @@ public class MissionControlUI : MonoBehaviour
         batchMode = on;
         if (on)
         {
-            // New comparison pack → wipe prior landing/batch traces
+            // Новий comparison pack → стерти попередні сліди landing/batch
             ClearGraphs();
             sampleTimer = 0f;
             HideLandingResult();
-            // Prevent PATH freezes during / right after Monte-Carlo
+            // Запобігти зависанням PATH під час / одразу після Monte-Carlo
             var tv = EnsureTrajectoryVisualizer();
             tv?.Clear();
             if (tv != null) tv.SetVisible(false);
             trajVisible = false;
             UpdateTrajButtonVisual();
-            // Wide overview while A–D batch runs (pad + descent corridor)
+            // Широкий overview під час batch A–D (pad + коридор зниження)
             EnterOverviewForCompare();
         }
-        // on=false: keep charts so the finished comparison remains visible
+        // on=false: лишити charts, щоб завершене порівняння лишалось видимим
         if (progressRoot != null) progressRoot.SetActive(on);
         RefreshSpeedLabel();
     }
 
-    /// <summary>Force full-trajectory overview (no toggle-off) for Monte-Carlo.</summary>
+    /// <summary>Форсувати overview повної траєкторії (без toggle-off) для Monte-Carlo.</summary>
     void EnterOverviewForCompare()
     {
         var cam = ResolveCamera();
@@ -2616,7 +2695,7 @@ public class MissionControlUI : MonoBehaviour
         if (txtProgress) txtProgress.text = label;
         if (progressFill != null)
             progressFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(p01), 1f);
-        // Mode pill stays short — batch detail lives only on progress bar
+        // Mode pill лишається коротким — деталі batch лише на progress bar
         if (txtMode && rocket != null)
             txtMode.text = UILocale.ModeNameShort(rocket.controlMode);
     }
@@ -2659,7 +2738,7 @@ public class MissionControlUI : MonoBehaviour
             resultAccentBar.color = c;
         }
 
-        // Compact metric cards (localized units)
+        // Компактні картки метрик (локалізовані одиниці)
         string ums = UILocale.T("u_ms");
         string um = UILocale.T("u_m");
         SetResultMetric(0, UILocale.T("res_m_v"),
@@ -2677,7 +2756,7 @@ public class MissionControlUI : MonoBehaviour
             {
                 txtResultBody.text = string.Format(UILocale.T("res_ok_sub"),
                     m.totalFlightTime, m.fuelRemaining);
-                txtResultBody.color = C_Muted;
+                txtResultBody.color = C_Secondary;
             }
             else if (m.timedOut)
             {
@@ -2689,7 +2768,7 @@ public class MissionControlUI : MonoBehaviour
             else
             {
                 txtResultBody.text = UILocale.T("res_fail_sub");
-                txtResultBody.color = C_Muted;
+                txtResultBody.color = C_Secondary;
             }
         }
 
@@ -2732,7 +2811,7 @@ public class MissionControlUI : MonoBehaviour
         if (resultMetricKeys[i] != null)
         {
             resultMetricKeys[i].text = key;
-            resultMetricKeys[i].color = C_Muted;
+            resultMetricKeys[i].color = C_Secondary;
         }
         if (resultMetricVals != null && resultMetricVals[i] != null)
         {
@@ -2766,7 +2845,7 @@ public class MissionControlUI : MonoBehaviour
         resultRoot.GetComponent<Image>().raycastTarget = true;
         resultRoot.transform.SetAsLastSibling();
 
-        // Compact card — content-tight, no dead air
+        // Компактна картка — щільно за змістом, без «мертвого» повітря
         var card = CreatePanel("ResultCard", resultRoot.transform, C_Panel);
         resultPanelBg = card.GetComponent<Image>();
         var crt = card.GetComponent<RectTransform>();
@@ -2775,7 +2854,7 @@ public class MissionControlUI : MonoBehaviour
         crt.sizeDelta = new Vector2(492f, 212f);
         Outline(card, 1.5f);
 
-        // Status accent bar
+        // Акцентна смуга статусу
         var accent = CreatePanel("ResAccent", card.transform, new Color(C_Ok.r, C_Ok.g, C_Ok.b, 0.9f));
         resultAccentBar = accent.GetComponent<Image>();
         resultAccentBar.raycastTarget = false;
@@ -2786,7 +2865,7 @@ public class MissionControlUI : MonoBehaviour
         art.anchoredPosition = Vector2.zero;
         art.sizeDelta = new Vector2(0f, 3f);
 
-        // Header row: title (left) + score pill (right)
+        // Ряд заголовка: title (ліворуч) + score pill (праворуч)
         txtResultTitle = CreateText(card.transform, UILocale.T("res_ok"), 16, C_Ok, FontStyles.Bold);
         var trtTitle = txtResultTitle.rectTransform;
         trtTitle.anchorMin = new Vector2(0f, 1f);
@@ -2816,7 +2895,7 @@ public class MissionControlUI : MonoBehaviour
         txtResultScore.alignment = TextAlignmentOptions.Center;
         txtResultScore.characterSpacing = 0.5f;
 
-        var scoreUnit = CreateText(scorePill.transform, UILocale.T("u_score"), 9, C_Muted, FontStyles.Bold);
+        var scoreUnit = CreateText(scorePill.transform, UILocale.T("u_score"), 9, C_Secondary, FontStyles.Bold);
         var surt = scoreUnit.rectTransform;
         surt.anchorMin = new Vector2(0f, 0f);
         surt.anchorMax = new Vector2(1f, 0.36f);
@@ -2825,8 +2904,8 @@ public class MissionControlUI : MonoBehaviour
         scoreUnit.alignment = TextAlignmentOptions.Center;
         scoreUnit.raycastTarget = false;
 
-        // One-line subtitle
-        txtResultBody = CreateText(card.transform, "", 11, C_Muted);
+        // Однорядковий підзаголовок
+        txtResultBody = CreateText(card.transform, "", 11, C_Secondary);
         txtResultBody.textWrappingMode = TextWrappingModes.NoWrap;
         txtResultBody.overflowMode = TextOverflowModes.Ellipsis;
         txtResultBody.alignment = TextAlignmentOptions.MidlineLeft;
@@ -2837,7 +2916,7 @@ public class MissionControlUI : MonoBehaviour
         brt.anchoredPosition = new Vector2(18f, -44f);
         brt.sizeDelta = new Vector2(-36f, 16f);
 
-        // Four metric chips in one tight row
+        // Чотири чіпи метрик в одному щільному ряду
         resultMetricKeys = new TMP_Text[4];
         resultMetricVals = new TMP_Text[4];
         string[] keyPh = {
@@ -2858,7 +2937,7 @@ public class MissionControlUI : MonoBehaviour
             crtChip.anchoredPosition = new Vector2(rowX0 + i * (rowChipW + rowGap), -66f);
             crtChip.sizeDelta = new Vector2(rowChipW, 56f);
 
-            resultMetricKeys[i] = CreateText(chip.transform, keyPh[i], 10, C_Muted, FontStyles.Bold);
+            resultMetricKeys[i] = CreateText(chip.transform, keyPh[i], 10, C_Secondary, FontStyles.Bold);
             var krt = resultMetricKeys[i].rectTransform;
             krt.anchorMin = new Vector2(0f, 1f);
             krt.anchorMax = new Vector2(1f, 1f);
@@ -2876,7 +2955,7 @@ public class MissionControlUI : MonoBehaviour
             resultMetricVals[i].alignment = TextAlignmentOptions.Center;
         }
 
-        // Single action row — three equal buttons, flush under metrics
+        // Один ряд дій — три рівні кнопки, впритул під метриками
         float btnH = 32f;
         float btnY = 12f;
         float btnGap = 8f;
@@ -2997,7 +3076,7 @@ public class MissionControlUI : MonoBehaviour
         Write(txtEta, eta > 0.05f && rocket.simulationArmed && !s.simulationFinished
             ? $"{eta:F1}" : "—", eta > 0f && eta < 8f ? C_Amber : C_Muted);
 
-        // Live peak / change tracking during flight
+        // Живе відстеження піків / змін під час польоту
         if (rocket.simulationArmed && !s.simulationFinished)
         {
             if (!flightPeaksActive) ResetFlightPeaks();
@@ -3014,7 +3093,7 @@ public class MissionControlUI : MonoBehaviour
             float dThr = s.currentThrust / 1000f - prevThr;
             if (txtDeltaStrip)
             {
-                // ASCII-only separators (no middle-dot tofu)
+                // Лише ASCII-роздільники (без middle-dot «тофу»)
                 txtDeltaStrip.text =
                     $"dh {Arrow(dAlt)}{Mathf.Abs(dAlt):F1}  |  dVy {Arrow(dVy)}{Mathf.Abs(dVy):F2}  |  " +
                     $"dTilt {Arrow(dTilt)}{Mathf.Abs(dTilt):F2}  |  dF {Arrow(dThr)}{Mathf.Abs(dThr):F1}";
@@ -3037,7 +3116,7 @@ public class MissionControlUI : MonoBehaviour
         // Soft-landing gate: name + current ≤ limit + NОРМА/ПОРУШЕННЯ/БЛИЗЬКО
         bool flying = rocket.simulationArmed && (s.time > 0.05f || s.simulationFinished || s.isLanded);
         bool landed = s.simulationFinished || s.isLanded;
-        // After touchdown prefer frozen metrics
+        // Після touchdown віддавати перевагу замороженим метрикам
         if (landed && rocket.metrics != null && rocket.metrics.totalFlightTime > 0.05f)
         {
             av = rocket.metrics.touchdownVelocity;
@@ -3073,7 +3152,7 @@ public class MissionControlUI : MonoBehaviour
             else if (s.simulationFinished && rocket.simulationArmed == false && rocket.metrics != null
                      && (rocket.metrics.totalFlightTime > 0.1f || rocket.metrics.isSuccessfulLanding || rocket.metrics.timedOut))
             {
-                // stopped mid-flight — OnStop already set badge
+                // зупинено mid-flight — OnStop уже виставив badge
             }
             else if (s.simulationFinished && rocket.metrics != null && rocket.metrics.totalFlightTime > 0.05f)
             {
@@ -3089,30 +3168,33 @@ public class MissionControlUI : MonoBehaviour
                 SetStatusVisual("st_wait", C_Muted);
         }
 
-        // Highlight selected mode; dim others during experiment
+        // Підсвітити обраний режим; приглушити інші під час експерименту (завжди оновлювати чорнило підписів)
         for (int i = 0; i < modeButtons.Count; i++)
         {
             var b = modeButtons[i];
             if (b == null) continue;
             b.interactable = !exp;
             bool active = b.gameObject.name == "Mode_" + rocket.controlMode;
+            Color bg;
+            if (exp)
+                bg = active ? Color.Lerp(C_Amber, C_Btn, 0.15f) : Color.Lerp(C_Btn, C_PanelSoft, 0.35f);
+            else
+                bg = active ? C_BtnActive : C_Btn;
             if (i < modeButtonImages.Count && modeButtonImages[i] != null)
+                modeButtonImages[i].color = bg;
+            foreach (var tmp in b.GetComponentsInChildren<TMP_Text>(true))
             {
-                if (exp)
-                    modeButtonImages[i].color = active ? C_Amber * 0.85f : C_Btn * 0.7f;
-                else if (UiTheme.IsLightBackground)
-                    modeButtonImages[i].color = active
-                        ? new Color(0.55f, 0.72f, 0.92f, 1f)
-                        : C_Btn;
-                else
-                    modeButtonImages[i].color = active ? C_BtnActive : C_Btn;
+                if (tmp == null) continue;
+                tmp.color = tmp.gameObject.name == "ModeSub"
+                    ? ModeSubtitleOn(bg)
+                    : ButtonLabelOn(bg);
             }
         }
 
-        // Strip charts: single flight + live MC comparison (reset only on new compare start)
+        // Стрічкові графіки: одиночний політ + live MC-порівняння (reset лише на старті нового compare)
         bool expRunning = batchMode || (sim != null && sim.IsExperimentRunning);
         sampleTimer += Time.unscaledDeltaTime;
-        // Faster sample during batch so multi-trial bursts still leave a visible trace
+        // Швидший sample у batch, щоб multi-trial bursts лишали видимий слід
         float sampleDt = expRunning
             ? 0.03f
             : (s.position.y < 200f ? 0.04f : 0.07f);
@@ -3127,10 +3209,10 @@ public class MissionControlUI : MonoBehaviour
             graphThr?.Push(s.currentThrust / 1000f);
         }
 
-        // Slider value labels update via onValueChanged (with units)
+        // Підписи значень слайдера оновлюються через onValueChanged (з одиницями)
         UpdateFlightStep(s);
 
-        // Keep camera label in sync if user used hotkeys
+        // Тримати підпис камери синхронним, якщо користувач тиснув гарячі клавіші
         if (txtCamMode && cameraFollow != null && Time.frameCount % 15 == 0)
             RefreshCamLabel();
     }
@@ -3191,7 +3273,7 @@ public class MissionControlUI : MonoBehaviour
         var img = t.transform.parent != null ? t.transform.parent.GetComponent<Image>() : null;
         if (img != null)
         {
-            // Pale wash on light themes — keep ink (c) dominant for contrast
+            // Бліда заливка на light-темах — тримати чорнило (c) домінантним для контрасту
             float a = UiTheme.IsLightBackground ? 0.12f : 0.14f;
             img.color = new Color(c.r, c.g, c.b, a);
         }
@@ -3209,7 +3291,7 @@ public class MissionControlUI : MonoBehaviour
 
     static string Arrow(float d)
     {
-        // ASCII-only (no unicode arrows → tofu on some fonts)
+        // Лише ASCII (unicode-стрілки → «тофу» на деяких шрифтах)
         if (d > 0.05f) return "+";
         if (d < -0.05f) return "-";
         return "=";
@@ -3244,12 +3326,12 @@ public class MissionControlUI : MonoBehaviour
             bool res = residualToggle != null ? residualToggle.isOn : UserSettings.HybridResidual;
             rocket.hybridController.useNeuralResidual = res;
         }
-        // Keep rocket IC in sync when idle (preview on next Start / mode change)
+        // Тримати ПУ ракети синхронними в idle (прев’ю на наступний Start / зміну режиму)
         if (rocket != null && !rocket.simulationArmed && (sim == null || !sim.IsExperimentRunning))
             ApplyExperimentInitialConditions();
     }
 
-    /// <summary>Apply flexible IC from UI/settings into SimulationParameters.</summary>
+    /// <summary>Застосувати гнучкі ПУ з UI/налаштувань у SimulationParameters.</summary>
     void ApplyExperimentInitialConditions()
     {
         if (rocket?.parameters == null) return;
@@ -3275,7 +3357,7 @@ public class MissionControlUI : MonoBehaviour
             sim.startTiltDeg = tilt;
         }
 
-        // Preview parked rocket at new IC when not flying
+        // Прев’ю припаркованої ракети на нових ПУ, коли не летить
         if (!rocket.simulationArmed && !rocket.state.simulationFinished)
         {
             rocket.state.position = p.startPosition;
@@ -3400,7 +3482,7 @@ public class MissionControlUI : MonoBehaviour
         var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         go.transform.SetParent(parent, false);
         var img = go.GetComponent<Image>();
-        // Simple white sprite — avoids 9-slice default UI sprite thickness glitches
+        // Простий білий спрайт — уникає глітчів товщини default 9-slice UI sprite
         if (s_uiWhite == null)
         {
             var tex = Texture2D.whiteTexture;
@@ -3450,7 +3532,7 @@ public class MissionControlUI : MonoBehaviour
 
     TMP_Text Header(Transform parent, string title, ref float y, float pad = 14f, float width = 300f)
     {
-        // Section label + hairline — same recipe as SectionHeader
+        // Підпис секції + hairline — той самий рецепт, що SectionHeader
         var t = CreateText(parent, title, 10, C_Header, FontStyles.Bold);
         t.gameObject.name = "SecHdr";
         t.characterSpacing = 3.2f;
@@ -3467,7 +3549,7 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text Metric(Transform parent, string key, string unit, ref float y,
         float pad = 14f, float width = 300f, bool primary = false)
     {
-        // label left | value right-aligned | unit at far right
+        // підпис ліворуч | значення right-aligned | одиниця край праворуч
         float rowH = primary ? 24f : 22f;
         float valSize = primary ? 16f : 14f;
         float labelW = width * 0.42f;
@@ -3636,7 +3718,7 @@ public class MissionControlUI : MonoBehaviour
             : new Color(0.05f, 0.05f, 0.06f, 1f);
         var bg = CreatePanel("Bar", parent, barBg);
         bg.GetComponent<Image>().raycastTarget = false;
-        // indent bar slightly under the metric value column
+        // зсунути bar трохи під колонку значень метрик
         float barX = pad + 2f;
         float barW = width - 4f;
         PinTL(bg.GetComponent<RectTransform>(), barX, y, barW, 7);
@@ -3665,7 +3747,7 @@ public class MissionControlUI : MonoBehaviour
         const float fW = 318f;
         const float gH = 100f;
 
-        // Root holds frame + plot + labels (labels last = on top)
+        // Root тримає frame + plot + labels (labels останні = зверху)
         var root = CreatePanel("GraphRoot_" + title, parent, new Color(0, 0, 0, 0));
         root.GetComponent<Image>().raycastTarget = false;
         var rootRt = root.GetComponent<RectTransform>();
@@ -3697,7 +3779,7 @@ public class MissionControlUI : MonoBehaviour
         g.showFill = true;
         g.showZeroLine = true;
         g.valueFormat = fmt ?? "F1";
-        g.BindLabelRoot(rootRt); // labels as siblings of plot, on top
+        g.BindLabelRoot(rootRt); // підписи як siblings plot, зверху
         g.Configure(title, unit, line, threshold);
 
         y -= gH + 10f;
@@ -3706,7 +3788,7 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildStepBar(Transform parent)
     {
-        // Floating phase strip — matches side panel chrome, left accent stripe
+        // Плаваюча смуга фази — узгоджена з chrome бічної панелі, ліва акцентна смужка
         stepBarGo = CreatePanel("StepBar", parent, C_Panel);
         stepBarGo.GetComponent<Image>().raycastTarget = false;
         Outline(stepBarGo, 1f);
@@ -3810,10 +3892,7 @@ public class MissionControlUI : MonoBehaviour
         var img = go.GetComponent<Image>();
         btn.targetGraphic = img;
         var colors = btn.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1.1f, 1.1f, 1.12f);
-        colors.pressedColor = new Color(0.82f, 0.82f, 0.84f);
-        colors.selectedColor = Color.white;
+        ApplyBtnColorBlock(ref colors);
         colors.fadeDuration = 0.06f;
         btn.colors = colors;
         modeButtonImages.Add(img);
@@ -3831,7 +3910,7 @@ public class MissionControlUI : MonoBehaviour
 
         if (!string.IsNullOrEmpty(subtitle))
         {
-            // Readable on light chips (C_Muted alone was too pale / green-tinted on some themes)
+            // Читабельно на світлих чіпах (сам C_Muted був надто блідий / зеленуватий на деяких темах)
             var sub = CreateText(go.transform, subtitle, 10, ModeSubtitleOn(C_Btn));
             sub.gameObject.name = "ModeSub";
             var sr = sub.rectTransform;
@@ -3873,7 +3952,7 @@ public class MissionControlUI : MonoBehaviour
     void ActionButtonAt(Transform parent, float x, float y, float w, float h,
         string label, string goName, Color col, UnityEngine.Events.UnityAction action)
     {
-        // Keep solid accent fills (Start/Stop family) — do not wash out on light themes
+        // Тримати суцільні акцентні заливки (сімейство Start/Stop) — не розмивати на light-темах
         Color bg = col;
         bg.a = 1f;
         var go = CreatePanel(goName, parent, bg);
@@ -3881,11 +3960,8 @@ public class MissionControlUI : MonoBehaviour
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = go.GetComponent<Image>();
         var colors = btn.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1.1f, 1.1f, 1.12f);
-        colors.pressedColor = new Color(0.82f, 0.82f, 0.85f);
+        ApplyBtnColorBlock(ref colors);
         btn.colors = colors;
-        // Dark/saturated fills always get light label (never dark ink on navy/amber)
         Color tc = ButtonLabelOn(bg);
         var txt = CreateText(go.transform, label, 11, tc, FontStyles.Bold);
         StretchFull(txt.rectTransform, 4, 2, 4, 2);
@@ -3896,10 +3972,29 @@ public class MissionControlUI : MonoBehaviour
         btn.onClick.AddListener(action);
     }
 
-    /// <summary>Theme-aware label on button fill (same family as panel text).</summary>
+    /// <summary>Theme-aware підпис на заливці кнопки (та сама родина, що текст панелі).</summary>
     static Color ButtonLabelOn(Color bg) => UiTheme.LabelOnFill(bg);
 
-    // Shared action palette — top Start/Stop/Pause and right Compare/Cancel/Demo
+    /// <summary>Множники ColorTint — light-теми лишаються яскравими при натисканні.</summary>
+    static void ApplyBtnColorBlock(ref ColorBlock colors)
+    {
+        colors.normalColor = Color.white;
+        colors.fadeDuration = 0.05f;
+        if (UiTheme.IsLightBackground)
+        {
+            colors.highlightedColor = new Color(1.05f, 1.06f, 1.09f, 1f);
+            colors.pressedColor = new Color(0.95f, 0.97f, 1f, 1f);
+            colors.selectedColor = new Color(1.03f, 1.04f, 1.07f, 1f);
+        }
+        else
+        {
+            colors.highlightedColor = new Color(1.1f, 1.1f, 1.12f, 1f);
+            colors.pressedColor = new Color(0.85f, 0.85f, 0.88f, 1f);
+            colors.selectedColor = Color.white;
+        }
+    }
+
+    // Спільна палітра дій — top Start/Stop/Pause і right Compare/Cancel/Demo
     static Color BtnGreen() => UiTheme.IsLightBackground
         ? new Color(0.12f, 0.50f, 0.30f, 1f)
         : new Color(0.14f, 0.40f, 0.26f, 1f);
@@ -3909,33 +4004,33 @@ public class MissionControlUI : MonoBehaviour
     static Color BtnBlue() => UiTheme.IsLightBackground
         ? new Color(0.14f, 0.32f, 0.55f, 1f)
         : new Color(0.12f, 0.26f, 0.45f, 1f);
-    /// <summary>Amber at same weight as Start/Stop (not washed theme-amber).</summary>
+    /// <summary>Amber тієї ж насиченості, що Start/Stop (не розмитий theme-amber).</summary>
     static Color BtnAmber() => UiTheme.IsLightBackground
         ? new Color(0.78f, 0.48f, 0.06f, 1f)
         : new Color(0.68f, 0.42f, 0.08f, 1f);
-    /// <summary>Violet — same luminance band as Pause blue.</summary>
+    /// <summary>Violet — та сама смуга яскравості, що Pause blue.</summary>
     static Color BtnViolet() => UiTheme.IsLightBackground
         ? new Color(0.42f, 0.22f, 0.62f, 1f)
         : new Color(0.36f, 0.20f, 0.52f, 1f);
-    /// <summary>Rose/pink — same luminance band as Stop red.</summary>
+    /// <summary>Rose/pink — та сама смуга яскравості, що Stop red.</summary>
     static Color BtnPink() => UiTheme.IsLightBackground
         ? new Color(0.72f, 0.22f, 0.42f, 1f)
         : new Color(0.55f, 0.16f, 0.32f, 1f);
 
-    /// <summary>Secondary line on mode cards — theme muted with contrast on fill.</summary>
+    /// <summary>Другий рядок на картках режимів — theme muted з контрастом на заливці.</summary>
     static Color ModeSubtitleOn(Color bg)
     {
         float l = 0.2126f * bg.r + 0.7152f * bg.g + 0.0722f * bg.b;
         Color muted = UiTheme.Current.Muted;
         if (l > 0.55f)
         {
-            // Pale chip: muted must stay dark enough
+            // Блідий чіп: muted має лишатись достатньо темним
             float ml = 0.2126f * muted.r + 0.7152f * muted.g + 0.0722f * muted.b;
             if (ml > 0.5f)
                 return Color.Lerp(muted, UiTheme.Current.Text, 0.55f);
             return muted;
         }
-        // Dark/active chip: lift muted toward light theme text
+        // Темний/active чіп: підтягнути muted до тексту light-теми
         return Color.Lerp(muted, UiTheme.TextOnDark, 0.45f);
     }
 
@@ -3988,7 +4083,7 @@ public class MissionControlUI : MonoBehaviour
         }
         else
         {
-            // Re-bind refs (same objects, new right-panel parent)
+            // Перев’язати refs (ті самі об’єкти, новий parent правої панелі)
             var sliders = conditionSectionGo.GetComponentsInChildren<Slider>(true);
             if (sliders.Length >= 10)
             {
@@ -4010,7 +4105,7 @@ public class MissionControlUI : MonoBehaviour
                 trainToggle = toggles[1];
                 residualToggle = toggles[2];
             }
-            // Display-value refs still point at NumField text components
+            // Посилання display-value досі вказують на текстові компоненти NumField
             if (windSlider != null)
             {
                 var inp = windSlider.transform.parent.GetComponentInChildren<TMP_InputField>(true);
@@ -4042,7 +4137,7 @@ public class MissionControlUI : MonoBehaviour
 
     void SectionHeader(Transform parent, string localeKey, ref float y, float pad, float width)
     {
-        // Match Header() geometry and colors exactly (was mismatched line offset + accent-green)
+        // Точно збігтись з геометрією й кольорами Header() (раніше зсув лінії + accent-green)
         var t = CreateText(parent, UILocale.T(localeKey), 10, C_Header, FontStyles.Bold);
         t.gameObject.name = "SecHdr";
         t.characterSpacing = 3.2f;
@@ -4059,7 +4154,7 @@ public class MissionControlUI : MonoBehaviour
         ref float y, out Slider slider, float pad = 12f, float width = 314f,
         string labelKey = null, string unitKey = null)
     {
-        // Fixed geometry — label + numeric input + unit + track
+        // Фіксована геометрія — підпис + числове поле + одиниця + доріжка
         const float blockH = 48f;
         const float labelH = 18f;
         const float trackH = 4f;
@@ -4078,12 +4173,12 @@ public class MissionControlUI : MonoBehaviour
         string unitS = string.IsNullOrEmpty(unit) ? "" : unit;
         val = Mathf.Clamp(val, min, max);
 
-        // ── Block container ──
+        // ── Контейнер блоку ──
         var block = CreatePanel("SliderBlock", parent, C_PanelSoft);
         block.GetComponent<Image>().raycastTarget = false;
         PinTL(block.GetComponent<RectTransform>(), pad, y, width, blockH);
 
-        // Label (left)
+        // Підпис (ліворуч)
         var k = CreateText(block.transform, label ?? "", 12, labelCol, FontStyles.Normal);
         k.gameObject.name = "SliderLabel";
         k.raycastTarget = false;
@@ -4097,7 +4192,7 @@ public class MissionControlUI : MonoBehaviour
         krt.anchoredPosition = new Vector2(8f, -4f);
         krt.sizeDelta = new Vector2(-(inputW + unitW + 20f), labelH);
 
-        // Unit (far right)
+        // Одиниця (край праворуч)
         var uLab = CreateText(block.transform, unitS, 11, C_Muted, FontStyles.Normal);
         uLab.gameObject.name = "SliderUnit";
         uLab.raycastTarget = false;
@@ -4112,7 +4207,7 @@ public class MissionControlUI : MonoBehaviour
         if (!string.IsNullOrEmpty(labelKey) || !string.IsNullOrEmpty(unitKey))
             conditionLabelBindings.Add((k, uLab, labelKey, unitKey));
 
-        // Numeric input (digits only) — click to type; focus must be obvious
+        // Числове введення (лише цифри) — клік для вводу; focus має бути очевидним
         var fieldGo = new GameObject("NumField", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         fieldGo.transform.SetParent(block.transform, false);
         var frtIn = fieldGo.GetComponent<RectTransform>();
@@ -4124,14 +4219,14 @@ public class MissionControlUI : MonoBehaviour
         StyleSimpleImage(fieldImg, fieldBg);
         fieldImg.raycastTarget = true;
 
-        // Outline focus ring (enabled on select) — visible on light & dark themes
+        // Завжди видима рамка, щоб light-теми показували поле; акцент товщає у фокусі
         var focusOutline = fieldGo.AddComponent<Outline>();
-        Color outlineCol = C_Accent;
-        outlineCol.a = 1f;
-        focusOutline.effectColor = outlineCol;
-        focusOutline.effectDistance = new Vector2(2.5f, -2.5f);
+        focusOutline.effectColor = NumFieldEdge();
+        focusOutline.effectDistance = UiTheme.IsLightBackground
+            ? new Vector2(1.2f, -1.2f)
+            : new Vector2(1f, -1f);
         focusOutline.useGraphicAlpha = false;
-        focusOutline.enabled = false;
+        focusOutline.enabled = true;
 
         var textGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         textGo.transform.SetParent(fieldGo.transform, false);
@@ -4182,13 +4277,13 @@ public class MissionControlUI : MonoBehaviour
         ic.colorMultiplier = 1f;
         ic.fadeDuration = 0.06f;
         input.colors = ic;
-        // ColorTint multiplies graphic.color — keep white so ColorBlock drives the fill
+        // ColorTint множить graphic.color — лишати білим, щоб ColorBlock керував заливкою
         fieldImg.color = Color.white;
         input.text = Mathf.RoundToInt(val).ToString();
-        // Keep display TMP_Text reference for legacy txtSeedVal updates
+        // Зберігати посилання display TMP_Text для legacy-оновлень txtSeedVal
         TMP_Text displayVal = v;
 
-        // ── Slider hit area (lower half of block) ──
+        // ── Hit-зона слайдера (нижня половина блоку) ──
         var slideGo = new GameObject("Slider", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         slideGo.transform.SetParent(block.transform, false);
         var srt = slideGo.GetComponent<RectTransform>();
@@ -4202,7 +4297,7 @@ public class MissionControlUI : MonoBehaviour
         slideImg.raycastTarget = true;
 
         slider = slideGo.AddComponent<Slider>();
-        // Local capture — out param cannot be used inside lambdas (CS1628)
+        // Локальне захоплення — out-параметр не можна в лямбдах (CS1628)
         var sld = slider;
         float minV = min;
         float maxV = max;
@@ -4214,7 +4309,7 @@ public class MissionControlUI : MonoBehaviour
         sld.navigation = new Navigation { mode = Navigation.Mode.None };
         slideGo.AddComponent<SliderScrollLock>();
 
-        // Background track (fixed height via center anchors + sizeDelta.y)
+        // Фонова доріжка (фіксована висота через center anchors + sizeDelta.y)
         var bgGo = new GameObject("Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         bgGo.transform.SetParent(slideGo.transform, false);
         StyleSimpleImage(bgGo.GetComponent<Image>(), trackCol);
@@ -4226,7 +4321,7 @@ public class MissionControlUI : MonoBehaviour
         bgr.anchoredPosition = Vector2.zero;
         bgr.sizeDelta = new Vector2(-trackPadX * 2f, trackH);
 
-        // Fill Area — standard Unity layout (height locked)
+        // Fill Area — стандартний layout Unity (висота зафіксована)
         var fillArea = new GameObject("Fill Area", typeof(RectTransform));
         fillArea.transform.SetParent(slideGo.transform, false);
         var far = fillArea.GetComponent<RectTransform>();
@@ -4241,14 +4336,14 @@ public class MissionControlUI : MonoBehaviour
         StyleSimpleImage(fillGo.GetComponent<Image>(), fillCol);
         fillGo.GetComponent<Image>().raycastTarget = false;
         var fr = fillGo.GetComponent<RectTransform>();
-        // Unity Slider drives anchorMax.x; keep y anchors full of fill area
+        // Unity Slider керує anchorMax.x; y-anchors тримати на всю fill area
         fr.anchorMin = new Vector2(0f, 0f);
         fr.anchorMax = new Vector2(0f, 1f);
         fr.offsetMin = Vector2.zero;
         fr.offsetMax = Vector2.zero;
         fr.pivot = new Vector2(0f, 0.5f);
 
-        // Handle Slide Area
+        // Область руху handle
         var hArea = new GameObject("Handle Slide Area", typeof(RectTransform));
         hArea.transform.SetParent(slideGo.transform, false);
         var har = hArea.GetComponent<RectTransform>();
@@ -4272,7 +4367,7 @@ public class MissionControlUI : MonoBehaviour
         sld.handleRect = hr;
         sld.targetGraphic = hImg;
 
-        // Re-lock handle size after Slider mutates anchors on first Set
+        // Повторно зафіксувати розмір handle після того, як Slider змінює anchors на першому Set
         void LockHandle()
         {
             if (hr == null) return;
@@ -4338,14 +4433,27 @@ public class MissionControlUI : MonoBehaviour
         {
             input.selectionAnchorPosition = 0;
             input.selectionFocusPosition = input.text.Length;
-            if (focusOutline != null) focusOutline.enabled = true;
+            if (focusOutline != null)
+            {
+                var oc = C_Accent; oc.a = 1f;
+                focusOutline.effectColor = oc;
+                focusOutline.effectDistance = new Vector2(2.5f, -2.5f);
+                focusOutline.enabled = true;
+            }
             input.caretWidth = 2;
             input.customCaretColor = true;
             input.caretColor = C_Accent;
         });
         input.onDeselect.AddListener(_ =>
         {
-            if (focusOutline != null) focusOutline.enabled = false;
+            if (focusOutline != null)
+            {
+                focusOutline.effectColor = NumFieldEdge();
+                focusOutline.effectDistance = UiTheme.IsLightBackground
+                    ? new Vector2(1.2f, -1.2f)
+                    : new Vector2(1f, -1f);
+                focusOutline.enabled = true;
+            }
         });
 
         sld.SetValueWithoutNotify(val);
@@ -4367,7 +4475,7 @@ public class MissionControlUI : MonoBehaviour
         return sb.ToString();
     }
 
-    /// <summary>Numeric display helper (input field is primary).</summary>
+    /// <summary>Допоміжний numeric display (input field — основний).</summary>
     static string FormatSliderValue(float val, string unitS)
     {
         int n = Mathf.RoundToInt(val);
@@ -4419,7 +4527,8 @@ public class MissionControlUI : MonoBehaviour
         bg.GetComponent<Image>().raycastTarget = false;
         PinTL(bg.GetComponent<RectTransform>(), x, y, w, h);
 
-        var k = CreateText(bg.transform, name, 10, C_Muted);
+        var k = CreateText(bg.transform, name, 10, C_Secondary);
+        k.gameObject.name = "StatLabel";
         var kr = k.rectTransform;
         kr.anchorMin = new Vector2(0, 0.48f);
         kr.anchorMax = new Vector2(1, 1);
@@ -4483,7 +4592,7 @@ public class MissionControlUI : MonoBehaviour
         rt.anchorMin = new Vector2(0, 1);
         rt.anchorMax = new Vector2(0, 1);
         rt.pivot = new Vector2(0, 1);
-        // Integer positions/sizes → sharper TMP under CanvasScaler
+        // Цілі позиції/розміри → чіткіший TMP під CanvasScaler
         rt.anchoredPosition = new Vector2(Mathf.Round(x), Mathf.Round(y));
         rt.sizeDelta = new Vector2(Mathf.Round(w), Mathf.Round(h));
     }
@@ -4498,7 +4607,7 @@ public class MissionControlUI : MonoBehaviour
 }
 
 /// <summary>
-/// While dragging a Slider inside a ScrollRect, disable the scroll so the handle moves.
+/// Під час drag Slider у ScrollRect вимикати scroll, щоб рухався handle.
 /// </summary>
 public class SliderScrollLock : MonoBehaviour,
     UnityEngine.EventSystems.IPointerDownHandler,

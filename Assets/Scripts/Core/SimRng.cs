@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Seeded PRNG for reproducible Monte-Carlo / flight disturbances.
-/// Wraps <see cref="System.Random"/>; independent of UnityEngine.Random state.
+/// Seeded PRNG для відтворюваних Monte-Carlo / збурень польоту.
+/// Обгортка над <see cref="System.Random"/>; незалежно від стану UnityEngine.Random.
 /// </summary>
 public static class SimRng
 {
@@ -11,14 +11,14 @@ public static class SimRng
 
     public static int CurrentSeed => currentSeed;
 
-    /// <summary>Reset stream from absolute seed (experiment start).</summary>
+    /// <summary>Скинути потік з абсолютного seed (старт експерименту).</summary>
     public static void Reseed(int seed)
     {
         currentSeed = seed;
         rng = new System.Random(seed);
     }
 
-    /// <summary>Derive a stable child seed (e.g. per trial index) without consuming stream.</summary>
+    /// <summary>Отримати стабільний дочірній seed (напр. за індексом trial) без споживання потоку.</summary>
     public static int DeriveSeed(int baseSeed, int salt)
     {
         unchecked
@@ -51,7 +51,7 @@ public static class SimRng
 
     public static Vector3 InsideUnitSphere()
     {
-        // Marsaglia method on unit ball surface then scale radius cube-root
+        // Метод Marsaglia на поверхні одиничної кулі, далі масштаб радіуса cube-root
         float u, v, s;
         do
         {

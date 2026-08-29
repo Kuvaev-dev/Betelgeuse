@@ -122,7 +122,7 @@ public static class UILocale
         ["mode_fuzzy"] = new("Нечітка логіка (Sugeno)", "Fuzzy logic (Sugeno)"),
         ["mode_neural"] = new("Нейромережа (ES)", "Neural net (ES)"),
         ["mode_hybrid"] = new("Гібрид Neuro-Fuzzy", "Hybrid Neuro-Fuzzy"),
-        // Short names for top mode pill (full names stay for messages)
+        // Короткі назви для top mode pill (повні — для повідомлень)
         ["mode_short_pid"] = new("PID", "PID"),
         ["mode_short_fuzzy"] = new("Fuzzy", "Fuzzy"),
         ["mode_short_neural"] = new("Neural", "Neural"),
@@ -136,7 +136,7 @@ public static class UILocale
         ["mode_sub_c"] = new("MLP + ES", "MLP + ES"),
         ["mode_sub_d"] = new("Fuzzy+NN", "Fuzzy+NN"),
 
-        // Headers (left panel — short, scannable)
+        // Заголовки (ліва панель — короткі, для швидкого сканування)
         ["h_telem"] = new("ПОЛІТ", "FLIGHT"),
         ["h_primary"] = new("ГОЛОВНЕ", "PRIMARY"),
         ["h_dyn"] = new("ДИНАМІКА", "DYNAMICS"),
@@ -156,7 +156,7 @@ public static class UILocale
         ["h_how"] = new("ШВИДКИЙ СТАРТ", "QUICK START"),
         ["h_msg"] = new("ПОВІДОМЛЕННЯ", "STATUS"),
 
-        // Metrics — short labels for dense left column
+        // Метрики — короткі підписи для щільної лівої колонки
         ["m_alt"] = new("Висота", "Altitude"),
         ["m_vy"] = new("|Vy| вниз", "|Vy| down"),
         ["m_vh"] = new("|Vh| бічна", "|Vh| lateral"),
@@ -174,7 +174,7 @@ public static class UILocale
         ["m_peak_vy"] = new("Пік |Vy|", "Peak |Vy|"),
         ["m_peak_tilt"] = new("Пік нахилу", "Peak tilt"),
         ["m_min_h"] = new("Мін. h", "Min h"),
-        // Landing gate badges — full names (not cryptic |Vy|)
+        // Бейджі landing gate — повні назви (не загадкові |Vy|)
         ["crit_vy"] = new("Швидкість вниз", "Descent speed"),
         ["crit_tilt"] = new("Нахил корпусу", "Body tilt"),
         ["crit_miss"] = new("Промах до pad", "Miss to pad"),
@@ -235,7 +235,7 @@ public static class UILocale
             "1-4 mode | D demo | I ideal | Space start | P compare | F1 help | E export | H hide"),
         ["cam_keys"] = new("ЛКМ/ПКМ оберт · WASD · колесо зум · F follow · T огляд · C ручне · R скинути",
             "LMB/RMB orbit · WASD · scroll zoom · F follow · T overview · C manual · R reset"),
-        // Sliders — what changes + unit in value column
+        // Слайдери — що змінюється + одиниця в колонці значення
         ["sl_tests"] = new("Запусків на алгоритм", "Runs per algorithm"),
         ["sl_wind"] = new("Швидкість вітру", "Wind speed"),
         ["sl_time"] = new("Прискорення MC", "MC speed"),
@@ -297,7 +297,7 @@ public static class UILocale
             "  Residual OFF — ablation (Hybrid≈Fuzzy)\n" +
             "  Train NN — ES · Export → SimulationLogs/"),
 
-        // Flight phase strip (bottom)
+        // Смуга фази польоту (низ)
         ["step_ready"] = new("Крок: готовність | оберіть алгоритм і Start", "Step: ready | pick algorithm and Start"),
         ["step_high"] = new("Крок: високий спуск | профіль швидкості", "Step: high descent | speed profile"),
         ["step_approach"] = new("Крок: підхід | гальмування + вирівнювання", "Step: approach | brake + upright"),
@@ -328,7 +328,7 @@ public static class UILocale
         ["res_fail_sub"] = new("Порушені критерії — див. картки нижче",
             "Criteria failed — see cards below"),
 
-        // Insights
+        // Інсайти
         ["ins_wait"] = new("Оберіть алгоритм (D — гібрид) і натисніть «ЗАПУСТИТИ ПОСАДКУ».",
             "Select algorithm (D — hybrid) and press START LANDING."),
         ["ins_batch"] = new("Йде авто-тест Monte-Carlo. Алгоритми змінюються автоматично.",
@@ -354,7 +354,7 @@ public static class UILocale
         ["ins_term_bad"] = new("Фінал: {0} критерій(ї) поза нормою.",
             "Terminal: {0} criterion(s) out of range."),
 
-        // Messages
+        // Повідомлення
         ["msg_cancel_first"] = new("Спочатку скасуйте авто-тест.", "Cancel auto-test first."),
         ["prog_start"] = new("Авто-тест: старт…", "Auto-test: starting…"),
         ["prog_done"] = new("Авто-тест завершено", "Auto-test complete"),

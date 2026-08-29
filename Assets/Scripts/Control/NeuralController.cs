@@ -32,9 +32,9 @@ public class NeuralController : MonoBehaviour, ILandingController
     public int generation;
     public float bestCost = float.MaxValue;
 
-    float[] wIH; // hidden * input
+    float[] wIH; // прихований × вхід
     float[] bH;
-    float[] wHO; // output * hidden
+    float[] wHO; // вихід × прихований
     float[] bO;
 
     float[] bestWIH, bestBH, bestWHO, bestBO;
@@ -63,15 +63,15 @@ public class NeuralController : MonoBehaviour, ILandingController
             bH[i] = (Random.value - 0.5f) * scale * 0.5f;
         for (int i = 0; i < wHO.Length; i++)
             wHO[i] = (Random.value - 0.5f) * 2f * scale;
-        bO[0] = 0.15f; // bias thrust mult ~ hover+
+        bO[0] = 0.15f; // bias множника тяги ~ hover+
         bO[1] = 0f;
 
         // Підсилення корисних входів
         for (int h = 0; h < hSize; h++)
         {
-            wIH[h * InputSize + 0] += -0.6f; // height
-            wIH[h * InputSize + 1] += 0.9f;  // descent speed
-            wIH[h * InputSize + 3] += 0.4f;  // tilt
+            wIH[h * InputSize + 0] += -0.6f; // висота
+            wIH[h * InputSize + 1] += 0.9f;  // швидкість зниження
+            wIH[h * InputSize + 3] += 0.4f;  // нахил
         }
     }
 
@@ -197,7 +197,7 @@ public class NeuralController : MonoBehaviour, ILandingController
 
     public void ResetSession()
     {
-        // Weights persist across flights; ES updates after episodes via Train()
+        // Ваги живуть між польотами; ES оновлює після епізодів через Train()
     }
 
     public ControlCommand Evaluate(in ControlContext ctx)
@@ -210,7 +210,7 @@ public class NeuralController : MonoBehaviour, ILandingController
     }
 
     /// <summary>
-    /// Еволюційний крок після епізоду. Cost: vel, angle, fuel, horizontal miss.
+    /// Еволюційний крок після епізоду. Cost: vel, angle, fuel, горизонтальний miss.
     /// </summary>
     public void Train(float touchdownVelocity, float angleError, float fuelRemaining, float horizontalMiss = 0f)
     {
@@ -236,7 +236,7 @@ public class NeuralController : MonoBehaviour, ILandingController
         else
         {
             RestoreBest();
-            mutationSigma = Mathf.Min(0.25f, mutationSigma / sigmaDecay); // mild reheating on stall
+            mutationSigma = Mathf.Min(0.25f, mutationSigma / sigmaDecay); // м'яке «підігрівання» при stall
         }
 
         // ES(1+λ): λ мутантів від еліти; для online-епізоду беремо 1-го
@@ -270,7 +270,7 @@ public class NeuralController : MonoBehaviour, ILandingController
 
     static float Gaussian()
     {
-        // Box-Muller
+        // Метод Box-Muller
         float u1 = Mathf.Max(1e-6f, Random.value);
         float u2 = Random.value;
         return Mathf.Sqrt(-2f * Mathf.Log(u1)) * Mathf.Cos(2f * Mathf.PI * u2);
@@ -289,7 +289,7 @@ public class NeuralController : MonoBehaviour, ILandingController
             bH = bestBH,
             wHO = bestWHO,
             bO = bestBO,
-            // legacy fields for old files
+            // застарілі поля для старих файлів
             weightsInputHidden = bestWIH != null && bestWIH.Length >= 4
                 ? new[] { bestWIH[0], bestWIH[1], bestWIH[2], bestWIH[3] }
                 : new[] { 0.8f, -1.2f, 0.6f, 1.1f },
@@ -322,7 +322,7 @@ public class NeuralController : MonoBehaviour, ILandingController
                 return;
             }
 
-            // Legacy 4→1→1
+            // Застаріла топологія 4→1→1
             if (data.weightsInputHidden != null && data.weightsInputHidden.Length >= 4)
             {
                 InitRandomWeights(0.2f);
@@ -363,18 +363,18 @@ public class NeuralController : MonoBehaviour, ILandingController
         for (int h = 0; h < hSize; h++)
         {
             float phase = h / (float)hSize;
-            // height ↓ → hidden ↑ (negative weight on normalized h)
+            // висота ↓ → hidden ↑ (від’ємна вага на нормалізованому h)
             wIH[h * InputSize + 0] = -0.85f - phase * 0.25f;
-            // |Vy| ↑ (feature = vy/-120, descent positive) → hidden ↑
+            // |Vy| ↑ (feature = vy/-120, зниження додатне) → hidden ↑
             wIH[h * InputSize + 1] = 1.05f + phase * 0.2f;
-            wIH[h * InputSize + 2] = -0.15f + phase * 0.1f; // mass
-            wIH[h * InputSize + 3] = 0.45f;                 // tilt
-            wIH[h * InputSize + 4] = 0.2f;                  // horiz
+            wIH[h * InputSize + 2] = -0.15f + phase * 0.1f; // маса
+            wIH[h * InputSize + 3] = 0.45f;                 // нахил
+            wIH[h * InputSize + 4] = 0.2f;                  // гориз.
             bH[h] = -0.05f * h;
 
-            // Thrust residual: moderate positive from hidden
+            // Residual тяги: помірно додатний від hidden
             wHO[0 * hSize + h] = 0.12f + 0.03f * (h % 3);
-            // Gimbal bias: near-zero (base PD handles attitude)
+            // Зсув gimbal: майже нуль (базовий PD тримає орієнтацію)
             wHO[1 * hSize + h] = 0.02f * ((h % 2) == 0 ? 1f : -1f);
         }
         bO[0] = 0.08f;
@@ -399,7 +399,7 @@ public class NeuralWeights
     public float[] bH;
     public float[] wHO;
     public float[] bO;
-    // legacy
+    // застарілі поля
     public float[] weightsInputHidden;
     public float[] weightsHiddenOutput;
 }

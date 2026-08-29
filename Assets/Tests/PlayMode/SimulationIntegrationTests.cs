@@ -151,7 +151,7 @@ public class SimulationIntegrationTests
 
         var rocketGo = new GameObject("R");
         rocketGo.transform.position = new Vector3(0, 100, 0);
-        // minimal rocket state via RocketPhysics would need more setup — just target
+        // мінімальний стан ракети через RocketPhysics потребував би більше setup — лише target
         follow.target = rocketGo.transform;
         follow.rocket = null;
 
@@ -209,7 +209,7 @@ public class SimulationIntegrationTests
         logger.Save();
         Assert.IsTrue(System.IO.File.Exists(logger.LastFilePath));
 
-        // cleanup test file
+        // прибрати тестовий файл
         try { System.IO.File.Delete(logger.LastFilePath); } catch { /* ignore */ }
 
         Object.Destroy(go);
@@ -233,7 +233,7 @@ public class SimulationIntegrationTests
         Object.Destroy(p);
     }
 
-    /// <summary>Golden: Ideal Hybrid soft-lands under seeded zero-disturbance.</summary>
+    /// <summary>Golden: Ideal Hybrid робить soft-landing за seeded нульових збурень.</summary>
     [UnityTest]
     public IEnumerator IdealHybrid_SoftLands()
     {
@@ -265,7 +265,7 @@ public class SimulationIntegrationTests
         rp.ResetSimulation();
         rp.ApplyFlightDisturbances(0f, false);
 
-        // Burst ticks (no FixedUpdate wait) for speed
+        // Пакетні ticks (без очікування FixedUpdate) для швидкості
         rp.batchDrivenTicks = true;
         int guard = 0;
         int maxSteps = Mathf.CeilToInt(p.maxSimulationTime / p.fixedTimeStep) + 64;

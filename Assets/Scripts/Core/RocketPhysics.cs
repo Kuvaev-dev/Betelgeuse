@@ -30,10 +30,10 @@ public class RocketPhysics : MonoBehaviour
 
     private DataLogger logger;
 
-    /// <summary>PID strategy (mode A) — pure class via Strategy pattern.</summary>
+    /// <summary>Стратегія PID (режим A) — чистий клас через патерн Strategy.</summary>
     readonly PidLandingStrategy pidStrategy = new PidLandingStrategy();
 
-    /// <summary>Resolves ILandingController by ControlMode (DIP).</summary>
+    /// <summary>Резолвить ILandingController за ControlMode (DIP).</summary>
     LandingControllerResolver controllerResolver;
 
     /// <summary>Налаштування PID з IdealLandingPresets / UI.</summary>
@@ -83,7 +83,7 @@ public class RocketPhysics : MonoBehaviour
         }
         cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
 
-        // Composition root: register strategies once
+        // Composition root: зареєструвати стратегії один раз
         controllerResolver = LandingControllerResolver.CreateDefault(this, pidStrategy);
 
         SyncFixedTimestep();
@@ -117,7 +117,7 @@ public class RocketPhysics : MonoBehaviour
         SyncTransformWithState();
     }
 
-    /// <summary>True while Monte-Carlo drives ticks manually (skip FixedUpdate double-step).</summary>
+    /// <summary>True, поки Monte-Carlo ганяє ticks вручну (пропустити double-step FixedUpdate).</summary>
     public bool batchDrivenTicks;
 
     void FixedUpdate()
@@ -152,14 +152,14 @@ public class RocketPhysics : MonoBehaviour
         UpdateControl();
         RungeKutta4Step(dt);
 
-        // Keep physics origin on/above pad surface (deck top ≈ PadSurfaceY)
+        // Тримати physics origin на/над поверхнею pad (верх палуби ≈ PadSurfaceY)
         float ground = EnvironmentBuilder.PadSurfaceY;
         if (state.position.y < ground)
             state.position.y = ground;
 
         ClampToTerrainDisk();
         SyncTransformWithState();
-        // Batch Monte-Carlo: skip logger/trajectory — they dominate CPU and used to stall trials into timeout → 0%
+        // Batch Monte-Carlo: пропускати logger/trajectory — вони домінують у CPU і раніше тягнули trial у timeout → 0%
         if (!batchDrivenTicks)
         {
             if (logger != null) logger.Log(state);
@@ -180,7 +180,7 @@ public class RocketPhysics : MonoBehaviour
         float mass = ctx.Mass;
         float tilt = ctx.TiltDeg;
 
-        // Safety PD upright gimbal — shared envelope for all strategies
+        // Захисний PD upright gimbal — спільний envelope для всіх стратегій
         Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(
             state.rotation, state.angularVelocity, maxDeg: 16f, kp: 0.7f, kd: 0.92f);
 
@@ -234,7 +234,7 @@ public class RocketPhysics : MonoBehaviour
         if (tilt > 28f) return;
 
         float scale = Mathf.Clamp(gainScale, 0.45f, 1.8f);
-        // Always-on authority from apogee — early drift was the universal-0% cause
+        // Авторитет з апогею завжди увімкнений — ранній drift давав універсальні 0%
         float shape = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(h / 2200f));
         float fade = Mathf.Lerp(0.7f, 1.25f, shape) * scale;
 
@@ -245,7 +245,7 @@ public class RocketPhysics : MonoBehaviour
         float miss = Mathf.Sqrt(px * px + pz * pz);
         float vh = Mathf.Sqrt(vx * vx + vz * vz);
 
-        // Strong PD; far from pad lean on position, near pad kill Vh
+        // Сильний PD; далеко від pad — на позицію, біля pad — гасити Vh
         float kPos = 0.22f * fade;
         float kVel = 0.95f * fade;
         if (h < 700f) { kPos *= 1.3f; kVel *= 1.4f; }
@@ -253,7 +253,7 @@ public class RocketPhysics : MonoBehaviour
         if (h < 80f)  { kPos *= 0.9f;  kVel *= 2.0f; }
         if (h < 25f)  { kPos *= 0.5f;  kVel *= 2.4f; }
 
-        // Extra pull when miss is large (open-loop urgency)
+        // Додаткова тяга, коли промах великий (open-loop urgency)
         if (miss > 40f) kPos *= 1.35f;
         if (vh > 8f) kVel *= 1.25f;
 
@@ -265,7 +265,7 @@ public class RocketPhysics : MonoBehaviour
         float gx = Mathf.Clamp(-(kPos * pz + kVel * vz), -lim, lim);
         float gz = Mathf.Clamp(+(kPos * px + kVel * vx), -lim, lim);
 
-        // Mostly replace upright TVC with lateral command (keep a little PD upright)
+        // Здебільшого замінити upright TVC на бічну команду (лишити трохи PD upright)
         Vector3 td = state.thrustDirection.normalized;
         float curX = Mathf.Atan2(td.z, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
         float curZ = Mathf.Atan2(-td.x, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
@@ -298,7 +298,7 @@ public class RocketPhysics : MonoBehaviour
             state.currentFuelMass = Mathf.Max(0f, state.currentFuelMass - massFlow * dt);
         }
 
-        // torque in body-ish frame from thrust vector offset
+        // момент у body-ish frame від offset вектора тяги
         Vector3 localTorque = new Vector3(-state.thrustDirection.z, 0f, state.thrustDirection.x)
                               * state.currentThrust * LeverArm;
         localTorque -= state.angularVelocity * AngularDamping;
@@ -329,7 +329,7 @@ public class RocketPhysics : MonoBehaviour
         Vector3 thrustWorld = state.rotation * td * state.currentThrust;
         acc += thrustWorld / Mathf.Max(1f, state.TotalMass);
 
-        // drag relative to air (incl. wind)
+        // опір відносно повітря (вкл. вітер)
         Vector3 airRel = vel - (applyContinuousWind ? windVelocity : Vector3.zero);
         float density = AtmosphereModel.GetDensity(pos.y);
         float dragMag = 0.5f * density * airRel.sqrMagnitude * Cd * RefArea;
@@ -342,7 +342,7 @@ public class RocketPhysics : MonoBehaviour
     void FinishLanding(bool timeout)
     {
         if (!timeout)
-            // Sit on pad deck — feet are ~0.06 m above origin, surface at PadSurfaceY
+            // Сісти на палубу pad — ноги ~0.06 м над origin, поверхня на PadSurfaceY
             state.position.y = EnvironmentBuilder.PadSurfaceY;
 
         state.isLanded = true;
@@ -357,7 +357,7 @@ public class RocketPhysics : MonoBehaviour
         metrics.totalFlightTime = state.time;
         metrics.timedOut = timeout;
 
-        // Single source of truth for soft-landing gate (Domain/LandingCriteria)
+        // Єдине джерело істини для soft-landing gate (Domain/LandingCriteria)
         LandingCriteria.ApplySuccessFlag(metrics, parameters);
 
         state.velocity = Vector3.zero;
@@ -436,7 +436,7 @@ public class RocketPhysics : MonoBehaviour
         }
         else
         {
-            // Light reset for Monte-Carlo trials
+            // Легкий reset для trial Monte-Carlo
             if (logger != null) logger.Initialize();
         }
     }
@@ -540,7 +540,7 @@ public class RocketPhysics : MonoBehaviour
 
         if (!keepPosition)
         {
-            // Return to start pad altitude for next run
+            // Повернутись на стартову висоту pad для наступного запуску
             InitializeSimulation();
             state.simulationFinished = false;
             state.isLanded = false;

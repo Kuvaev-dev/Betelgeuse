@@ -7,7 +7,7 @@ public static class LandingCriteria
 {
     public const float DefaultMaxTouchdownVelocity = 3.5f;
     public const float DefaultMaxLandingAngle = 7f;
-    // First-stage class: ±40 m pad miss / 6.5 m/s Vh is still a soft landing
+    // Клас 1-го ступеня: промах pad ±40 м / Vh 6.5 м/с усе ще soft-landing
     public const float DefaultMaxHorizontalMiss = 40f;
     public const float DefaultMaxHorizontalSpeed = 6.5f;
 

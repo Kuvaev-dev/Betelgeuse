@@ -1,20 +1,20 @@
-# Betelgeuse — Architecture
+# Betelgeuse — Архітектура
 
-**Version:** 1.2.0 (defense-complete)  
-**Stack:** Unity 6000 URP · C#
+**Версія:** 1.2.0 (готово до захисту)  
+**Стек:** Unity 6000 URP · C#
 
-## Goals
+## Цілі
 
-- Stable diploma demo (modes A–D, metrics, export, UI, 3D).
-- **SOLID** where it cuts coupling without over-engineering scenes.
-- Adding a 5th controller = **register a strategy**, not edit physics dispatch.
+- Стабільне демо для дипломної роботи (режими A–D, метрики, експорт, UI, 3D).
+- **SOLID** там, де це зменшує зв’язність без зайвого ускладнення сцен.
+- Додавання 5-го контролера = **реєстрація стратегії**, а не правка диспетчеризації фізики.
 
-## Layering
+## Шари
 
 ```
-Presentation     UI/ · Visual/ · Utils (camera, window)
+Presentation     UI/ · Visual/ · Utils (камера, вікно)
        ↓
-Application      Control/* strategies (Fuzzy/Neural/Hybrid MB + pure PID)
+Application      Control/* стратегії (Fuzzy/Neural/Hybrid MB + чистий PID)
        ↓
 Domain           ILandingController · Context/Command · Resolver · Criteria
        ↓
@@ -22,45 +22,45 @@ Core             RocketPhysics (RK4) · SimulationManager · Export · Logger
 Parameters       SimulationParameters (ScriptableObject)
 ```
 
-| Layer | Responsibility |
-|-------|----------------|
-| **Domain** | GNC contracts and soft-landing rules |
-| **Control** | Concrete strategies + shared guidance profile |
-| **Core** | Integration, Monte-Carlo, metrics, export |
-| **Presentation** | HUD, meshes, camera, splash |
+| Шар | Відповідальність |
+|-----|------------------|
+| **Domain** | Контракти GNC і правила soft-landing |
+| **Control** | Конкретні стратегії + спільний профіль наведення |
+| **Core** | Інтегрування, Monte-Carlo, метрики, експорт |
+| **Presentation** | HUD, меші, камера, splash |
 
 ## SOLID
 
 | | |
 |--|--|
-| **S** | PID in `PidLandingStrategy`; gate in `LandingCriteria`; UI separate |
-| **O** | New mode → implement `ILandingController` + `Register` |
-| **L** | All strategies return `ControlCommand`; physics applies shared safety envelope |
-| **I** | Narrow interface: Mode / Evaluate / Reset / IsAvailable |
-| **D** | `RocketPhysics` depends on resolver, not concrete Fuzzy/NN for dispatch |
+| **S** | PID у `PidLandingStrategy`; gate у `LandingCriteria`; UI окремо |
+| **O** | Новий режим → реалізувати `ILandingController` + `Register` |
+| **L** | Усі стратегії повертають `ControlCommand`; фізика застосовує спільний safety envelope |
+| **I** | Вузький інтерфейс: Mode / Evaluate / Reset / IsAvailable |
+| **D** | `RocketPhysics` залежить від resolver, а не від конкретних Fuzzy/NN для диспетчеризації |
 
-## Patterns
+## Патерни
 
-| Pattern | Where |
-|---------|--------|
+| Патерн | Де |
+|--------|-----|
 | Strategy | `ILandingController.Evaluate` |
 | Registry | `LandingControllerResolver` |
 | DTO / Snapshot | `ControlContext`, `ControlCommand` |
 | Composition root | `RocketPhysics.Start` → `CreateDefault` |
 | Facade | `SoftLandingGuidance` |
 | Builder | `EnvironmentBuilder`, `RocketVisualBuilder` |
-| Observer | `UILocale` / `UiTheme` change events |
+| Observer | події змін `UILocale` / `UiTheme` |
 
-## Control flow (FixedUpdate)
+## Потік керування (FixedUpdate)
 
-1. `SimulationTick` — RK4 translation + attitude integration  
+1. `SimulationTick` — RK4-трансляція + інтегрування орієнтації  
 2. `ControlContext.FromState`  
 3. `resolver.Resolve(mode).Evaluate(ctx)` → `ControlCommand`  
-4. Blend strategy gimbal with upright PD safety net  
-5. Lateral guidance × `LateralScale`  
+4. Змішування gimbal стратегії з upright PD safety net  
+5. Бічне наведення × `LateralScale`  
 6. Touchdown → `LandingMetrics` + `LandingCriteria.ApplySuccessFlag`  
 
-## Folder map
+## Карта каталогів
 
 ```
 Assets/Scripts/
@@ -71,22 +71,22 @@ Assets/Scripts/
 ├── Visual/
 ├── UI/
 ├── Utils/
-└── (Tests under Assets/Tests)
+└── (тести в Assets/Tests)
 ```
 
-## Adding a controller
+## Як додати контролер
 
-1. Implement `ILandingController` (MonoBehaviour or pure class).  
-2. `resolver.Register(instance)` in composition root.  
-3. Extend `RocketPhysics.ControlMode` + UI button if user-facing.  
-4. **Do not** add a dispatch `switch` in `UpdateControl`.  
+1. Реалізувати `ILandingController` (MonoBehaviour або чистий клас).  
+2. `resolver.Register(instance)` у composition root.  
+3. Розширити `RocketPhysics.ControlMode` + кнопку UI, якщо режим для користувача.  
+4. **Не** додавати `switch` диспетчеризації в `UpdateControl`.  
 
-## Deliberate non-goals
+## Свідомі non-goals
 
-- Full DI container (Zenject/VContainer)  
-- Splitting `MissionControlUI` into many files in one pass  
-- ECS rewrite  
+- Повний DI-контейнер (Zenject/VContainer)  
+- Розбиття `MissionControlUI` на багато файлів одним проходом  
+- Перепис на ECS  
 
-## Tests
+## Тести
 
-EditMode / PlayMode cover PID, Fuzzy, Neural signs, physics, metrics, export, integration.
+EditMode / PlayMode покривають PID, Fuzzy, знаки Neural, фізику, метрики, експорт, інтеграцію.

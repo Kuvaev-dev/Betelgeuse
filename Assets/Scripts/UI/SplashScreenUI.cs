@@ -5,8 +5,8 @@ using UnityEngine.EventSystems;
 using TMPro;
 
 /// <summary>
-/// Branded loading screen — starfield only, spinning loader, refined status card.
-/// Animations use unscaled time so they keep moving during bootstrap.
+/// Фірмовий екран завантаження — лише зоряне поле, спінер, акуратна картка статусу.
+/// Анімації на unscaled time, щоб рухались під час bootstrap.
 /// </summary>
 [DefaultExecutionOrder(-1000)]
 public class SplashScreenUI : MonoBehaviour
@@ -68,8 +68,8 @@ public class SplashScreenUI : MonoBehaviour
     void LateUpdate() => TickSpinnerOnly();
 
     /// <summary>
-    /// Wall-clock spin so the arc keeps the correct angle after frame hitches
-    /// and still advances every frame the main thread is free.
+    /// Обертання за wall-clock, щоб дуга тримала правильний кут після frame hitch
+    /// і все одно просувається щокадру, коли main thread вільний.
     /// </summary>
     void TickSpinnerOnly()
     {
@@ -175,7 +175,7 @@ public class SplashScreenUI : MonoBehaviour
         Stretch(bg.rectTransform, 0, 0, 0, 0);
         bg.raycastTarget = true;
 
-        // Starfield only — no moon, wash, or chrome chips on the backdrop
+        // Лише зоряне поле — без місяця, wash чи chrome-чіпів на тлі
         BuildStars(transform, 90);
 
         BuildCard(transform);
@@ -191,10 +191,10 @@ public class SplashScreenUI : MonoBehaviour
         crt.pivot = new Vector2(0.5f, 0.5f);
         crt.sizeDelta = new Vector2(520f, 280f);
 
-        // Thin cyan edge frame (1 px via 4 sides)
+        // Тонка cyan-рамка краю (1 px через 4 сторони)
         MakeFrame(card.transform, ColCardEdge);
 
-        // Top accent bar
+        // Верхня акцентна смуга
         var accent = MakeImage(card.transform, "AccentBar",
             new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.85f));
         var ar = accent.rectTransform;
@@ -227,7 +227,7 @@ public class SplashScreenUI : MonoBehaviour
         sr.offsetMax = new Vector2(-32f, 0f);
         txtSub.alignment = TextAlignmentOptions.Center;
 
-        // Divider under subtitle
+        // Роздільник під підзаголовком
         var div = MakeImage(card.transform, "Div", new Color(1f, 1f, 1f, 0.08f));
         var dr = div.rectTransform;
         dr.anchorMin = new Vector2(0.18f, 0.44f);
@@ -245,7 +245,7 @@ public class SplashScreenUI : MonoBehaviour
         txtStage.alignment = TextAlignmentOptions.Center;
         txtStage.characterSpacing = 1.5f;
 
-        // Progress track
+        // Доріжка прогресу
         var trackGo = MakeImage(card.transform, "Track", ColTrack);
         var trk = trackGo.rectTransform;
         trk.anchorMin = new Vector2(0.1f, 0.22f);
@@ -267,7 +267,7 @@ public class SplashScreenUI : MonoBehaviour
         bgr.offsetMin = Vector2.zero;
         bgr.offsetMax = Vector2.zero;
 
-        // Status row
+        // Ряд статусу
         txtStatus = MakeText(card.transform, "…", 13, ColMuted, FontStyles.Normal);
         var st = txtStatus.rectTransform;
         st.anchorMin = new Vector2(0.1f, 0.08f);
@@ -311,14 +311,14 @@ public class SplashScreenUI : MonoBehaviour
         rootRt.pivot = new Vector2(0.5f, 0.5f);
         rootRt.sizeDelta = new Vector2(48f, 48f);
 
-        // Static dim ring
+        // Статичне тьмяне кільце
         var ring = MakeImage(root.transform, "Ring", new Color(1f, 1f, 1f, 0.1f));
         ring.sprite = RingSprite(64, 5f, 1f);
         ring.type = Image.Type.Simple;
         ring.preserveAspect = true;
         Stretch(ring.rectTransform, 0, 0, 0, 0);
 
-        // Spinning arc (partial ring)
+        // Обертова дуга (часткове кільце)
         var spinGo = new GameObject("ArcSpin", typeof(RectTransform));
         spinGo.transform.SetParent(root.transform, false);
         spinnerRt = spinGo.GetComponent<RectTransform>();
@@ -330,7 +330,7 @@ public class SplashScreenUI : MonoBehaviour
         spinnerArc.preserveAspect = true;
         Stretch(spinnerArc.rectTransform, 0, 0, 0, 0);
 
-        // Center dot
+        // Центральна точка
         var core = MakeImage(root.transform, "Core", new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.35f));
         var cr = core.rectTransform;
         cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0.5f);
@@ -338,7 +338,7 @@ public class SplashScreenUI : MonoBehaviour
         cr.sizeDelta = new Vector2(6f, 6f);
     }
 
-    /// <summary>Procedural ring / arc sprite. fill01 = fraction of circumference drawn.</summary>
+    /// <summary>Процедурний спрайт кільця / дуги. fill01 = частка намальованої довжини кола.</summary>
     static Sprite RingSprite(int size, float thicknessPx, float fill01)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -363,7 +363,7 @@ public class SplashScreenUI : MonoBehaviour
                     tex.SetPixel(x, y, clear);
                     continue;
                 }
-                // 0 = up, increases clockwise
+                // 0 = вгору, зростає за годинниковою стрілкою
                 float ang = Mathf.Atan2(dx, dy);
                 if (ang < 0f) ang += Mathf.PI * 2f;
                 float edge = 1f;
@@ -394,7 +394,7 @@ public class SplashScreenUI : MonoBehaviour
             rt.offsetMax = Vector2.zero;
             if (size.x > 0f || size.y > 0f)
                 rt.sizeDelta = size;
-            // For stretch edges keep sizeDelta on the thin axis
+            // Для stretch-країв тримати sizeDelta на тонкій осі
             if (Mathf.Approximately(aMin.x, 0f) && Mathf.Approximately(aMax.x, 1f))
             {
                 rt.pivot = new Vector2(0.5f, aMin.y > 0.5f ? 1f : 0f);
@@ -509,7 +509,7 @@ public class SplashScreenUI : MonoBehaviour
             float x = (float)rng.NextDouble();
             float y = (float)rng.NextDouble();
             float s = 1.1f + (float)rng.NextDouble() * 2.4f;
-            // Occasional brighter star
+            // Іноді яскравіша зірка
             if (rng.NextDouble() < 0.08)
                 s += 1.6f;
             float a = 0.18f + (float)rng.NextDouble() * 0.55f;
