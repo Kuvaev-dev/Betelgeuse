@@ -113,6 +113,8 @@ public class SimulationManager : MonoBehaviour
         float prevScale = Time.timeScale;
         float prevFixed = Time.fixedDeltaTime;
         rocketPhysics.batchDrivenTicks = true;
+        // MC лише на ділянці посадки 1-го ступеня (після sep)
+        rocketPhysics.skipStackPhase = true;
 
         // Справедливий paired Monte-Carlo протокол (seeded, однакові ПУ/збурення для A–D)
         DefenseBaseline.ApplyTo(this);

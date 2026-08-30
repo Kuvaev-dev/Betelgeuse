@@ -1,22 +1,34 @@
 using UnityEngine;
 
 /// <summary>
-/// Ядро фізики та GNC: RK4-трансляція, Euler-орієнтація, TVC і soft-landing.
-/// Керування A–D через <see cref="ILandingController"/> / <see cref="LandingControllerResolver"/>.
-/// Політ стартує лише після <c>simulationArmed</c>.
+/// Ядро фізики та GNC (Earth LZ): RK4, TVC, soft-landing 1-го ступеня.
+/// Фази: <see cref="FlightPhase.Stack"/> (спрощений підйом пакета) →
+/// відділення → <see cref="FlightPhase.Stage1"/> (A–D лише тут).
 /// </summary>
 [RequireComponent(typeof(DataLogger))]
 public class RocketPhysics : MonoBehaviour
 {
     [Header("Основні параметри")]
     public SimulationParameters parameters;
-    /// <summary>Алгоритм керування (A–D у UI).</summary>
+    /// <summary>Алгоритм керування (A–D у UI) — активний лише у фазі Stage1.</summary>
     public enum ControlMode { PID, Fuzzy, Neural, Hybrid }
+
+    /// <summary>Фаза місії: пакет до sep / 1-й ступінь на посадці.</summary>
+    public enum FlightPhase { Idle, Stack, Stage1 }
 
     [Header("Режим керування")]
     public ControlMode controlMode = ControlMode.Hybrid;
     /// <summary>Поточний фізичний стан (єдине джерело правди для камери/UI).</summary>
     public RocketState state = new RocketState();
+
+    [Header("Фаза польоту")]
+    public FlightPhase phase = FlightPhase.Idle;
+    /// <summary>
+    /// true = одразу Stage1 (єдиний режим UI: лише 1-й ступінь).
+    /// </summary>
+    public bool skipStackPhase = true;
+    /// <summary>Чи відбулось відділення в поточному прогоні.</summary>
+    public bool hasSeparated { get; private set; }
 
     [Header("Запуск")]
     [Tooltip("false = ракета чекає кнопки «Запустити посадку»")]
@@ -27,6 +39,13 @@ public class RocketPhysics : MonoBehaviour
     [Header("Зовнішні збурення")]
     public Vector3 windVelocity = Vector3.zero;
     public bool applyContinuousWind = true;
+    /// <summary>Відкладені збурення UI/MC — застосовуються після відділення (не до пакета).</summary>
+    float pendingWindStrength;
+    bool pendingRandomize;
+    float pendingMassVar = 6f;
+    float pendingAngleVar = 7f;
+    float pendingJitter = 18f;
+    bool hasPendingDisturbances;
 
     private DataLogger logger;
 
@@ -104,17 +123,111 @@ public class RocketPhysics : MonoBehaviour
     void InitializeSimulation()
     {
         if (parameters == null) return;
-        state.position = parameters.startPosition;
-        state.velocity = parameters.startVelocity;
-        state.rotation = Quaternion.Euler(parameters.startEulerAngles);
-        state.angularVelocity = Vector3.zero;
-        state.dryMass = parameters.dryMass;
-        state.currentFuelMass = parameters.fuelMass;
-        state.maxThrust = parameters.maxThrust;
+        parameters.EnsureStackDefaults();
+        hasSeparated = false;
+        hasPendingDisturbances = false;
+
+        // Завжди лише 1-й ступінь (візуал і GNC)
+        skipStackPhase = true;
+        EnterStage1(fromSeparation: false, applyLandingIc: true);
+        hasSeparated = true;
+
         state.currentThrust = 0f;
         state.thrustDirection = Vector3.up;
         state.time = 0f;
+        state.isLanded = false;
+        state.simulationFinished = false;
         SyncTransformWithState();
+        RocketVisualBuilder.SetUpperStackVisible(transform, false);
+    }
+
+    void EnterStack()
+    {
+        phase = FlightPhase.Stack;
+        hasSeparated = false;
+        state.position = parameters.stackStartPosition;
+        state.velocity = parameters.stackStartVelocity;
+        state.rotation = Quaternion.Euler(parameters.stackStartEulerAngles);
+        state.angularVelocity = Vector3.zero;
+        state.dryMass = parameters.stackDryMass;
+        state.currentFuelMass = parameters.stackFuelMass;
+        state.maxThrust = parameters.stackMaxThrust;
+        // Під час Stack вітер не застосовуємо
+        windVelocity = Vector3.zero;
+        applyContinuousWind = false;
+        RocketVisualBuilder.SetUpperStackVisible(transform, true);
+    }
+
+    void EnterStage1(bool fromSeparation, bool applyLandingIc)
+    {
+        phase = FlightPhase.Stage1;
+        if (fromSeparation) hasSeparated = true;
+
+        state.dryMass = parameters.dryMass;
+        state.currentFuelMass = parameters.fuelMass;
+        state.maxThrust = parameters.maxThrust;
+
+        if (applyLandingIc || (fromSeparation && parameters.snapToLandingIcOnSeparation))
+        {
+            state.position = parameters.startPosition;
+            state.velocity = parameters.startVelocity;
+            state.rotation = Quaternion.Euler(parameters.startEulerAngles);
+            state.angularVelocity = Vector3.zero;
+            if (fromSeparation)
+            {
+                currentTime = 0f;
+                state.time = 0f;
+                maxHeightRecorded = state.position.y;
+            }
+        }
+
+        // 1) sync stage1 у фінальну позу (після можливого snap)
+        // 2) лише тоді cinematic sep — upper прив’язується до stage1 у кадрі камери
+        SyncTransformWithState();
+        if (fromSeparation)
+        {
+            RocketVisualBuilder.SetUpperStackVisible(transform, false, animateAway: true);
+            ApplyPendingDisturbancesIfAny();
+        }
+        else
+        {
+            RocketVisualBuilder.SetUpperStackVisible(transform, false, animateAway: false);
+        }
+    }
+
+    void CheckSeparation()
+    {
+        if (phase != FlightPhase.Stack || parameters == null) return;
+        float h = state.position.y;
+        float t = state.time;
+        bool byAlt = h >= parameters.separationAltitude;
+        bool byTime = t >= parameters.separationTime;
+        if (!byAlt && !byTime) return;
+        EnterStage1(fromSeparation: true, applyLandingIc: parameters.snapToLandingIcOnSeparation);
+        controllerResolver?.ResetAll();
+        pidStrategy.ResetSession();
+    }
+
+    /// <summary>Спрощений open-loop підйом пакета (не A–D).</summary>
+    void UpdateStackControl()
+    {
+        float h = state.position.y;
+        float vy = state.velocity.y;
+        float sepH = parameters != null ? parameters.separationAltitude : 2400f;
+        // Профіль: повна тяга на розгін, throttle down біля sep
+        float throttle = 1f;
+        if (h > sepH * 0.55f) throttle = 0.72f;
+        if (h > sepH * 0.82f) throttle = 0.35f;
+        if (vy > 120f) throttle = Mathf.Min(throttle, 0.25f);
+        if (h > sepH * 0.95f) throttle = 0.05f;
+
+        state.thrustDirection = Vector3.up;
+        state.currentThrust = state.maxThrust * throttle;
+        if (state.currentFuelMass <= 0f) state.currentThrust = 0f;
+
+        // М'яке вирівнювання корпусу
+        state.rotation = Quaternion.Slerp(state.rotation, Quaternion.identity, 0.08f);
+        state.angularVelocity *= 0.9f;
     }
 
     /// <summary>True, поки Monte-Carlo ганяє ticks вручну (пропустити double-step FixedUpdate).</summary>
@@ -149,8 +262,18 @@ public class RocketPhysics : MonoBehaviour
             return;
         }
 
-        UpdateControl();
-        RungeKutta4Step(dt);
+        if (phase == FlightPhase.Stack)
+        {
+            UpdateStackControl();
+            RungeKutta4Step(dt);
+            CheckSeparation();
+        }
+        else
+        {
+            // A–D лише після відділення (Stage1)
+            UpdateControl();
+            RungeKutta4Step(dt);
+        }
 
         // Тримати physics origin на/над поверхнею pad (верх палуби ≈ PadSurfaceY)
         float ground = EnvironmentBuilder.PadSurfaceY;
@@ -168,12 +291,15 @@ public class RocketPhysics : MonoBehaviour
             cachedVisualizer?.SampleFlight(force: false);
         }
 
-        if (state.position.y <= ground + 0.04f)
+        // Touchdown лише у фазі посадки 1-го ступеня
+        if (phase == FlightPhase.Stage1 && state.position.y <= ground + 0.04f)
             FinishLanding(timeout: false);
     }
 
     void UpdateControl()
     {
+        if (phase != FlightPhase.Stage1) return;
+
         float dt = parameters != null ? parameters.fixedTimeStep : Time.fixedDeltaTime;
         var ctx = ControlContext.FromState(state, dt);
         float h = ctx.Height;
@@ -407,7 +533,7 @@ public class RocketPhysics : MonoBehaviour
         return logger != null ? logger.LastFilePath : null;
     }
 
-    /// <summary>Повне перезавантаження та старт спуску (без збурень — див. ApplyFlightDisturbances).</summary>
+    /// <summary>Повне перезавантаження та старт (Stack→sep→Stage1 або одразу Stage1).</summary>
     public void ResetSimulation()
     {
         state.isLanded = false;
@@ -419,6 +545,8 @@ public class RocketPhysics : MonoBehaviour
         applyContinuousWind = true;
         simulationArmed = true;
         simulationPaused = false;
+        // MC завжди лише ділянка посадки
+        if (batchDrivenTicks) skipStackPhase = true;
 
         controllerResolver?.ResetAll();
         pidStrategy.ResetSession();
@@ -436,15 +564,14 @@ public class RocketPhysics : MonoBehaviour
         }
         else
         {
-            // Легкий reset для trial Monte-Carlo
             if (logger != null) logger.Initialize();
         }
     }
 
     /// <summary>
-    /// Збурення для ОДИНОЧНОЇ посадки з UI (вітер / шум).
-    /// Раніше працювало лише в Monte-Carlo — тому ручні слайдери «нічого не міняли».
-    /// Ideal presets: windStrength=0, randomize=false.
+    /// Збурення для посадки 1-го ступеня (вітер / шум).
+    /// Якщо ще фаза Stack — відкладаються до відділення (не діють на пакет).
+    /// Ideal: windStrength=0, randomize=false.
     /// </summary>
     public void ApplyFlightDisturbances(
         float windStrength,
@@ -453,12 +580,33 @@ public class RocketPhysics : MonoBehaviour
         float angleVariationDegrees = 7f,
         float positionJitterMeters = 18f)
     {
-        windStrength = Mathf.Max(0f, windStrength);
+        pendingWindStrength = Mathf.Max(0f, windStrength);
+        pendingRandomize = randomize;
+        pendingMassVar = massVariationPercent;
+        pendingAngleVar = angleVariationDegrees;
+        pendingJitter = positionJitterMeters;
+        hasPendingDisturbances = true;
+
+        if (phase == FlightPhase.Stage1)
+            ApplyPendingDisturbancesIfAny();
+        else
+        {
+            // Під час Stack збурення вимкнені
+            windVelocity = Vector3.zero;
+            applyContinuousWind = false;
+        }
+    }
+
+    void ApplyPendingDisturbancesIfAny()
+    {
+        if (!hasPendingDisturbances) return;
+        hasPendingDisturbances = false;
+
+        float windStrength = pendingWindStrength;
         applyContinuousWind = windStrength > 0.05f;
 
         if (windStrength > 0.05f)
         {
-            // Постійний вітер + початковий kick (seeded via SimRng) — paired with MC recipe
             Vector3 kick = new Vector3(
                 SimRng.Range(-windStrength, windStrength),
                 0f,
@@ -471,26 +619,26 @@ public class RocketPhysics : MonoBehaviour
             windVelocity = Vector3.zero;
         }
 
-        if (randomize)
+        if (pendingRandomize)
         {
-            float massNoise = 1f + SimRng.Range(-massVariationPercent, massVariationPercent) / 100f;
+            float massNoise = 1f + SimRng.Range(-pendingMassVar, pendingMassVar) / 100f;
             state.currentFuelMass = Mathf.Max(500f, state.currentFuelMass * massNoise);
 
-            float ax = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
-            float az = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
+            float ax = SimRng.Range(-pendingAngleVar, pendingAngleVar);
+            float az = SimRng.Range(-pendingAngleVar, pendingAngleVar);
             state.rotation = Quaternion.Normalize(state.rotation * Quaternion.Euler(ax, 0f, az));
 
-            if (positionJitterMeters > 0.1f)
+            if (pendingJitter > 0.1f)
             {
-                state.position.x += SimRng.Range(-positionJitterMeters, positionJitterMeters);
-                state.position.z += SimRng.Range(-positionJitterMeters, positionJitterMeters);
+                state.position.x += SimRng.Range(-pendingJitter, pendingJitter);
+                state.position.z += SimRng.Range(-pendingJitter, pendingJitter);
             }
         }
 
         SyncTransformWithState();
     }
 
-    /// <summary>Лише вибір режиму — без старту.</summary>
+    /// <summary>Лише вибір режиму — без старту. Показує пакет на pad (idle Stack visual).</summary>
     public void PrepareMode(ControlMode mode)
     {
         controlMode = mode;
@@ -502,12 +650,31 @@ public class RocketPhysics : MonoBehaviour
         windVelocity = Vector3.zero;
         simulationArmed = false;
         simulationPaused = false;
+        // skipStackPhase зберігається (Ideal/MC можуть лишити landing-only)
+        hasSeparated = false;
+        hasPendingDisturbances = false;
+        phase = FlightPhase.Idle;
 
         controllerResolver?.ResetAll();
         pidStrategy.ResetSession();
 
         SyncFixedTimestep();
-        InitializeSimulation();
+        if (parameters != null)
+        {
+            parameters.EnsureStackDefaults();
+            state.position = parameters.startPosition;
+            state.velocity = Vector3.zero;
+            state.rotation = Quaternion.Euler(parameters.startEulerAngles);
+            state.angularVelocity = Vector3.zero;
+            state.dryMass = parameters.dryMass;
+            state.currentFuelMass = parameters.fuelMass;
+            state.maxThrust = parameters.maxThrust;
+            state.currentThrust = 0f;
+            state.thrustDirection = Vector3.up;
+            state.time = 0f;
+            RocketVisualBuilder.SetUpperStackVisible(transform, false);
+            SyncTransformWithState();
+        }
         if (logger != null) logger.Initialize();
         if (cachedVisualizer == null)
             cachedVisualizer = FindAnyObjectByType<TrajectoryVisualizer>();
@@ -515,6 +682,9 @@ public class RocketPhysics : MonoBehaviour
         MissionControlUI.Instance?.HideLandingResult();
         SnapCamera();
     }
+
+    /// <summary>Підпис середовища для UI/експорту.</summary>
+    public static string EnvironmentLabel => "Earth LZ · Stage-1 · after separation";
 
     /// <summary>
     /// Примусове завершення з метриками (для Monte-Carlo timeout / STOP з оцінкою).
@@ -561,11 +731,10 @@ public class RocketPhysics : MonoBehaviour
     }
 
     /// <summary>
-    /// Тримає горизонтальну позицію всередині crater-диска (з м'яким відскоком швидкості).
+    /// Тримає горизонтальну позицію всередині земного диска LZ (м'який відскік).
     /// </summary>
     void ClampToTerrainDisk()
     {
-        // Невеликий запас, щоб корпус/ноги не «звисали» з краю
         float maxR = LunarTerrainMesh.TerrainRadius * 0.92f;
         float hx = state.position.x;
         float hz = state.position.z;

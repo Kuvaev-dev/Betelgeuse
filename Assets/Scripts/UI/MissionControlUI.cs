@@ -354,9 +354,13 @@ public class MissionControlUI : MonoBehaviour
                 case "RightPanel":
                 case "TopChrome":
                 case "ResultCard":
-                case "HelpCard":
                 case "StepBar":
                     img.color = C_Panel;
+                    break;
+                case "HelpCard":
+                    {
+                        var hc = C_Panel; hc.a = 1f; img.color = hc;
+                    }
                     break;
                 case "SliderBlock":
                 case "ToggleRow":
@@ -402,9 +406,7 @@ public class MissionControlUI : MonoBehaviour
                     img.color = UiTheme.ModalScrim;
                     break;
                 case "HelpOverlay":
-                    img.color = UiTheme.IsLightBackground
-                        ? new Color(0.12f, 0.14f, 0.18f, 0.55f)
-                        : new Color(0.02f, 0.03f, 0.05f, 0.72f);
+                    img.color = HelpScrimColor();
                     break;
                 case "Box":
                     img.color = C_Btn;
@@ -550,6 +552,8 @@ public class MissionControlUI : MonoBehaviour
                 bg = BtnPink();
             else if (n == "Action")
                 bg = BtnViolet();
+            else if (n == "HelpOkBtn" || n == "CloseResult" || n == "ShowTraj" || n == "ExportResult")
+                bg = C_Btn; // chrome-кнопки як Help у top menu
             else if (n.StartsWith("Mode_"))
             {
                 bool active = rocket != null && n == "Mode_" + rocket.controlMode;
@@ -2075,21 +2079,39 @@ public class MissionControlUI : MonoBehaviour
         HideLandingResult();
         ClearGraphs();
         ResetFlightPeaks();
-        overviewCam = false;
-        ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
+        // Зберегти режим камери (T огляд / C manual) — не форсувати Follow
+        var cam = ResolveCamera();
+        if (cam != null)
+        {
+            bool keepOverview = overviewCam || cam.mode == CameraFollow.ViewMode.Overview;
+            bool keepManual = cam.mode == CameraFollow.ViewMode.Manual;
+            if (keepOverview)
+            {
+                overviewCam = true;
+                cam.SnapToFullTrajectoryView();
+            }
+            else if (keepManual)
+            {
+                // лишити Manual як є
+                cam.SetMode(CameraFollow.ViewMode.Manual);
+            }
+            // інакше Follow лишається Follow — без примусового reset
+        }
         RefreshCamLabel();
+        UpdateViewButtonVisual();
         ApplySettings();
         ApplyExperimentInitialConditions();
         // Детерміновані збурення одиночного запуску з поточного seed
         SimRng.Reseed(sim != null ? sim.experimentSeed : UserSettings.ExperimentSeed);
         rocket.batchDrivenTicks = false; // гарантувати FixedUpdate + trajectory
+        // Звичайний старт: пакет → sep → Stage1 (Ideal лишає skipStackPhase=true)
         rocket.ResetSimulation();
         UpdatePauseButtonVisual();
         var tv = EnsureTrajectoryVisualizer();
         tv?.Clear();
         tv?.SetVisible(trajVisible);
 
-        // UI-вітер/шум → реальна одиночна посадка (не лише Monte-Carlo)
+        // Вітер/шум — лише після відділення (ApplyFlightDisturbances відкладає на Stack)
         float wind = windSlider != null ? windSlider.value : 0f;
         bool noise = noiseToggle != null && noiseToggle.isOn;
         float massVar = massNoiseSlider != null ? massNoiseSlider.value : UserSettings.MassNoise;
@@ -2103,10 +2125,10 @@ public class MissionControlUI : MonoBehaviour
         }
         rocket.ApplyFlightDisturbances(wind, noise, massVar, angVar);
 
-        float h0 = rocket.parameters != null ? rocket.parameters.startPosition.y : 0f;
+        float h0 = rocket.state.position.y;
         string dist = UILocale.IsUK
-            ? $"h₀={h0:F0} м · вітер≈{wind:F0} · шум={(noise ? "ON" : "OFF")}"
-            : $"h₀={h0:F0} m · wind≈{wind:F0} · noise={(noise ? "ON" : "OFF")}";
+            ? $"Earth LZ · 1-й ступінь · h={h0:F0} м · вітер≈{wind:F0}"
+            : $"Earth LZ · first stage · h={h0:F0} m · wind≈{wind:F0}";
         NotifyInfo(string.Format(UILocale.T("msg_started"), UILocale.ModeName(rocket.controlMode)) + "\n" + dist);
     }
 
@@ -2310,6 +2332,7 @@ public class MissionControlUI : MonoBehaviour
         var cam = ResolveCamera();
         if (cam != null)
         {
+            // Явний F — увімкнути слідкування (скинути freeze огляду)
             cam.userOrbitLock = false;
             cam.SetMode(CameraFollow.ViewMode.Follow);
         }
@@ -2534,28 +2557,56 @@ public class MissionControlUI : MonoBehaviour
         SetHelpVisible(false);
         HideLandingResult();
 
-        // Hybrid + Ideal + Follow + Start (скриптований шлях захисту)
+        // Hybrid Ideal: посадка лише 1-го ступеня (Earth LZ)
         SelectMode(RocketPhysics.ControlMode.Hybrid);
         yield return null;
-        OnApplyIdealPresets();
+
+        if (heightSlider != null) heightSlider.value = IdealLandingPresets.StartHeight;
+        if (descentSlider != null) descentSlider.value = IdealLandingPresets.StartDescentSpeed;
+        if (tilt0Slider != null) tilt0Slider.value = IdealLandingPresets.StartTiltDeg;
+        if (windSlider != null) windSlider.value = 0f;
+        if (noiseToggle != null) noiseToggle.isOn = false;
+        if (sim != null)
+        {
+            sim.enableNoise = false;
+            sim.windStrength = 0f;
+            sim.startHeight = IdealLandingPresets.StartHeight;
+            sim.startDescentSpeed = IdealLandingPresets.StartDescentSpeed;
+            sim.startTiltDeg = IdealLandingPresets.StartTiltDeg;
+        }
+
+        IdealLandingPresets.ApplyDefaultControllerTuning(
+            rocket, rocket.fuzzyController, rocket.neuralController, rocket.hybridController);
+        if (rocket.neuralController != null)
+        {
+            rocket.neuralController.enableTraining = false;
+            rocket.neuralController.InstallIdealWeights();
+        }
+        rocket.skipStackPhase = true;
+
         yield return null;
         ApplyLiveTimeScale(Mathf.Max(1f, Time.timeScale));
         OnStartLanding();
         NotifyInfo(UILocale.T("msg_demo_flight"));
 
-        // Чекати завершення посадки або timeout (~3 хв wall)
         float wall = 0f;
-        while (rocket != null && rocket.simulationArmed && !rocket.state.simulationFinished && wall < 180f)
+        while (rocket != null && rocket.simulationArmed && !rocket.state.simulationFinished && wall < 240f)
         {
             wall += Time.unscaledDeltaTime;
             yield return null;
         }
 
-        // Коротка пауза на результаті, далі overview траєкторії
         yield return new WaitForSecondsRealtime(1.2f);
         if (rocket != null && rocket.state.simulationFinished)
         {
-            OnFullTrajectoryView();
+            // Не зривати ручний огляд (Manual / user orbit) — лише з Follow без lock
+            var cam = ResolveCamera();
+            bool userInspecting = cam != null && (
+                cam.mode == CameraFollow.ViewMode.Manual
+                || cam.userOrbitLock
+                || cam.mode == CameraFollow.ViewMode.Overview);
+            if (!userInspecting)
+                OnFullTrajectoryView();
             NotifyInfo(UILocale.T("msg_demo_done"));
         }
         defenseDemoCo = null;
@@ -2566,12 +2617,27 @@ public class MissionControlUI : MonoBehaviour
     void SetHelpVisible(bool on)
     {
         helpVisible = on;
-        if (helpRoot != null) helpRoot.SetActive(on);
+        if (helpRoot != null)
+        {
+            helpRoot.SetActive(on);
+            // Оновити scrim під поточну тему (завжди легкий)
+            var img = helpRoot.GetComponent<Image>();
+            if (img != null) img.color = HelpScrimColor();
+        }
+    }
+
+    /// <summary>Напівпрозорий scrim — інтерфейс позаду лишається читабельним.</summary>
+    static Color HelpScrimColor()
+    {
+        if (UiTheme.IsLightBackground)
+            return new Color(0.15f, 0.18f, 0.22f, 0.28f);
+        return new Color(0.02f, 0.03f, 0.06f, 0.32f);
     }
 
     void BuildHelpOverlay(Transform parent)
     {
-        helpRoot = CreatePanel("HelpOverlay", parent, new Color(0.02f, 0.03f, 0.05f, 0.72f));
+        // Легкий scrim — HUD/сцена лишаються видимими (не «сіра стіна»)
+        helpRoot = CreatePanel("HelpOverlay", parent, HelpScrimColor());
         var rt = helpRoot.GetComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -2582,22 +2648,29 @@ public class MissionControlUI : MonoBehaviour
         dimBtn.transition = Selectable.Transition.None;
         dimBtn.onClick.AddListener(() => SetHelpVisible(false));
 
-        // Компактна картка: title + body + кнопка з малими відступами
+        // Компактна картка: title + body + кнопка
         const float cardW = 540f;
         const float cardH = 430f;
         const float titleH = 28f;
         const float titleTop = 14f;
-        const float bodyTop = titleTop + titleH + 8f; // відступ під title
+        const float bodyTop = titleTop + titleH + 8f;
         const float btnH = 34f;
         const float btnBottom = 14f;
-        const float bodyBottom = btnBottom + btnH + 10f; // 10px між текстом і кнопкою
+        const float bodyBottom = btnBottom + btnH + 10f;
 
-        var card = CreatePanel("HelpCard", helpRoot.transform, C_Panel);
+        // Непрозора картка поверх легкого scrim
+        Color cardBg = C_Panel;
+        cardBg.a = 1f;
+        var card = CreatePanel("HelpCard", helpRoot.transform, cardBg);
         var crt = card.GetComponent<RectTransform>();
         crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
         crt.pivot = new Vector2(0.5f, 0.5f);
         crt.sizeDelta = new Vector2(cardW, cardH);
         Outline(card, 1.5f);
+        // Клік по картці не закриває help
+        var block = card.AddComponent<Button>();
+        block.targetGraphic = card.GetComponent<Image>();
+        block.transition = Selectable.Transition.None;
 
         var title = CreateText(card.transform, UILocale.T("help_title"), 17, C_Accent, FontStyles.Bold);
         var tr = title.rectTransform;
@@ -2623,8 +2696,9 @@ public class MissionControlUI : MonoBehaviour
 
         float btnY = -(cardH - btnBottom - btnH);
         float btnX = (cardW - 200f) * 0.5f;
+        // Як кнопка Help у top menu: C_Btn + ButtonLabelOn (не фіолетовий Action)
         ActionButtonAt(card.transform, btnX, btnY, 200f, btnH, UILocale.T("btn_ok"),
-            C_BtnActive, () => SetHelpVisible(false));
+            "HelpOkBtn", C_Btn, () => SetHelpVisible(false));
 
         helpRoot.SetActive(false);
         helpVisible = false;
@@ -2983,7 +3057,7 @@ public class MissionControlUI : MonoBehaviour
             () => { HideLandingResult(); OnFullTrajectoryView(); });
         MakeResultBtn("ExportResult", UILocale.T("btn_export_short"), C_Btn, btnX0 + btnW + btnGap,
             OnExportResults);
-        MakeResultBtn("CloseResult", UILocale.T("btn_ok"), C_BtnActive, btnX0 + (btnW + btnGap) * 2f,
+        MakeResultBtn("CloseResult", UILocale.T("btn_ok"), C_Btn, btnX0 + (btnW + btnGap) * 2f,
             HideLandingResult);
 
         resultRoot.SetActive(false);
@@ -3160,6 +3234,8 @@ public class MissionControlUI : MonoBehaviour
                 SetStatusVisual(ok ? "st_success" : "st_fail", ok ? C_Ok : C_Alert);
                 Write(txtScore, $"{rocket.metrics.SuccessScore:F0}", ok ? C_Ok : C_Alert);
             }
+            else if (rocket.simulationArmed && rocket.phase == RocketPhysics.FlightPhase.Stack)
+                SetStatusVisual("st_stack", C_Amber);
             else if (rocket.simulationArmed && s.time > 0.05f)
                 SetStatusVisual("st_descent", C_Cyan);
             else if (rocket.simulationArmed)
@@ -3672,6 +3748,13 @@ public class MissionControlUI : MonoBehaviour
             return;
         }
 
+        if (rocket.phase == RocketPhysics.FlightPhase.Stack)
+        {
+            txtInsight.text = UILocale.T("ins_stack");
+            txtInsight.color = C_Amber;
+            return;
+        }
+
         if (s.position.y > 400f)
         {
             txtInsight.text = twr < 0.95f ? UILocale.T("ins_high_low_twr") : UILocale.T("ins_high_ok");
@@ -3858,6 +3941,11 @@ public class MissionControlUI : MonoBehaviour
             key = s.time > 0.05f ? "step_stop" : "step_ready";
             col = C_Muted;
         }
+        else if (rocket.phase == RocketPhysics.FlightPhase.Stack)
+        {
+            key = "step_stack";
+            col = C_Amber;
+        }
         else if (h >= 400f) { key = "step_high"; col = C_Cyan; }
         else if (h >= 100f) { key = "step_approach"; col = C_Cyan; }
         else if (h >= 25f) { key = "step_powered"; col = C_Amber; }
@@ -3865,7 +3953,9 @@ public class MissionControlUI : MonoBehaviour
         else if (h >= 2f) { key = "step_soft"; col = C_Ok; }
         else { key = "step_touch"; col = C_Ok; }
 
-        string mode = UILocale.ModeNameShort(rocket.controlMode);
+        string mode = rocket.phase == RocketPhysics.FlightPhase.Stack
+            ? "STACK"
+            : UILocale.ModeNameShort(rocket.controlMode);
         txtStep.text = mode + "  |  " + UILocale.T(key);
         txtStep.color = col;
         var stripeTf = stepBarGo != null ? stepBarGo.transform.Find("StepAccent") : null;

@@ -48,8 +48,11 @@ public static class ResearchExporter
         /// <summary>Покрокові семпли для SVG-графіків і детального аналізу.</summary>
         public List<DataLogger.Sample> samples;
         public string thesisTopic =
-            "Розроблення інтелектуальної системи автономної посадки ракетоносія " +
-            "на основі нечіткої логіки та машинного навчання";
+            "Розроблення інтелектуальної системи автономної посадки першого ступеня ракети-носія " +
+            "на основі нечіткої логіки та машинного навчання (Earth LZ, після відділення)";
+        public string environment = "Earth LZ";
+        public string vehicle = "first stage";
+        public string phase = "landing after separation";
     }
 
     public sealed class ComparisonExportData
@@ -69,6 +72,9 @@ public static class ResearchExporter
         public float startHeight = 1800f;
         public float startDescentSpeed = 72f;
         public float startTiltDeg = 3.5f;
+        public string environment = "Earth LZ";
+        public string vehicle = "first stage";
+        public string phase = "landing after separation";
         public List<AlgoStats> algorithms = new();
 
         /// <summary>True, якщо активний будь-який канал збурень (для формулювань звіту).</summary>
@@ -266,6 +272,9 @@ public static class ResearchExporter
         sb.AppendLine($"  \"type\": \"single_landing\",");
         sb.AppendLine($"  \"timestamp\": \"{Esc(d.timestamp ?? Stamp())}\",");
         sb.AppendLine($"  \"algorithm\": \"{Esc(d.algorithm)}\",");
+        sb.AppendLine($"  \"environment\": \"{Esc(d.environment ?? "Earth LZ")}\",");
+        sb.AppendLine($"  \"vehicle\": \"{Esc(d.vehicle ?? "first stage")}\",");
+        sb.AppendLine($"  \"phase\": \"{Esc(d.phase ?? "landing after separation")}\",");
         sb.AppendLine($"  \"thesisTopic\": \"{Esc(d.thesisTopic)}\",");
         sb.AppendLine($"  \"sampleCount\": {(d.samples != null ? d.samples.Count : 0)},");
         sb.AppendLine("  \"criteria\": {");
@@ -350,6 +359,9 @@ public static class ResearchExporter
         sb.AppendLine($"| | |");
         sb.AppendLine($"|--|--|");
         sb.AppendLine($"| **Алгоритм** | {d.algorithm} |");
+        sb.AppendLine($"| **Середовище** | {d.environment ?? "Earth LZ"} |");
+        sb.AppendLine($"| **Об'єкт** | {d.vehicle ?? "first stage"} |");
+        sb.AppendLine($"| **Фаза** | {d.phase ?? "landing after separation"} |");
         sb.AppendLine($"| **Дата** | {DateTime.Now:yyyy-MM-dd HH:mm:ss} |");
         sb.AppendLine($"| **Оцінка (SuccessScore)** | **{m.SuccessScore:F1} / 100** |");
         sb.AppendLine($"| **Кроків у CSV** | {(d.samples != null ? d.samples.Count : 0)} |");
@@ -643,6 +655,9 @@ public static class ResearchExporter
         sb.AppendLine("  \"project\": \"Betelgeuse\",");
         sb.AppendLine("  \"type\": \"monte_carlo_comparison\",");
         sb.AppendLine($"  \"timestamp\": \"{Esc(d.timestamp ?? Stamp())}\",");
+        sb.AppendLine($"  \"environment\": \"{Esc(d.environment ?? "Earth LZ")}\",");
+        sb.AppendLine($"  \"vehicle\": \"{Esc(d.vehicle ?? "first stage")}\",");
+        sb.AppendLine($"  \"phase\": \"{Esc(d.phase ?? "landing after separation")}\",");
         sb.AppendLine("  \"experiment\": {");
         sb.AppendLine($"    \"testsPerAlgorithm\": {d.testsPerAlgorithm},");
         sb.AppendLine($"    \"enableNoise\": {(d.enableNoise ? "true" : "false")},");
@@ -690,12 +705,18 @@ public static class ResearchExporter
         var sb = new StringBuilder(4096);
         sb.AppendLine("# Порівняння алгоритмів GNC (Monte-Carlo)");
         sb.AppendLine();
-        sb.AppendLine("Один експеримент: кожен алгоритм (PID / Fuzzy / Neural / Hybrid) запускається N разів.");
+        sb.AppendLine("**Середовище:** Earth LZ · **Об'єкт:** first stage · **Фаза:** landing after separation.");
+        sb.AppendLine();
+        sb.AppendLine("Один експеримент: кожен алгоритм (PID / Fuzzy / Neural / Hybrid) на **ділянці посадки 1-го ступеня** (N разів).");
         sb.AppendLine("**Paired seeds** — trial `i` має однакові збурення для всіх алгоритмів (чесне порівняння).");
+        sb.AppendLine("Вітер/шум застосовуються після відділення (MC стартує вже у фазі Stage1).");
         sb.AppendLine();
         sb.AppendLine($"| | |");
         sb.AppendLine($"|--|--|");
         sb.AppendLine($"| **Дата** | {DateTime.Now:yyyy-MM-dd HH:mm:ss} |");
+        sb.AppendLine($"| **Середовище** | {d.environment ?? "Earth LZ"} |");
+        sb.AppendLine($"| **Об'єкт** | {d.vehicle ?? "first stage"} |");
+        sb.AppendLine($"| **Фаза** | {d.phase ?? "landing after separation"} |");
         sb.AppendLine($"| **Запусків на алгоритм (N)** | {d.testsPerAlgorithm} |");
         sb.AppendLine($"| **Seed** | `{d.experimentSeed}` |");
         sb.AppendLine($"| **Protocol** | v{d.protocolVersion} · paired={(d.pairedSeeds ? "yes" : "no")} |");

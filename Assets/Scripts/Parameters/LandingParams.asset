@@ -12,13 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2bc18c850296c4e48a2d9e8d0f0d98b6, type: 3}
   m_Name: LandingParams
   m_EditorClassIdentifier: Assembly-CSharp::SimulationParameters
-  startPosition: {x: 0, y: 1800, z: 0}
-  startVelocity: {x: 0, y: -72, z: 0}
-  startEulerAngles: {x: 0, y: 0, z: 3.5}
+  startPosition: {x: 0, y: 1600, z: 0}
+  startVelocity: {x: 0, y: -60, z: 0}
+  startEulerAngles: {x: 0, y: 0, z: 2}
   dryMass: 25600
   fuelMass: 14000
   maxThrust: 845000
   isp: 311
+  stackStartPosition: {x: 0, y: 45, z: 0}
+  stackStartVelocity: {x: 0, y: 35, z: 0}
+  stackStartEulerAngles: {x: 0, y: 0, z: 0}
+  stackDryMass: 110000
+  stackFuelMass: 280000
+  stackMaxThrust: 7600000
+  separationAltitude: 2400
+  separationTime: 18
+  snapToLandingIcOnSeparation: 1
+
   fixedTimeStep: 0.005
   maxSimulationTime: 400
   maxTouchdownVelocity: 3.5

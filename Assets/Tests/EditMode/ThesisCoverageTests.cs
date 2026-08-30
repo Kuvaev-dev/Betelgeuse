@@ -14,6 +14,33 @@ public class ThesisCoverageTests
     }
 
     [Test]
+    public void EarthAtmosphere_GravityNearNinePointEight()
+    {
+        float g0 = AtmosphereModel.GetGravity(0f);
+        Assert.AreEqual(9.80665f, g0, 0.01f);
+        float g1 = AtmosphereModel.GetGravity(1600f);
+        Assert.Greater(g1, 9.7f);
+        Assert.Less(g1, 9.81f);
+        Assert.Greater(AtmosphereModel.GetDensity(0f), 1.0f);
+    }
+
+    [Test]
+    public void SimulationParameters_StackDefaults_AreSane()
+    {
+        var p = ScriptableObject.CreateInstance<SimulationParameters>();
+        p.stackDryMass = 0f;
+        p.stackFuelMass = 0f;
+        p.stackMaxThrust = 0f;
+        p.stackStartPosition = Vector3.zero;
+        p.EnsureStackDefaults();
+        Assert.Greater(p.stackDryMass, p.dryMass);
+        Assert.Greater(p.stackMaxThrust, p.maxThrust);
+        Assert.Greater(p.separationAltitude, 500f);
+        Assert.Greater(p.stackStartPosition.y, 1f);
+        Object.DestroyImmediate(p);
+    }
+
+    [Test]
     public void LandingCriteria_RejectsTimeoutAndHardTouchdown()
     {
         var lim = new LandingCriteria.Limits(3.5f, 7f, 25f, 5f);

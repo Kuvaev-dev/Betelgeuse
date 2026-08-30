@@ -20,13 +20,9 @@ public class SplashScreenUI : MonoBehaviour
     static readonly Color ColAmber = new(1f, 0.8f, 0.42f, 1f);
     static readonly Color ColMuted = new(0.58f, 0.62f, 0.72f, 1f);
     static readonly Color ColDim = new(0.42f, 0.46f, 0.55f, 1f);
-    static readonly Color ColTrack = new(0.1f, 0.12f, 0.16f, 1f);
-    static readonly Color ColFill = new(0.38f, 0.8f, 0.96f, 1f);
     static readonly Color ColBtn = new(0.1f, 0.12f, 0.16f, 0.92f);
     static readonly Color ColClose = new(0.68f, 0.22f, 0.24f, 0.95f);
 
-    Image barFill;
-    Image barGlow;
     RectTransform spinnerRt;
     Image spinnerArc;
     Image[] starImgs;
@@ -93,39 +89,13 @@ public class SplashScreenUI : MonoBehaviour
 
         TickSpinnerOnly();
 
-        displayProgress = Mathf.MoveTowards(displayProgress, targetProgress, dt * 0.85f);
-        if (barFill != null)
-        {
-            var rt = barFill.rectTransform;
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = new Vector2(Mathf.Clamp01(displayProgress), 1f);
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-        }
-        if (barGlow != null)
-        {
-            float w = Mathf.Clamp01(displayProgress);
-            if (w < 0.03f)
-            {
-                barGlow.enabled = false;
-            }
-            else
-            {
-                barGlow.enabled = true;
-                float tip = Mathf.Clamp01(w);
-                var gr = barGlow.rectTransform;
-                gr.anchorMin = new Vector2(Mathf.Max(0f, tip - 0.06f), 0f);
-                gr.anchorMax = new Vector2(tip, 1f);
-                gr.offsetMin = Vector2.zero;
-                gr.offsetMax = Vector2.zero;
-                float pulse = 0.45f + 0.35f * (0.5f + 0.5f * Mathf.Sin(animT * 6f));
-                var gc = barGlow.color;
-                gc.a = pulse;
-                barGlow.color = gc;
-            }
-        }
-        if (txtPct != null)
-            txtPct.text = $"{Mathf.RoundToInt(displayProgress * 100f)}%";
+        // Плавне дотягування %; на фініші — snap 100%
+        float lag = targetProgress - displayProgress;
+        float speed = lag > 0.2f ? 2.8f : 1.6f;
+        displayProgress = Mathf.MoveTowards(displayProgress, targetProgress, dt * speed);
+        if (targetProgress >= 0.999f && displayProgress >= 0.97f)
+            displayProgress = 1f;
+        ApplyProgressVisual(displayProgress);
 
         if (starImgs != null)
         {
@@ -204,16 +174,18 @@ public class SplashScreenUI : MonoBehaviour
         ar.anchoredPosition = Vector2.zero;
         ar.sizeDelta = new Vector2(0f, 2.5f);
 
+        // Спінер + % всередині кола (зверху)
         BuildSpinner(card.transform);
 
-        var txtTitle = MakeText(card.transform, "BETELGEUSE", 34, ColAccent, FontStyles.Bold);
+        // Вертикальний ритм: spinner → title → sub → div → modes → status
+        var txtTitle = MakeText(card.transform, "BETELGEUSE", 32, ColAccent, FontStyles.Bold);
         var tr = txtTitle.rectTransform;
-        tr.anchorMin = new Vector2(0f, 0.58f);
-        tr.anchorMax = new Vector2(1f, 0.74f);
+        tr.anchorMin = new Vector2(0f, 0.52f);
+        tr.anchorMax = new Vector2(1f, 0.66f);
         tr.offsetMin = new Vector2(28f, 0f);
         tr.offsetMax = new Vector2(-28f, 0f);
         txtTitle.alignment = TextAlignmentOptions.Center;
-        txtTitle.characterSpacing = 8f;
+        txtTitle.characterSpacing = 10f;
 
         var txtSub = MakeText(card.transform,
             UILocale.IsUK
@@ -221,69 +193,38 @@ public class SplashScreenUI : MonoBehaviour
                 : "Autonomous Landing  ·  GNC Mission Control",
             13, ColMuted, FontStyles.Normal);
         var sr = txtSub.rectTransform;
-        sr.anchorMin = new Vector2(0f, 0.46f);
-        sr.anchorMax = new Vector2(1f, 0.58f);
+        sr.anchorMin = new Vector2(0f, 0.40f);
+        sr.anchorMax = new Vector2(1f, 0.52f);
         sr.offsetMin = new Vector2(32f, 0f);
         sr.offsetMax = new Vector2(-32f, 0f);
         txtSub.alignment = TextAlignmentOptions.Center;
 
-        // Роздільник під підзаголовком
         var div = MakeImage(card.transform, "Div", new Color(1f, 1f, 1f, 0.08f));
         var dr = div.rectTransform;
-        dr.anchorMin = new Vector2(0.18f, 0.44f);
-        dr.anchorMax = new Vector2(0.82f, 0.44f);
+        dr.anchorMin = new Vector2(0.22f, 0.36f);
+        dr.anchorMax = new Vector2(0.78f, 0.36f);
         dr.pivot = new Vector2(0.5f, 0.5f);
         dr.sizeDelta = new Vector2(0f, 1f);
 
         var txtStage = MakeText(card.transform, "PID  ·  FUZZY  ·  NEURAL  ·  HYBRID",
             11, new Color(ColAmber.r, ColAmber.g, ColAmber.b, 0.75f), FontStyles.Bold);
         var stg = txtStage.rectTransform;
-        stg.anchorMin = new Vector2(0f, 0.34f);
-        stg.anchorMax = new Vector2(1f, 0.44f);
+        stg.anchorMin = new Vector2(0f, 0.24f);
+        stg.anchorMax = new Vector2(1f, 0.36f);
         stg.offsetMin = new Vector2(24f, 0f);
         stg.offsetMax = new Vector2(-24f, 0f);
         txtStage.alignment = TextAlignmentOptions.Center;
         txtStage.characterSpacing = 1.5f;
 
-        // Доріжка прогресу
-        var trackGo = MakeImage(card.transform, "Track", ColTrack);
-        var trk = trackGo.rectTransform;
-        trk.anchorMin = new Vector2(0.1f, 0.22f);
-        trk.anchorMax = new Vector2(0.9f, 0.28f);
-        trk.offsetMin = Vector2.zero;
-        trk.offsetMax = Vector2.zero;
-
-        barFill = MakeImage(trackGo.transform, "Fill", ColFill);
-        var fr = barFill.rectTransform;
-        fr.anchorMin = Vector2.zero;
-        fr.anchorMax = new Vector2(0.02f, 1f);
-        fr.offsetMin = Vector2.zero;
-        fr.offsetMax = Vector2.zero;
-
-        barGlow = MakeImage(trackGo.transform, "TipGlow", new Color(1f, 1f, 1f, 0.55f));
-        var bgr = barGlow.rectTransform;
-        bgr.anchorMin = Vector2.zero;
-        bgr.anchorMax = new Vector2(0.05f, 1f);
-        bgr.offsetMin = Vector2.zero;
-        bgr.offsetMax = Vector2.zero;
-
-        // Ряд статусу
-        txtStatus = MakeText(card.transform, "…", 13, ColMuted, FontStyles.Normal);
+        // Статус по центру внизу картки (без progress bar)
+        txtStatus = MakeText(card.transform, "…", 14, ColMuted, FontStyles.Normal);
         var st = txtStatus.rectTransform;
-        st.anchorMin = new Vector2(0.1f, 0.08f);
-        st.anchorMax = new Vector2(0.7f, 0.2f);
+        st.anchorMin = new Vector2(0.08f, 0.06f);
+        st.anchorMax = new Vector2(0.92f, 0.20f);
         st.offsetMin = Vector2.zero;
         st.offsetMax = Vector2.zero;
-        txtStatus.alignment = TextAlignmentOptions.MidlineLeft;
+        txtStatus.alignment = TextAlignmentOptions.Center;
         txtStatus.overflowMode = TextOverflowModes.Ellipsis;
-
-        txtPct = MakeText(card.transform, "0%", 16, ColAmber, FontStyles.Bold);
-        var pr = txtPct.rectTransform;
-        pr.anchorMin = new Vector2(0.7f, 0.08f);
-        pr.anchorMax = new Vector2(0.9f, 0.2f);
-        pr.offsetMin = Vector2.zero;
-        pr.offsetMax = Vector2.zero;
-        txtPct.alignment = TextAlignmentOptions.MidlineRight;
     }
 
     void BuildFooter(Transform parent)
@@ -307,35 +248,35 @@ public class SplashScreenUI : MonoBehaviour
         var root = new GameObject("Spinner", typeof(RectTransform));
         root.transform.SetParent(card, false);
         var rootRt = root.GetComponent<RectTransform>();
-        rootRt.anchorMin = rootRt.anchorMax = new Vector2(0.5f, 0.86f);
+        rootRt.anchorMin = rootRt.anchorMax = new Vector2(0.5f, 0.82f);
         rootRt.pivot = new Vector2(0.5f, 0.5f);
-        rootRt.sizeDelta = new Vector2(48f, 48f);
+        rootRt.sizeDelta = new Vector2(72f, 72f);
 
         // Статичне тьмяне кільце
-        var ring = MakeImage(root.transform, "Ring", new Color(1f, 1f, 1f, 0.1f));
-        ring.sprite = RingSprite(64, 5f, 1f);
+        var ring = MakeImage(root.transform, "Ring", new Color(1f, 1f, 1f, 0.12f));
+        ring.sprite = RingSprite(96, 6f, 1f);
         ring.type = Image.Type.Simple;
         ring.preserveAspect = true;
         Stretch(ring.rectTransform, 0, 0, 0, 0);
 
-        // Обертова дуга (часткове кільце)
+        // Обертова дуга
         var spinGo = new GameObject("ArcSpin", typeof(RectTransform));
         spinGo.transform.SetParent(root.transform, false);
         spinnerRt = spinGo.GetComponent<RectTransform>();
         Stretch(spinnerRt, 0, 0, 0, 0);
 
         spinnerArc = MakeImage(spinGo.transform, "Arc", ColAccent);
-        spinnerArc.sprite = RingSprite(64, 5.5f, 0.28f);
+        spinnerArc.sprite = RingSprite(96, 6.5f, 0.30f);
         spinnerArc.type = Image.Type.Simple;
         spinnerArc.preserveAspect = true;
         Stretch(spinnerArc.rectTransform, 0, 0, 0, 0);
 
-        // Центральна точка
-        var core = MakeImage(root.transform, "Core", new Color(ColAccent.r, ColAccent.g, ColAccent.b, 0.35f));
-        var cr = core.rectTransform;
-        cr.anchorMin = cr.anchorMax = new Vector2(0.5f, 0.5f);
-        cr.pivot = new Vector2(0.5f, 0.5f);
-        cr.sizeDelta = new Vector2(6f, 6f);
+        // % у центрі кола (не обертається з дугою)
+        txtPct = MakeText(root.transform, "0", 18, ColAccent, FontStyles.Bold);
+        var pr = txtPct.rectTransform;
+        Stretch(pr, 0, 0, 0, 0);
+        txtPct.alignment = TextAlignmentOptions.Center;
+        txtPct.raycastTarget = false;
     }
 
     /// <summary>Процедурний спрайт кільця / дуги. fill01 = частка намальованої довжини кола.</summary>
@@ -460,7 +401,7 @@ public class SplashScreenUI : MonoBehaviour
         le.preferredHeight = h;
 
         var img = go.GetComponent<Image>();
-        img.sprite = WhiteSprite();
+        img.sprite = UiSprite();
         img.type = Image.Type.Simple;
         img.color = Color.white;
         img.raycastTarget = true;
@@ -526,13 +467,28 @@ public class SplashScreenUI : MonoBehaviour
 
     public void SetProgress(float t01, string status)
     {
-        targetProgress = Mathf.Clamp01(t01);
+        float t = Mathf.Clamp01(t01);
+        if (t > targetProgress)
+            targetProgress = t;
+        else if (t >= 0.999f)
+            targetProgress = 1f;
+
         if (!string.IsNullOrEmpty(status))
         {
             statusBase = status.TrimEnd('.', '…', ' ');
-            if (txtStatus != null && fading)
-                txtStatus.text = statusBase;
+            if (txtStatus != null)
+                txtStatus.text = fading ? statusBase : statusBase + "…";
         }
+
+        displayProgress = targetProgress;
+        ApplyProgressVisual(displayProgress);
+    }
+
+    void ApplyProgressVisual(float p01)
+    {
+        float w = Mathf.Clamp01(p01);
+        if (txtPct != null)
+            txtPct.text = $"{Mathf.RoundToInt(w * 100f)}";
     }
 
     public void FadeOutAndDestroy(float duration = 0.6f)
@@ -540,6 +496,8 @@ public class SplashScreenUI : MonoBehaviour
         if (fading) return;
         fading = true;
         targetProgress = 1f;
+        displayProgress = 1f;
+        ApplyProgressVisual(1f);
         StartCoroutine(FadeCo(duration));
     }
 
@@ -547,13 +505,12 @@ public class SplashScreenUI : MonoBehaviour
     {
         statusBase = UILocale.IsUK ? "Готово" : "Ready";
         if (txtStatus != null) txtStatus.text = statusBase;
-        float guard = 0f;
-        while (displayProgress < 0.98f && guard < 1.5f)
-        {
-            guard += Time.unscaledDeltaTime;
-            yield return null;
-        }
+        targetProgress = 1f;
         displayProgress = 1f;
+        ApplyProgressVisual(1f);
+        yield return null;
+        ApplyProgressVisual(1f);
+        yield return null;
 
         float t = 0f;
         var cg = gameObject.GetComponent<CanvasGroup>();
@@ -570,14 +527,22 @@ public class SplashScreenUI : MonoBehaviour
         Destroy(gameObject);
     }
 
-    static Sprite _whiteSprite;
-    static Sprite WhiteSprite()
+    static Sprite _uiSprite;
+    /// <summary>Власний 32×8 білий спрайт для UI (FullRect — коректний stretch fill).</summary>
+    static Sprite UiSprite()
     {
-        if (_whiteSprite != null) return _whiteSprite;
-        var tex = Texture2D.whiteTexture;
-        _whiteSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height),
-            new Vector2(0.5f, 0.5f), 100f);
-        return _whiteSprite;
+        if (_uiSprite != null) return _uiSprite;
+        const int w = 32, h = 8;
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        tex.wrapMode = TextureWrapMode.Clamp;
+        var px = new Color[w * h];
+        for (int i = 0; i < px.Length; i++) px[i] = Color.white;
+        tex.SetPixels(px);
+        tex.Apply(false, true);
+        _uiSprite = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f,
+            0, SpriteMeshType.FullRect);
+        return _uiSprite;
     }
 
     static Image MakeImage(Transform parent, string name, Color c)
@@ -585,7 +550,7 @@ public class SplashScreenUI : MonoBehaviour
         var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         go.transform.SetParent(parent, false);
         var img = go.GetComponent<Image>();
-        img.sprite = WhiteSprite();
+        img.sprite = UiSprite();
         img.type = Image.Type.Simple;
         img.color = c;
         img.raycastTarget = false;

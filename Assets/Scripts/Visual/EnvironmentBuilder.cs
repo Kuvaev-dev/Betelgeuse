@@ -2,18 +2,24 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Середовище посадки: диск Місяця, LZ pad, зірки, сонце, підхідні маркери.
+/// Середовище посадки: земний аеродром / бетонна LZ, горизонт, небо, pad, маркери.
 /// </summary>
 public static class EnvironmentBuilder
 {
+    /// <summary>Світова позиція диска Сонця (спільна для світла й візуалу).</summary>
+    public static readonly Vector3 SunWorldPosition = new Vector3(-3600f, 3400f, -2800f);
+
     public static void Build()
     {
+        LunarTerrainMesh.EarthSurface = true;
         LunarTerrainMesh.Drain(BuildRoutine());
     }
 
-    /// <summary>Покрокова збірка — yield, щоб splash-спінер крутився.</summary>
+    /// <summary>Покрокова збірка — yield + splash progress (0.50…0.78).</summary>
     public static IEnumerator BuildRoutine()
     {
+        LunarTerrainMesh.EarthSurface = true;
+        Splash(0.52f, "Освітлення…", "Lighting…");
         SetupLighting(out Light sun);
         SetupSkyAndFog();
         yield return null;
@@ -24,65 +30,490 @@ public static class EnvironmentBuilder
 
         var root = new GameObject("EnvironmentRoot");
 
-        yield return BuildLunarSurfaceRoutine(root.transform);
+        Splash(0.56f, "Рельєф Earth LZ…", "Earth LZ terrain…");
+        yield return null;
+        yield return BuildEarthSurfaceRoutine(root.transform);
+
+        Splash(0.72f, "Площадка / небо…", "Pad / sky…");
         BuildLandingPad(root.transform);
         yield return null;
-        var starPs = BuildStarField(root.transform);
+        BuildSkyGradientDome(root.transform);
+        yield return null;
+        Splash(0.75f, "Хмари…", "Clouds…");
+        BuildSoftClouds(root.transform);
         BuildSunDisc(root.transform);
         BuildApproachLights(root.transform);
-
+        yield return null;
         var amb = SpaceAmbience.Ensure();
-        amb.Bind(root.transform, starPs, sun);
+        amb.Bind(root.transform, null, sun);
+        Splash(0.78f, "Середовище ✓", "Environment ✓");
+        yield return null;
     }
 
-    static IEnumerator BuildLunarSurfaceRoutine(Transform parent)
+    static void Splash(float t, string uk, string en)
     {
-        var surface = new GameObject("LunarSurface");
+        var s = SplashScreenUI.Instance;
+        if (s != null)
+            s.SetProgress(t, UILocale.IsUK ? uk : en);
+    }
+
+    static IEnumerator BuildEarthSurfaceRoutine(Transform parent)
+    {
+        var surface = new GameObject("EarthSurface");
         surface.transform.SetParent(parent, false);
 
-        var regolith = VisualMaterials.Lit(
-            new Color(0.40f, 0.405f, 0.42f),
-            metallic: 0.0f,
-            smooth: 0.028f);
+        Splash(0.58f, "Текстури землі…", "Ground textures…");
+        yield return null;
+        EnvironmentTextures.EnsureLoaded();
+        var ground = EnvironmentTextures.MakeGroundMaterial();
 
         float R = LunarTerrainMesh.TerrainRadius;
-        // Збалансований меш: достатньо гладкі краї, швидкий cold start
-        int res = QualitySettings.GetQualityLevel() <= 1 ? 160 : 224;
-        yield return LunarTerrainMesh.CreateRoutine(surface.transform, regolith, null, res, R);
+        int res = QualitySettings.GetQualityLevel() <= 1 ? 220 : 320;
+        Splash(0.60f, "Меш рельєфу…", "Terrain mesh…");
+        yield return null;
+        yield return LunarTerrainMesh.CreateRoutine(surface.transform, ground, null, res, R);
 
-        // Horizon ring використовує те саме albedo NASA LROC (темніше, без normal — дешеве far field)
-        var farMat = MakeHorizonMaterial();
-        var far = SmoothMesh.MakeCylinder("HorizonDisk", surface.transform,
-            new Vector3(0f, -2.8f, 0f), R * 2f, 2.2f, farMat);
-        var fr = far.GetComponent<MeshRenderer>();
-        if (fr != null)
-        {
-            fr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            fr.receiveShadows = true;
-        }
+        Physics.SyncTransforms();
         yield return null;
 
-        var rng = new System.Random(17);
-        float clear = LunarTerrainMesh.PadClearRadius + 25f;
-        var rockMat = MakeRockMaterial();
-        int nRocks = QualitySettings.GetQualityLevel() <= 1 ? 10 : 16;
-        for (int i = 0; i < nRocks; i++)
+        Splash(0.66f, "Природа…", "Nature props…");
+        yield return null;
+        yield return BuildNatureProps(surface.transform);
+
+        Splash(0.71f, "Природа ✓", "Nature ✓");
+        yield return null;
+        FitShadowsToFocusDepth(420f);
+    }
+
+    /// <summary>
+    /// Природа з Kenney Nature Kit (FBX у Resources/Nature).
+    /// Посадка на smoothed terrain height.
+    /// </summary>
+    static IEnumerator BuildNatureProps(Transform parent)
+    {
+        NatureLibrary.EnsureLoaded();
+        if (!NatureLibrary.Ready)
+        {
+            Debug.LogWarning("[Nature] FBX not imported yet — skip props this run. Re-enter Play after Unity imports Resources/Nature.");
+            yield break;
+        }
+
+        var rng = new System.Random(47);
+        float clear = LunarTerrainMesh.PadClearRadius + 22f;
+        float R = LunarTerrainMesh.TerrainRadius * 0.88f;
+        bool low = QualitySettings.GetQualityLevel() <= 1;
+
+        const float treeScale = 8.5f;
+        const float pineScale = 10.5f;
+        const float bushScale = 5.0f;
+        const float grassScale = 3.6f;
+        const float flowerScale = 2.6f;
+        const float rockScale = 4.6f;
+        const float stumpScale = 4.2f;
+
+        float Yaw() => (float)rng.NextDouble() * 360f;
+        float Gy(float x, float z) => LunarTerrainMesh.SampleSurfaceY(x, z);
+
+        // Прогрес 0.66…0.71 під час природи (бар не «застигає/зникає»)
+        float natureT = 0.66f;
+        void NatureProg(string uk, string en)
+        {
+            natureT = Mathf.Min(0.705f, natureT + 0.004f);
+            Splash(natureT, uk, en);
+        }
+
+        // Природний розкид по площі (sqrt) + jitter
+        void NaturalPoint(float d0, float d1, out float x, out float z)
         {
             float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
-            float dist = clear + 40f + (float)rng.NextDouble() * (R * 0.75f - clear);
-            float x = Mathf.Cos(ang) * dist;
-            float z = Mathf.Sin(ang) * dist;
-            float s = 2.2f + (float)rng.NextDouble() * 5.5f;
-            float h = SampleApproxHeight(x, z);
-            SmoothMesh.MakeSphere($"Boulder_{i}", surface.transform,
-                new Vector3(x, h + s * 0.12f, z),
-                new Vector3(s * 1.0f, s * 0.42f, s * 0.95f),
-                rockMat);
+            float t = (float)rng.NextDouble();
+            float dist = Mathf.Sqrt(Mathf.Lerp(d0 * d0, d1 * d1, t));
+            float cx = Mathf.Cos(ang) * dist;
+            float cz = Mathf.Sin(ang) * dist;
+            float u1 = Mathf.Max(1e-4f, (float)rng.NextDouble());
+            float u2 = (float)rng.NextDouble();
+            float mag = Mathf.Sqrt(-2f * Mathf.Log(u1)) * (8f + (float)rng.NextDouble() * 18f);
+            float phi = u2 * Mathf.PI * 2f;
+            x = cx + Mathf.Cos(phi) * mag;
+            z = cz + Mathf.Sin(phi) * mag;
+            float d = Mathf.Sqrt(x * x + z * z);
+            if (d < clear + 2f)
+            {
+                float k = (clear + 4f + (float)rng.NextDouble() * 10f) / Mathf.Max(0.01f, d);
+                x *= k;
+                z *= k;
+            }
+        }
+
+        // ── Густі кільця: немає «пустиря» ──
+        // Approach path
+        for (int i = 0; i < (low ? 40 : 70); i++)
+        {
+            float z = clear + 15f + (float)rng.NextDouble() * 380f;
+            float side = (i % 2 == 0) ? 1f : -1f;
+            float x = side * (26f + (float)rng.NextDouble() * 50f);
+            NatureLibrary.SpawnBush(parent, $"PathBush_{i}", rng, x, z, Gy(x, z),
+                bushScale * (0.65f + (float)rng.NextDouble() * 0.55f), Yaw());
+            float gx = x + side * (2f + (float)rng.NextDouble() * 8f);
+            float gz = z + ((float)rng.NextDouble() - 0.5f) * 10f;
+            NatureLibrary.SpawnGrass(parent, $"PathGrass_{i}", rng, gx, gz, Gy(gx, gz),
+                grassScale * (0.8f + (float)rng.NextDouble() * 0.5f), Yaw());
+            if (i % 4 == 0)
+            {
+                float fx = x + side * 3f, fz = z - 4f;
+                NatureLibrary.SpawnFlower(parent, $"PathFlower_{i}", rng, fx, fz, Gy(fx, fz),
+                    flowerScale * 0.9f, Yaw());
+            }
+            if ((i & 3) == 0) { NatureProg("Природа: шлях…", "Nature: path…"); yield return null; }
+        }
+
+        // Ближні кущі (natural area scatter)
+        int nBushNear = low ? 100 : 180;
+        for (int i = 0; i < nBushNear; i++)
+        {
+            NaturalPoint(clear + 4f, clear + 130f, out float x, out float z);
+            NatureLibrary.SpawnBush(parent, $"BushNear_{i}", rng, x, z, Gy(x, z),
+                bushScale * (0.55f + (float)rng.NextDouble() * 0.7f), Yaw());
+            if ((i & 7) == 0) { NatureProg("Природа: кущі…", "Nature: bushes…"); yield return null; }
+        }
+
+        // Трава — густо, рівномірно по площі
+        int nGrass = low ? 280 : 480;
+        for (int i = 0; i < nGrass; i++)
+        {
+            NaturalPoint(clear + 2f, clear + 650f, out float x, out float z);
+            NatureLibrary.SpawnGrass(parent, $"Grass_{i}", rng, x, z, Gy(x, z),
+                grassScale * (0.45f + (float)rng.NextDouble() * 0.85f), Yaw());
+            if ((i & 15) == 0) { NatureProg("Природа: трава…", "Nature: grass…"); yield return null; }
+        }
+
+        int nFlower = low ? 90 : 160;
+        for (int i = 0; i < nFlower; i++)
+        {
+            NaturalPoint(clear + 5f, clear + 340f, out float x, out float z);
+            NatureLibrary.SpawnFlower(parent, $"Flower_{i}", rng, x, z, Gy(x, z),
+                flowerScale * (0.55f + (float)rng.NextDouble() * 0.65f), Yaw());
+            if ((i & 7) == 0) yield return null;
+        }
+
+        int nBushMid = low ? 90 : 160;
+        for (int i = 0; i < nBushMid; i++)
+        {
+            NaturalPoint(clear + 70f, R * 0.65f, out float x, out float z);
+            NatureLibrary.SpawnBush(parent, $"BushMid_{i}", rng, x, z, Gy(x, z),
+                bushScale * (0.65f + (float)rng.NextDouble() * 0.7f), Yaw());
+            if ((i & 7) == 0) yield return null;
+        }
+
+        int nTrees = low ? 95 : 150;
+        for (int i = 0; i < nTrees; i++)
+        {
+            NaturalPoint(clear + 40f, R - 80f, out float x, out float z);
+            NatureLibrary.SpawnTree(parent, $"Tree_{i}", rng, x, z, Gy(x, z),
+                treeScale * (0.7f + (float)rng.NextDouble() * 0.55f), Yaw());
+            if ((i & 3) == 0) { NatureProg("Природа: дерева…", "Nature: trees…"); yield return null; }
+        }
+
+        int nPine = low ? 50 : 85;
+        for (int i = 0; i < nPine; i++)
+        {
+            NaturalPoint(clear + 80f, R - 70f, out float x, out float z);
+            NatureLibrary.SpawnPine(parent, $"Pine_{i}", rng, x, z, Gy(x, z),
+                pineScale * (0.7f + (float)rng.NextDouble() * 0.55f), Yaw());
+            if ((i & 2) == 0) { NatureProg("Природа: сосни…", "Nature: pines…"); yield return null; }
+        }
+
+        int nRock = low ? 85 : 140;
+        for (int i = 0; i < nRock; i++)
+        {
+            NaturalPoint(clear + 12f, R * 0.75f, out float x, out float z);
+            NatureLibrary.SpawnRock(parent, $"Rock_{i}", rng, x, z, Gy(x, z),
+                rockScale * (0.4f + (float)rng.NextDouble() * 1.1f), Yaw());
             if ((i & 3) == 0) yield return null;
+        }
+
+        int nStump = low ? 24 : 42;
+        for (int i = 0; i < nStump; i++)
+        {
+            NaturalPoint(clear + 25f, clear + 420f, out float x, out float z);
+            NatureLibrary.SpawnStump(parent, $"Stump_{i}", rng, x, z, Gy(x, z),
+                stumpScale * (0.6f + (float)rng.NextDouble() * 0.6f), Yaw());
+            if ((i & 3) == 0) yield return null;
+        }
+
+        int nMush = low ? 30 : 55;
+        for (int i = 0; i < nMush; i++)
+        {
+            NaturalPoint(clear + 20f, clear + 360f, out float x, out float z);
+            NatureLibrary.SpawnMushroom(parent, $"Mush_{i}", rng, x, z, Gy(x, z),
+                2.8f * (0.6f + (float)rng.NextDouble() * 0.8f), Yaw());
+            if ((i & 3) == 0) yield return null;
+        }
+
+        // Живі огорожі
+        int nHedge = low ? 8 : 12;
+        for (int h = 0; h < nHedge; h++)
+        {
+            float baseAng = h * (Mathf.PI * 2f / nHedge) + 0.1f;
+            float arc = 0.5f + (float)rng.NextDouble() * 0.35f;
+            float dist = clear + 8f + (float)rng.NextDouble() * 36f;
+            int segs = low ? 10 : 14;
+            for (int s = 0; s < segs; s++)
+            {
+                float a = baseAng + (s / (float)(segs - 1) - 0.5f) * arc;
+                float x = Mathf.Cos(a) * dist, z = Mathf.Sin(a) * dist;
+                NatureLibrary.SpawnBush(parent, $"Hedge_{h}_{s}", rng, x, z, Gy(x, z),
+                    bushScale * (0.5f + (float)rng.NextDouble() * 0.45f), a * Mathf.Rad2Deg);
+            }
+            yield return null;
+        }
+
+        // Заповнювачі mid-field (змішані кластери)
+        int nFill = low ? 60 : 100;
+        for (int i = 0; i < nFill; i++)
+        {
+            NaturalPoint(clear + 100f, clear + 600f, out float x, out float z);
+            float gy = Gy(x, z);
+            int kind = i % 5;
+            if (kind == 0)
+                NatureLibrary.SpawnTree(parent, $"FillTree_{i}", rng, x, z, gy, treeScale * 0.85f, Yaw());
+            else if (kind == 1)
+                NatureLibrary.SpawnPine(parent, $"FillPine_{i}", rng, x, z, gy, pineScale * 0.85f, Yaw());
+            else if (kind == 2)
+                NatureLibrary.SpawnBush(parent, $"FillBush_{i}", rng, x, z, gy, bushScale * 1.1f, Yaw());
+            else if (kind == 3)
+                NatureLibrary.SpawnRock(parent, $"FillRock_{i}", rng, x, z, gy, rockScale * 0.9f, Yaw());
+            else
+            {
+                NatureLibrary.SpawnGrass(parent, $"FillGrass_{i}a", rng, x, z, gy, grassScale, Yaw());
+                float x2 = x + ((float)rng.NextDouble() - 0.5f) * 5f;
+                float z2 = z + ((float)rng.NextDouble() - 0.5f) * 5f;
+                NatureLibrary.SpawnGrass(parent, $"FillGrass_{i}b", rng, x2, z2, Gy(x2, z2), grassScale * 0.8f, Yaw());
+            }
+            if ((i & 3) == 0) yield return null;
+        }
+
+        // Далекі рощі — суцільний лісовий горизонт
+        int nGrove = low ? 14 : 20;
+        for (int g = 0; g < nGrove; g++)
+        {
+            float gang = g * (Mathf.PI * 2f / nGrove) + 0.12f;
+            float gdist = 240f + (float)rng.NextDouble() * 520f;
+            float gx = Mathf.Cos(gang) * gdist;
+            float gz = Mathf.Sin(gang) * gdist;
+            int count = 10 + rng.Next(10);
+            for (int j = 0; j < count; j++)
+            {
+                float ox = gx + ((float)rng.NextDouble() - 0.5f) * 80f;
+                float oz = gz + ((float)rng.NextDouble() - 0.5f) * 80f;
+                float gy = Gy(ox, oz);
+                float s = treeScale * (0.8f + (float)rng.NextDouble() * 0.5f);
+                if (j % 3 == 0)
+                    NatureLibrary.SpawnPine(parent, $"GrovePine_{g}_{j}", rng, ox, oz, gy, s * 1.15f, Yaw());
+                else
+                    NatureLibrary.SpawnTree(parent, $"GroveTree_{g}_{j}", rng, ox, oz, gy, s, Yaw());
+                if (j % 4 == 0)
+                    NatureLibrary.SpawnBush(parent, $"GroveBush_{g}_{j}", rng,
+                        ox + 3f, oz - 2f, Gy(ox + 3f, oz - 2f), bushScale * 0.9f, Yaw());
+            }
+            yield return null;
         }
     }
 
-    static float SampleApproxHeight(float x, float z) => SampleTerrainSurfaceY(x, z);
+    /// <summary>Купол з чистим вертикальним градієнтом (без горизонтального шва).</summary>
+    static void BuildSkyGradientDome(Transform parent)
+    {
+        var old = GameObject.Find("SkyDome");
+        if (old != null) Object.Destroy(old);
+
+        var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        go.name = "SkyDome";
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = Vector3.zero;
+        // Рівномірний купол; flip X щоб normals всередину (без асиметрії Y)
+        go.transform.localScale = new Vector3(-14000f, -14000f, -14000f);
+        Object.Destroy(go.GetComponent<Collider>());
+
+        var tex = MakeSkyGradientTex(512);
+        var mat = new Material(VisualMaterials.UnlitShader);
+        mat.name = "SkyDomeGrad";
+        mat.renderQueue = 850;
+        if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 0f);
+        if (mat.HasProperty("_BaseMap"))
+        {
+            mat.SetTexture("_BaseMap", tex);
+            mat.EnableKeyword("_BASEMAP");
+        }
+        if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
+        mat.mainTexture = tex;
+        if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+        if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
+        // Немає tiling/offset — чистий V-градієнт
+        if (mat.HasProperty("_BaseMap_ST")) mat.SetVector("_BaseMap_ST", new Vector4(1f, 1f, 0f, 0f));
+
+        var r = go.GetComponent<MeshRenderer>();
+        r.sharedMaterial = mat;
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        r.receiveShadows = false;
+    }
+
+    static Texture2D MakeSkyGradientTex(int h)
+    {
+        // Ширина 4: ідентичні стовпці → UV-шов сфери невидимий
+        const int w = 4;
+        var tex = new Texture2D(w, h, TextureFormat.RGB24, false, false);
+        tex.name = "SkyGrad";
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+
+        // Палітра узгоджена з EnvironmentTextures (steel + warm horizon near sun side conceptually)
+        Color horizon = EnvironmentTextures.SkyHorizon;
+        Color low = Color.Lerp(EnvironmentTextures.SkyHorizon, new Color(0.32f, 0.44f, 0.56f), 0.55f);
+        Color mid = new Color(0.22f, 0.36f, 0.5f);
+        Color upper = new Color(0.12f, 0.24f, 0.4f);
+        Color zenith = EnvironmentTextures.SkyZenith;
+
+        for (int y = 0; y < h; y++)
+        {
+            float t = y / (float)(h - 1);
+            Color c;
+            if (t < 0.2f)
+                c = Color.Lerp(horizon, low, Smooth01(t / 0.2f));
+            else if (t < 0.45f)
+                c = Color.Lerp(low, mid, Smooth01((t - 0.2f) / 0.25f));
+            else if (t < 0.72f)
+                c = Color.Lerp(mid, upper, Smooth01((t - 0.45f) / 0.27f));
+            else
+                c = Color.Lerp(upper, zenith, Smooth01((t - 0.72f) / 0.28f));
+
+            for (int x = 0; x < w; x++)
+                tex.SetPixel(x, y, c);
+        }
+        tex.Apply(false, true);
+        return tex;
+    }
+
+    static float Smooth01(float t)
+    {
+        t = Mathf.Clamp01(t);
+        return t * t * (3f - 2f * t);
+    }
+
+    /// <summary>Готові cloud-спрайти (Poly Haven) на Quad; більше шарів, далеко від pad.</summary>
+    static void BuildSoftClouds(Transform parent)
+    {
+        EnvironmentTextures.EnsureLoaded();
+        var root = new GameObject("Clouds");
+        root.transform.SetParent(parent, false);
+
+        // Багато реалістичних скупчень (далеко/високо — pad вільний)
+        var specs = new[]
+        {
+            new Vector4( 3000f, 1450f, -2600f, 560f),
+            new Vector4(-3300f, 1550f,  2100f, 520f),
+            new Vector4( 2100f, 1650f,  3400f, 540f),
+            new Vector4(-2600f, 1380f, -3500f, 480f),
+            new Vector4( 3600f, 1580f,   800f, 500f),
+            new Vector4(-1400f, 1720f,  3700f, 440f),
+            new Vector4(  800f, 1800f, -3800f, 460f),
+            new Vector4(-3800f, 1480f,  -400f, 490f),
+            new Vector4( 4200f, 1700f, -1200f, 430f),
+            new Vector4(-2000f, 1900f,  4200f, 450f),
+            new Vector4( 1500f, 1350f, -4200f, 410f),
+            new Vector4(-4200f, 1600f,  1500f, 470f),
+            new Vector4( 4800f, 1850f,  2200f, 400f),
+            new Vector4(-4800f, 1750f, -2200f, 420f),
+            new Vector4( 2500f, 2000f,  4800f, 380f),
+            new Vector4(-900f,  2100f, -4800f, 390f),
+            new Vector4(  200f, 1550f,  5000f, 360f),
+            new Vector4( 5000f, 1650f,  -800f, 410f),
+        };
+
+        for (int i = 0; i < specs.Length; i++)
+        {
+            var s = specs[i];
+            bool shade = (i % 2) == 1;
+            var matMain = EnvironmentTextures.MakeCloudMaterial(shade, i);
+            var matSoft = EnvironmentTextures.MakeCloudMaterial(!shade, i + 2);
+            var matFar = EnvironmentTextures.MakeCloudMaterial(shade, i + 4);
+
+            // Орієнтація карток «до центру сцени» (кращий силует)
+            float yaw = Mathf.Atan2(s.x, s.z) * Mathf.Rad2Deg + 180f;
+
+            MakeCloudQuad(root.transform, $"C{i}_a", new Vector3(s.x, s.y, s.z),
+                s.w * 1.85f, s.w * 0.62f, matMain, yaw);
+            MakeCloudQuad(root.transform, $"C{i}_b",
+                new Vector3(s.x + s.w * 0.4f, s.y + 40f, s.z - s.w * 0.15f),
+                s.w * 1.25f, s.w * 0.45f, matSoft, yaw + 18f);
+            MakeCloudQuad(root.transform, $"C{i}_c",
+                new Vector3(s.x - s.w * 0.35f, s.y + 22f, s.z + s.w * 0.12f),
+                s.w * 1.0f, s.w * 0.36f, matMain, yaw - 22f);
+            MakeCloudQuad(root.transform, $"C{i}_d",
+                new Vector3(s.x + s.w * 0.12f, s.y + 58f, s.z + s.w * 0.22f),
+                s.w * 0.8f, s.w * 0.3f, matFar, yaw + 35f);
+            MakeCloudQuad(root.transform, $"C{i}_e",
+                new Vector3(s.x - s.w * 0.2f, s.y + 8f, s.z - s.w * 0.25f),
+                s.w * 0.65f, s.w * 0.26f, matSoft, yaw - 40f);
+        }
+
+        // ── Хмари ЗВЕРХУ (zenith / над pad) — горизонтальні картки ──
+        var overhead = new[]
+        {
+            new Vector4(  400f, 2800f,  -300f, 700f),
+            new Vector4( -500f, 3000f,   450f, 650f),
+            new Vector4(  200f, 3200f,   600f, 580f),
+            new Vector4( -350f, 2700f,  -550f, 620f),
+            new Vector4(  700f, 3100f,   150f, 540f),
+            new Vector4( -700f, 2900f,  -100f, 560f),
+            new Vector4(  100f, 3400f,  -700f, 500f),
+            new Vector4( -150f, 2600f,   800f, 520f),
+        };
+        for (int i = 0; i < overhead.Length; i++)
+        {
+            var s = overhead[i];
+            var mat = EnvironmentTextures.MakeCloudMaterial(i % 2 == 0, i + 1);
+            var mat2 = EnvironmentTextures.MakeCloudMaterial(i % 2 == 1, i + 3);
+            // Горизонтально (дивляться вниз) — видно при погляді вгору
+            MakeCloudQuadFlat(root.transform, $"Top_{i}_a",
+                new Vector3(s.x, s.y, s.z), s.w * 1.4f, s.w * 1.1f, mat, i * 20f);
+            MakeCloudQuadFlat(root.transform, $"Top_{i}_b",
+                new Vector3(s.x + s.w * 0.25f, s.y + 80f, s.z - s.w * 0.2f),
+                s.w * 0.9f, s.w * 0.75f, mat2, i * 20f + 35f);
+        }
+    }
+
+    static void MakeCloudQuad(Transform parent, string name, Vector3 pos, float width, float height, Material mat, float yawDeg)
+    {
+        var c = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        c.name = name;
+        c.transform.SetParent(parent, false);
+        c.transform.position = pos;
+        c.transform.rotation = Quaternion.Euler(12f, yawDeg, 0f);
+        c.transform.localScale = new Vector3(width, height, 1f);
+        Object.Destroy(c.GetComponent<Collider>());
+        var mr = c.GetComponent<MeshRenderer>();
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+    }
+
+    /// <summary>Хмара зеніту: quad майже горизонтально (нормаль вниз).</summary>
+    static void MakeCloudQuadFlat(Transform parent, string name, Vector3 pos, float width, float depth, Material mat, float yawDeg)
+    {
+        var c = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        c.name = name;
+        c.transform.SetParent(parent, false);
+        c.transform.position = pos;
+        // 90° pitch = face down; yaw для різноманітності
+        c.transform.rotation = Quaternion.Euler(90f, yawDeg, 0f);
+        c.transform.localScale = new Vector3(width, depth, 1f);
+        Object.Destroy(c.GetComponent<Collider>());
+        var mr = c.GetComponent<MeshRenderer>();
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+    }
+
 
     /// <summary>
     /// Фізична земля / верх палуби. ЛИШЕ одна плита pad — без накладених копланарних кришок
@@ -145,20 +576,27 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>
-    /// Один стандартний маяк. <paramref name="groundY"/> = поверхня під основою (верх pad або рельєф).
+    /// Маяк на землі: низ бази = groundY (без «паріння»).
+    /// MakeCylinder: center Y, halfHeight — низ = center − halfH.
     /// </summary>
     static void PlaceBeacon(Transform parent, string id, Vector3 xz, float groundY,
         Material baseMat, Material poleMat, Material lampMat)
     {
-        // Геометрія точно збігається з кутовими маяками pad
+        const float baseHalf = 0.12f;
+        const float poleHalf = 1.55f;
+        // База сидить на groundY (трохи заглиблена)
+        float baseY = groundY + baseHalf - 0.06f;
+        float poleY = baseY + baseHalf + poleHalf - 0.02f;
+        float lampY = poleY + poleHalf + 0.2f;
+
         var bBase = SmoothMesh.MakeCylinder($"{id}_Base", parent,
-            xz + Vector3.up * (groundY + 0.15f), 0.55f, 0.14f, baseMat);
+            new Vector3(xz.x, baseY, xz.z), 0.55f, baseHalf, baseMat);
         var bPole = SmoothMesh.MakeCylinder($"{id}_Pole", parent,
-            xz + Vector3.up * (groundY + 1.85f), 0.18f, 1.65f, poleMat);
+            new Vector3(xz.x, poleY, xz.z), 0.16f, poleHalf, poleMat);
         SetShadow(bBase, true, true);
         SetShadow(bPole, true, true);
         var lamp = SmoothMesh.MakeSphere($"{id}_Lamp", parent,
-            xz + Vector3.up * (groundY + 3.7f), new Vector3(0.42f, 0.32f, 0.42f), lampMat);
+            new Vector3(xz.x, lampY, xz.z), new Vector3(0.4f, 0.3f, 0.4f), lampMat);
         SetShadow(lamp, false, false);
     }
 
@@ -173,8 +611,7 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>
-    /// Матовий темно-середній сірий LZ (має читатись сірим під жорстким місячним сонцем ~2.8).
-    /// Line art: кільця дальності, хрест, діагоналі, риски краю, «яблучко».
+    /// Бетонна LZ палуба (Earth airfield): кільця, хрест, діагоналі.
     /// Палуба Ø ≈ 92 м → r=1 ≈ 46 м.
     /// </summary>
     static Material MakePadDeckMaterial(string name)
@@ -207,10 +644,10 @@ public static class EnvironmentBuilder
                 continue;
             }
 
-            // ── Базова палуба: рівномірніший темніший сірий під жорстким місячним сонцем ──
-            float g0 = 0.14f
-                     + PadHash(u * 9f, v * 9f) * 0.015f
-                     + PadHash(u * 24f, v * 24f) * 0.008f;
+            // Чистий світлий бетон LZ
+            float g0 = 0.52f
+                     + PadHash(u * 9f, v * 9f) * 0.02f
+                     + PadHash(u * 24f, v * 24f) * 0.01f;
 
             float bay = Mathf.Abs(r * 3f - Mathf.Round(r * 3f));
             g0 -= (1f - Mathf.SmoothStep(0f, 0.06f, bay)) * 0.03f;
@@ -218,11 +655,10 @@ public static class EnvironmentBuilder
             float spoke = Mathf.Abs(a01 * 8f - Mathf.Round(a01 * 8f));
             g0 -= (1f - Mathf.SmoothStep(0f, 0.03f, spoke)) * 0.02f;
 
-            g0 -= Mathf.SmoothStep(0.88f, 1f, r) * 0.03f;
-            g0 = Mathf.Clamp(g0, 0.08f, 0.22f);
+            g0 -= Mathf.SmoothStep(0.88f, 1f, r) * 0.05f;
+            g0 = Mathf.Clamp(g0, 0.32f, 0.62f);
 
-            // Холодний темно-сірий
-            float rr = g0 * 0.97f, gg = g0 * 0.99f, bb = g0 * 1.03f;
+            float rr = g0 * 1.06f, gg = g0 * 1.03f, bb = g0 * 0.96f;
 
             // ── Насичений line art LZ ──
             float line = 0f;
@@ -308,8 +744,7 @@ public static class EnvironmentBuilder
 
         var mat = new Material(VisualMaterials.LitShader);
         mat.name = name;
-        // Легке сіре множення, щоб палуба лишалась темною навіть за жорсткого сонця
-        var tint = new Color(0.75f, 0.76f, 0.78f, 1f);
+        var tint = new Color(0.95f, 0.94f, 0.90f, 1f);
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tint);
         if (mat.HasProperty("_Color")) mat.SetColor("_Color", tint);
         if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
@@ -373,8 +808,7 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>
-    /// Лише підхідні маркери — без мощеної смуги (тонула в рельєфі й псувала місячний вигляд).
-    /// Короткі стійки на рельєфі з safety lift; палітра як реголіт + сірий pad.
+    /// Підхідні маркери Earth LZ (маяки вздовж corridor).
     /// </summary>
     static void BuildApproachLights(Transform parent)
     {
@@ -389,151 +823,116 @@ public static class EnvironmentBuilder
         // Ті самі матеріали + геометрія, що кутові маяки pad
         GetBeaconMaterials(out var baseMat, out var poleMat, out var lampMat);
 
+        Physics.SyncTransforms();
         const float xOff = 22f;
         for (int i = 0; i < 9; i++)
         {
             float z = LunarTerrainMesh.PadClearRadius + 8f + i * 38f;
             foreach (float x in new[] { -xOff, xOff })
             {
-                float ground = SampleTerrainSurfaceY(x, z);
-                // Невеликий lift, щоб база ніколи не кліпала хвилястість рельєфу
-                float y = ground + 0.25f;
+                // Точна висота mesh — без +lift (раніше «літали»)
+                float ground = LunarTerrainMesh.SampleSurfaceY(x, z);
                 PlaceBeacon(root.transform, $"AppBeacon_{i}_{x}",
-                    new Vector3(x, 0f, z), y, baseMat, poleMat, lampMat);
+                    new Vector3(x, 0f, z), ground, baseMat, poleMat, lampMat);
             }
         }
     }
 
-    /// <summary>
-    /// Та сама модель висоти, що LunarTerrainMesh.SampleHeight (без кратерів), щоб props сідали на меш.
-    /// PadHash ≡ terrain Noise2 (діапазон −1…1).
-    /// </summary>
-    static float SampleTerrainSurfaceY(float x, float z)
-    {
-        float dist = Mathf.Sqrt(x * x + z * z);
-        float clear = LunarTerrainMesh.PadClearRadius;
-
-        if (dist <= clear)
-        {
-            float t = dist / Mathf.Max(1f, clear);
-            return Mathf.Lerp(-1.6f, -0.15f, t * t);
-        }
-
-        float h = 0f;
-        h += PadHash(x * 0.0016f, z * 0.0016f) * 2.8f;
-        h += PadHash(x * 0.0048f + 11f, z * 0.0048f - 7f) * 1.15f;
-        h += PadHash(x * 0.012f, z * 0.012f) * 0.35f;
-        float edgeN = dist / Mathf.Max(1f, LunarTerrainMesh.TerrainRadius);
-        h += edgeN * edgeN * 1.1f;
-
-        float blend = Mathf.SmoothStep(0f, 1f, (dist - clear) / 32f);
-        return h * blend;
-    }
-
     static Material MakePadCollarMaterial(string name)
     {
-        // Темніше сіре кільце під палубою — узгоджено зі стіною ями / реголітом
-        var mat = VisualMaterials.Lit(new Color(0.16f, 0.165f, 0.18f), 0.02f, 0.04f);
+        var mat = VisualMaterials.Lit(new Color(0.28f, 0.29f, 0.30f), 0.02f, 0.06f);
         mat.name = name;
         return mat;
     }
 
-    static ParticleSystem BuildStarField(Transform parent)
-    {
-        var root = new GameObject("StarField");
-        root.transform.SetParent(parent, false);
-        var go = new GameObject("Stars");
-        go.transform.SetParent(root.transform, false);
-        var ps = go.AddComponent<ParticleSystem>();
-        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-
-        var main = ps.main;
-        main.playOnAwake = false;
-        main.loop = false;
-        main.duration = 0.5f;
-        main.startLifetime = 99999f;
-        main.startSpeed = 0f;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.3f, 2.0f);
-        main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(0.85f, 0.87f, 0.95f, 0.85f), Color.white);
-        main.maxParticles = 2800;
-        main.simulationSpace = ParticleSystemSimulationSpace.World;
-
-        var em = ps.emission;
-        em.rateOverTime = 0f;
-        em.SetBursts(new[] { new ParticleSystem.Burst(0f, 2500) });
-
-        var sh = ps.shape;
-        sh.shapeType = ParticleSystemShapeType.Sphere;
-        sh.radius = 5200f;
-        sh.radiusThickness = 0.5f;
-
-        var rend = go.GetComponent<ParticleSystemRenderer>();
-        rend.renderMode = ParticleSystemRenderMode.Billboard;
-        rend.sharedMaterial = VisualMaterials.Particle(Color.white);
-        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        ps.Play();
-        return ps;
-    }
-
     static void BuildSunDisc(Transform parent)
     {
+        EnvironmentTextures.EnsureLoaded();
         var sky = new GameObject("SkyBodies");
         sky.transform.SetParent(parent, false);
-        var sunMat = VisualMaterials.Unlit(new Color(1f, 0.98f, 0.94f), new Color(1f, 0.95f, 0.85f));
-        SmoothMesh.MakeSphere("SunDisc", sky.transform,
-            new Vector3(-2600f, 1700f, -1900f), Vector3.one * 100f, sunMat);
-    }
 
-    static Material MakeHorizonMaterial()
-    {
-        // Трохи глибше за основний диск — глибина без «чорного» вигляду
-        var mat = VisualMaterials.Lit(new Color(0.32f, 0.325f, 0.34f), 0f, 0.02f);
-        mat.name = "HorizonDisk_SolidGray";
-        return mat;
-    }
-
-    static Material MakeRockMaterial()
-    {
-        var mat = VisualMaterials.Lit(new Color(0.36f, 0.365f, 0.38f), 0.03f, 0.045f);
-        mat.name = "Boulder_SolidGray";
-        return mat;
+        // Диск у тій самій позиції, звідки світить directional light
+        var sunMat = EnvironmentTextures.MakeBeautifulSunMaterial();
+        var sun = SmoothMesh.MakeSphere("Sun", sky.transform, SunWorldPosition, Vector3.one * 280f, sunMat);
+        var r = sun.GetComponent<MeshRenderer>();
+        if (r != null)
+        {
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+        }
     }
 
     static void SetupLighting(out Light sun)
     {
-        sun = Object.FindAnyObjectByType<Light>();
-        if (sun == null || sun.type != LightType.Directional)
+        EnvironmentTextures.EnsureLoaded();
+
+        // Лише одне directional-світло = Сонце (прибрати Fill/Rim/SkyBounce тощо)
+        DestroyExtraDirectionalLights();
+
+        sun = FindMainSunLight();
+        if (sun == null)
         {
             var go = new GameObject("Sun");
             sun = go.AddComponent<Light>();
             sun.type = LightType.Directional;
         }
         sun.name = "Sun";
-        // Місячне сонце: трохи м’якше, щоб сірий pad не випалювався в білий
-        sun.color = new Color(1f, 0.98f, 0.94f);
-        sun.intensity = 2.35f;
-        // Hard shadows — soft filter росте у world space при віддаленні й виглядає розмито
+        sun.enabled = true;
+        sun.color = new Color(1f, 0.95f, 0.88f);
+        sun.intensity = 1.35f;
         sun.shadows = LightShadows.Hard;
-        sun.shadowStrength = 0.9f;
-        // Bias підібрано під великий pad + тонкі ноги (менше acne, менше peter-panning)
-        sun.shadowBias = 0.03f;
-        sun.shadowNormalBias = 0.35f;
-        sun.shadowNearPlane = 0.15f;
+        sun.shadowStrength = 0.75f;
+        sun.shadowBias = 0.02f;
+        sun.shadowNormalBias = 0.25f;
+        sun.shadowNearPlane = 0.1f;
         sun.shadowResolution = UnityEngine.Rendering.LightShadowResolution.VeryHigh;
-        // ~28° elevation — довші читабельні тіні ракети на pad
-        sun.transform.rotation = Quaternion.Euler(28f, -42f, 0f);
 
-        // М’яка заливка + край — вакуум темний, білий booster читається чисто
-        EnsureDir("FillLight", new Color(0.5f, 0.52f, 0.58f), 0.18f, Quaternion.Euler(200f, 55f, 0f));
-        EnsureDir("RimLight", new Color(0.4f, 0.44f, 0.52f), 0.12f, Quaternion.Euler(-8f, 145f, 0f));
+        // Промені ВІД диска Сонця
+        Vector3 toScene = -SunWorldPosition.normalized;
+        sun.transform.rotation = Quaternion.LookRotation(toScene, Vector3.up);
 
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.07f, 0.072f, 0.082f);
-        RenderSettings.reflectionIntensity = 0.03f;
+        // М’який ambient замість другого «сонця зверху»
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+        RenderSettings.ambientSkyColor = new Color(0.32f, 0.42f, 0.55f);
+        RenderSettings.ambientEquatorColor = new Color(0.42f, 0.48f, 0.4f);
+        RenderSettings.ambientGroundColor = new Color(0.18f, 0.24f, 0.14f);
+        RenderSettings.ambientIntensity = 1.15f;
+        RenderSettings.reflectionIntensity = 0.3f;
 
-        // Базовий рівень; CameraFollow.FitShadows тримає cascades чіткими під час orbit-zoom
-        FitShadowsToFocusDepth(120f);
+        FitShadowsToFocusDepth(420f);
+    }
+
+    static Light FindMainSunLight()
+    {
+        var named = GameObject.Find("Sun");
+        if (named != null)
+        {
+            var l = named.GetComponent<Light>();
+            if (l != null && l.type == LightType.Directional) return l;
+        }
+        foreach (var l in Object.FindObjectsByType<Light>())
+        {
+            if (l != null && l.type == LightType.Directional && l.enabled)
+                return l;
+        }
+        return null;
+    }
+
+    static void DestroyExtraDirectionalLights()
+    {
+        string[] kill = { "FillLight", "RimLight", "SkyBounce", "Fill", "Rim" };
+        foreach (var n in kill)
+        {
+            var go = GameObject.Find(n);
+            if (go != null) Object.Destroy(go);
+        }
+        // Будь-які інші directional, крім "Sun"
+        foreach (var l in Object.FindObjectsByType<Light>())
+        {
+            if (l == null || l.type != LightType.Directional) continue;
+            if (l.gameObject.name == "Sun") continue;
+            Object.Destroy(l.gameObject);
+        }
     }
 
     /// <summary>
@@ -547,7 +946,8 @@ public static class EnvironmentBuilder
 
         focusDepth = Mathf.Max(8f, focusDepth);
         // Об’єм тіні трохи за об’єктом — не фіксовані 1400 м, що розріджують texels зблизька
-        float shadowDist = Mathf.Clamp(focusDepth * 1.55f + 90f, low ? 180f : 220f, low ? 900f : 2200f);
+        // Ширший shadow distance — дерева/кущі біля pad теж в cascade
+        float shadowDist = Mathf.Clamp(focusDepth * 1.85f + 140f, low ? 280f : 380f, low ? 1200f : 2800f);
 
         // Розставити межі cascade так, щоб глибина focus була біля кінця cascade 2/3
         // (найвища корисна щільність на ракеті + pad, не лише біля об’єктива камери).
@@ -599,49 +999,23 @@ public static class EnvironmentBuilder
         catch { /* ignore type mismatch */ }
     }
 
-    static void EnsureDir(string name, Color c, float i, Quaternion r)
-    {
-        var go = GameObject.Find(name);
-        if (go == null) { go = new GameObject(name); go.AddComponent<Light>(); }
-        var l = go.GetComponent<Light>();
-        l.type = LightType.Directional;
-        l.color = c;
-        l.intensity = i;
-        l.shadows = LightShadows.None;
-        go.transform.rotation = r;
-    }
-
     static void SetupSkyAndFog()
     {
+        // Fog = atmospheric perspective: край землі розчиняється в небі (без зеленого кільця)
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.ExponentialSquared;
-        RenderSettings.fogColor = new Color(0.012f, 0.012f, 0.014f);
-        RenderSettings.fogDensity = 0.00001f;
+        EnvironmentTextures.EnsureLoaded();
+        RenderSettings.fogColor = EnvironmentTextures.FogColor;
+        RenderSettings.fogDensity = 0.00007f;
 
         var cam = Camera.main ?? Object.FindAnyObjectByType<Camera>();
         if (cam != null)
         {
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.006f, 0.006f, 0.008f);
+            cam.backgroundColor = Color.Lerp(EnvironmentTextures.SkyZenith, EnvironmentTextures.SkyHorizon, 0.35f);
             cam.farClipPlane = 18000f;
-            cam.nearClipPlane = 0.3f;
+            cam.nearClipPlane = 0.25f;
         }
     }
 
-    static GameObject MakeBox(Transform parent, string name, Vector3 pos, Vector3 scale, Material mat)
-    {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        go.name = name;
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = pos;
-        go.transform.localScale = scale;
-        Object.Destroy(go.GetComponent<Collider>());
-        var r = go.GetComponent<MeshRenderer>();
-        if (r != null)
-        {
-            r.sharedMaterial = mat;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-        return go;
-    }
 }

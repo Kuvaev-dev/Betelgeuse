@@ -1,14 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// Ідеальні умови + per-algorithm GNC-тюнінг для гарантованої м’якої посадки.
-/// Не змінює «характер» алгоритмів назавжди — лише виставляє номінал без збурень
-/// і коефіцієнти, за яких кожен A/B/C/D стабільно сідає.
-/// Ручні/Monte-Carlo умови лишаються складнішими (див. LandingParams default).
+/// Ідеальні умови посадки 1-го ступеня (Earth LZ) + per-algorithm GNC-тюнінг.
+/// Лише ділянка після відділення (skipStackPhase) — номінал без вітру/шуму.
 /// </summary>
 public static class IdealLandingPresets
 {
-    // Спокійний номінал (не default сцени)
+    // Номінал ділянки посадки Stage-1 (Earth)
     public const float StartHeight = 1400f;
     public const float StartVy = -48f;
     /// <summary>Додатний модуль StartVy (для слайдерів UI).</summary>
@@ -50,39 +48,41 @@ public static class IdealLandingPresets
 
         rocket.windVelocity = Vector3.zero;
         rocket.applyContinuousWind = false;
+        // Ideal = лише ділянка посадки 1-го ступеня (без Stack-підйому)
+        rocket.skipStackPhase = true;
         rocket.SyncFixedTimestep();
 
         if (sim != null)
         {
             sim.enableNoise = false;
             sim.windStrength = 0f;
-            // Не обнуляємо mass/angle variation назавжди — інакше після Ideal
-            // toggle «Шум» не впливав би на одиночний старт.
             sim.massVariationPercent = 6f;
             sim.angleVariationDegrees = 7f;
             sim.continuousWind = true;
+            sim.startHeight = StartHeight;
+            sim.startDescentSpeed = StartDescentSpeed;
+            sim.startTiltDeg = StartTiltDeg;
         }
-        // UI-слайдери вітру/шуму скидає MissionControlUI після Apply
 
         var fuzzy = rocket.fuzzyController ?? rocket.GetComponent<FuzzyLandingController>();
         var neural = rocket.neuralController ?? rocket.GetComponent<NeuralController>();
         var hybrid = rocket.hybridController ?? rocket.GetComponent<HybridController>();
 
-        // Скинути «агресивні» default-и, потім per-mode ідеал
         ApplyDefaultControllerTuning(rocket, fuzzy, neural, hybrid);
         ApplyModeIdeal(rocket.controlMode, rocket, fuzzy, neural, hybrid);
 
         rocket.PrepareMode(rocket.controlMode);
+        rocket.skipStackPhase = true;
 
         string mode = rocket.GetModeDisplayName();
         summaryUk =
-            $"Ідеал для «{mode}»: h₀={StartHeight:F0} м, Vᵧ={StartVy:F0} м/с, крен {StartTiltDeg:F1}°.\n" +
-            "Вітер/шум ВИМК · GNC-тюнінг цього алгоритму.\n" +
-            "ЗАПУСТИТИ ПОСАДКУ — очікуваний успіх. Ручні умови лишаються складнішими.";
+            $"Ідеал Stage-1 (Earth LZ) «{mode}»: h₀={StartHeight:F0} м, Vᵧ={StartVy:F0} м/с, крен {StartTiltDeg:F1}°.\n" +
+            "Після відділення · вітер/шум ВИМК · маса 1-го ступеня.\n" +
+            "ЗАПУСТИТИ — очікуваний soft-landing.";
         summaryEn =
-            $"Ideal for “{mode}”: h₀={StartHeight:F0} m, Vᵧ={StartVy:F0} m/s, tilt {StartTiltDeg:F1}°.\n" +
-            "Wind/noise OFF · per-algorithm GNC tune.\n" +
-            "START LANDING — expected success. Manual conditions stay harder.";
+            $"Ideal Stage-1 (Earth LZ) “{mode}”: h₀={StartHeight:F0} m, Vᵧ={StartVy:F0} m/s, tilt {StartTiltDeg:F1}°.\n" +
+            "After separation · wind/noise OFF · first-stage mass.\n" +
+            "START — expected soft-landing.";
     }
 
     /// <summary>Робочі (не ідеальні) коефіцієнти — відмінності A/B/C/D помітні.</summary>

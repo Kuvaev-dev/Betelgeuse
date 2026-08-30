@@ -64,22 +64,32 @@ public class BootstrapRunner : MonoBehaviour
             rocket.GetComponent<NeuralController>(),
             rocket.GetComponent<HybridController>());
 
-        Prog(0.35f, "Модель ракетоносія…", "Building rocket…");
+        Prog(0.30f, "Модель ракетоносія…", "Building rocket…");
         yield return null;
         yield return RocketVisualBuilder.BuildRoutine(rocket);
+        Prog(0.45f, "Модель ракетоносія ✓", "Rocket mesh ✓");
+        yield return null;
 
-        Prog(0.55f, "Місяць і посадковий майданчик…", "Moon & landing pad…");
+        // Довгий крок LZ — кілька проміжних Prog, щоб бар не «застигав/зникав» на ~52%
+        Prog(0.50f, "Земний аеродром / LZ…", "Earth airfield / LZ…");
+        yield return null;
+        Prog(0.55f, "Рельєф і текстури…", "Terrain & textures…");
         yield return null;
         yield return EnvironmentBuilder.BuildRoutine();
+        Prog(0.78f, "Середовище ✓", "Environment ✓");
+        yield return null;
 
-        Prog(0.78f, "Стан симуляції…", "Simulation state…");
+        Prog(0.84f, "Стан симуляції…", "Simulation state…");
         yield return null;
 
         rocket.simulationArmed = false;
+        rocket.skipStackPhase = true;
         if (rocket.parameters != null)
         {
+            // Idle: лише 1-й ступінь на IC посадки
+            rocket.parameters.EnsureStackDefaults();
             rocket.state.position = rocket.parameters.startPosition;
-            rocket.state.velocity = rocket.parameters.startVelocity;
+            rocket.state.velocity = Vector3.zero;
             rocket.state.rotation = Quaternion.Euler(rocket.parameters.startEulerAngles);
             rocket.state.angularVelocity = Vector3.zero;
             rocket.state.currentThrust = 0f;
@@ -89,6 +99,8 @@ public class BootstrapRunner : MonoBehaviour
             rocket.state.isLanded = false;
             rocket.state.simulationFinished = false;
             rocket.state.time = 0f;
+            rocket.phase = RocketPhysics.FlightPhase.Idle;
+            RocketVisualBuilder.SetUpperStackVisible(rocket.transform, false);
             rocket.SyncTransformWithState();
         }
 
@@ -114,13 +126,15 @@ public class BootstrapRunner : MonoBehaviour
         foreach (var theme in Object.FindObjectsByType<MissionControlTheme>())
             theme.styleOnAwake = false;
 
-        Prog(0.96f, "Mission Control HUD…", "Mission Control HUD…");
+        Prog(0.94f, "Mission Control HUD…", "Mission Control HUD…");
         yield return null;
 
         Prog(1f, "Готово", "Ready");
-        yield return null;
+        // Дати splash 2–3 кадри дотягнути бар до 100%
+        for (int i = 0; i < 4; i++)
+            yield return null;
 
-        splash?.FadeOutAndDestroy(0.35f);
+        splash?.FadeOutAndDestroy(0.45f);
         Destroy(gameObject);
     }
 

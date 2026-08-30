@@ -69,6 +69,9 @@ public class CameraFollow : MonoBehaviour
     Vector3 lastMouse;
     /// <summary>Після ручного orbit не повертати кут автоматично, доки не скинуто (F/R).</summary>
     public bool userOrbitLock;
+    /// <summary>У Manual focus заморожено — камера не «прилипає» до ракети після посадки.</summary>
+    bool focusFrozen;
+    Vector3 frozenFocus;
     Camera cam;
 
     // Поля сумісності, що використовуються деінде / в inspector
@@ -116,6 +119,25 @@ public class CameraFollow : MonoBehaviour
     {
         Resolve();
         Vector3 targetFocus = ComputeFocus();
+
+        // Manual: focus зафіксовано (огляд) — не перемикатись на «слідкування» за ракетою
+        if (mode == ViewMode.Manual && focusFrozen)
+            targetFocus = frozenFocus;
+        // Після посадки в Follow з userOrbitLock — теж тримати focus (користувач оглядає)
+        else if (mode == ViewMode.Follow && userOrbitLock && RocketIsSettled())
+        {
+            if (!focusFrozen)
+            {
+                frozenFocus = smoothFocus;
+                focusFrozen = true;
+            }
+            targetFocus = frozenFocus;
+        }
+        else if (mode == ViewMode.Follow && !userOrbitLock)
+        {
+            focusFrozen = false;
+        }
+
         if (!focusInited)
         {
             smoothFocus = targetFocus;
@@ -123,14 +145,11 @@ public class CameraFollow : MonoBehaviour
         }
         else
         {
-            // Focus завжди гладко йде за ракетою — це прибирає дьоргання від look-ahead
             float fk = 1f - Mathf.Exp(-focusSmooth * Time.deltaTime);
             smoothFocus = Vector3.Lerp(smoothFocus, targetFocus, fk);
         }
 
-        bool hard = orbitDragging || Input.anyKey; // під час керування — без лагу
-        // anyKey занадто широко — лише коли orbit-клавіші
-        hard = orbitDragging || IsOrbitKeyHeld();
+        bool hard = orbitDragging || IsOrbitKeyHeld();
 
         if (mode == ViewMode.Overview)
             PlaceOverview(hard);
@@ -230,17 +249,24 @@ public class CameraFollow : MonoBehaviour
                 ApplyZoom(-zD * Time.deltaTime * 12f);
         }
 
-        // Follow auto-distance, коли не зафіксовано користувачем
-        if (mode == ViewMode.Follow && !userOrbitLock && !orbitDragging)
+        // Follow auto-distance лише в активному польоті без user lock
+        // (після посадки / в Manual — не тягнути камеру назад у «слідкування»)
+        if (mode == ViewMode.Follow && !userOrbitLock && !orbitDragging && !RocketIsSettled())
         {
             float h = 0f;
             if (rocket != null) h = Mathf.Max(0f, rocket.state.position.y);
             float wantDist = Mathf.Lerp(nearDistance, farDistance, Mathf.Clamp01(h / 2000f));
             distance = Mathf.Lerp(distance, wantDist, 1f - Mathf.Exp(-autoReturnSpeed * Time.deltaTime));
-            // М'яко повертаємо кут до default
             yaw = Mathf.LerpAngle(yaw, defaultYaw, 1f - Mathf.Exp(-autoReturnSpeed * 0.35f * Time.deltaTime));
             pitch = Mathf.Lerp(pitch, defaultPitch, 1f - Mathf.Exp(-autoReturnSpeed * 0.35f * Time.deltaTime));
         }
+    }
+
+    /// <summary>Ракета на землі / симуляція завершена — режим огляду не скидати.</summary>
+    public bool RocketIsSettled()
+    {
+        if (rocket == null) return false;
+        return rocket.state.isLanded || rocket.state.simulationFinished;
     }
 
     void ApplyZoom(float scroll)
@@ -406,19 +432,29 @@ public class CameraFollow : MonoBehaviour
 
     public void SetMode(ViewMode m)
     {
-        mode = m;
         if (m == ViewMode.Follow)
         {
-            if (!userOrbitLock) ResetOrbitDefaults();
+            mode = ViewMode.Follow;
+            // Не скидати userOrbitLock, якщо користувач уже крутив огляд
+            // (скидання лише явним F з OnCamFollow / R)
+            if (!userOrbitLock)
+            {
+                focusFrozen = false;
+                ResetOrbitDefaults();
+            }
             SnapNow();
         }
         else if (m == ViewMode.Overview)
+        {
             SnapToFullTrajectoryView();
+        }
         else
         {
-            // Manual — зберегти поточні orbit-кути
-            userOrbitLock = true;
+            // Manual — вільний огляд: focus freeze, кути зберегти
             mode = ViewMode.Manual;
+            userOrbitLock = true;
+            frozenFocus = focusInited ? smoothFocus : ComputeFocus();
+            focusFrozen = true;
             SnapNow();
         }
     }
@@ -428,6 +464,7 @@ public class CameraFollow : MonoBehaviour
     public void ResetManualOrbit()
     {
         userOrbitLock = false;
+        focusFrozen = false;
         ResetOrbitDefaults();
         if (mode == ViewMode.Overview) SnapToFullTrajectoryView();
         else SetMode(ViewMode.Follow);
@@ -437,7 +474,10 @@ public class CameraFollow : MonoBehaviour
     {
         Resolve();
         focusInited = false;
-        smoothFocus = ComputeFocus();
+        if (mode == ViewMode.Manual && focusFrozen)
+            smoothFocus = frozenFocus;
+        else
+            smoothFocus = ComputeFocus();
         focusInited = true;
         if (mode == ViewMode.Overview)
             PlaceOverview(true);

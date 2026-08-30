@@ -1,26 +1,35 @@
-# Betelgeuse — Intelligent Autonomous Rocket Landing
+# Betelgeuse — інтелектуальна автономна посадка першого ступеня
 
-**v1.2.0** · Diploma GNC simulator (Unity URP)
+**v1.3.1** · дипломний GNC-симулятор (Unity URP)
 
-**Тема:** Розроблення інтелектуальної системи автономної посадки ракетоносія на основі нечіткої логіки та машинного навчання.
+**Тема:** Розроблення інтелектуальної системи автономної посадки **першого ступеня** ракети-носія на основі нечіткої логіки та машинного навчання.
 
-Симулятор GNC першого ступеня (~42 м, Falcon-class scale) з порівнянням класичного PID та інтелектуальних алгоритмів.
+Симулятор GNC **1-го ступеня** (компактний Falcon-class booster, ~28 м візуал) у **земних** умовах (Earth LZ): порівняння PID / Fuzzy / Neural / Hybrid.
 
 | Документ | Зміст |
 |----------|--------|
-| [`DOCS.md`](DOCS.md) | Повна специфікація (GNC, UI, візуал, експорт, тести) |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Шари, SOLID, патерни, як додати контролер |
-| [`RELEASE.md`](RELEASE.md) | Нотатки релізу / демо для захисту |
-| [`HOW_TO_RUN.md`](HOW_TO_RUN.md) | Запуск для комісії + baseline seed |
+| [`DOCS.md`](DOCS.md) | Повна специфікація |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Шари, SOLID, GNC, DRY |
+| [`RELEASE.md`](RELEASE.md) | Демо захисту |
+| [`HOW_TO_RUN.md`](HOW_TO_RUN.md) | Запуск + baseline seed |
+
+## Об'єкт роботи
+
+| | |
+|--|--|
+| **Об'єкт** | Автономна посадка **першого ступеня** ракети-носія |
+| **Середовище** | Earth LZ (аеродром / бетонна площадка, природа, небо) |
+| **Методи** | Нечітка логіка (Sugeno) + ML (MLP+ES) + Hybrid Neuro-Fuzzy |
+| **Порівняння** | A PID · B Fuzzy · C Neural · D Hybrid (Monte-Carlo) |
+
+**Не моделюється:** орбітальне виведення, посадка 2/3 ступенів, Місяць, Kalman/INS, CFD, industrial avionics.
 
 ## Швидкий старт
 
 1. Unity **6000.x** (URP) → `Assets/Scenes/SampleScene.unity` → **Play**
-2. Справа: алгоритм **4 Hybrid** (рекомендовано)
-3. Опційно **Ідеал** `[I]` — номінал без вітру/шуму
-4. **Старт** `[Space]` — посадка
-5. **Порівняти** `P` — Monte-Carlo A–D (DefenseBaseline, paired seeds)
-6. **Експорт** `[E]` → `SimulationLogs/`
+2. На екрані: **Earth LZ** + **1-й ступінь** (ноги, grid fins, 9 сопел)
+3. **`4`** Hybrid → **`I`** Ideal → **`Space`** — посадка
+4. **`D`** — демо захисту · **`P`** — Monte-Carlo A–D · **`E`** — експорт
 
 ## Режими керування
 
@@ -31,108 +40,35 @@
 | C | **Neural** | MLP 5→8→2 + **ES (1+λ)** |
 | D | **Hybrid** ★ | Neuro-Fuzzy (тема роботи) |
 
-Диспетчеризація — через `ILandingController` / `LandingControllerResolver` (без switch по типах).
-
-## Гарячі клавіші
-
-| Клавіша | Дія |
-|---------|-----|
-| **1 / 2 / 3 / 4** | PID / Fuzzy / Neural / Hybrid |
-| **Space** | Старт посадки |
-| **I** | Ідеальні параметри |
-| **Esc** | Стоп / закрити результат |
-| **H** | Сховати / показати панелі |
-| **F / T / C / R** | Follow / Overview / Manual / Reset cam |
-| **L** | Траєкторія on/off |
-| **E / O** | Експорт / папка звітів |
-| **F1 / ?** | Довідка (кнопка після Експорт у топ-барі) |
-| **D** | Демо захисту (Hybrid → Ideal → Start) |
-| **G** | Мова UA ↔ EN |
-| **Y** | Тема UI (8 тем) |
-| **P / X** | Порівняти всі / скасувати |
-| Слайдер **прискорення** | Швидкість Play / Monte-Carlo (права панель) |
-
-## Камера
-
-| Дія | Керування |
-|-----|-----------|
-| Orbit | ЛКМ / ПКМ · WASD · стрілки · Q/E |
-| Зум | Колесо · +/- |
-| Follow / Overview / Reset | F / T / R |
-
 ## Критерії soft-landing
 
 |Vᵧ| &lt; **3.5** м/с · нахил &lt; **7°** · промах &lt; **25** м · |Vₕ| &lt; **5** м/с  
-(`LandingCriteria` — єдине джерело правди)
+(`LandingCriteria`)
 
-## Структура коду
+## Фізика
 
-```
-Assets/Scripts/
-├── Domain/Control/   ILandingController, Context/Command, Resolver, Criteria, PidStrategy
-├── Control/          Fuzzy, Neural, Hybrid, SoftLandingGuidance, Ideal presets
-├── Core/             RocketPhysics (RK4), SimulationManager, export, metrics, logger
-├── Parameters/       SimulationParameters (ScriptableObject)
-├── Visual/           Місяць, pad, ракета, FX
-├── UI/               MissionControlUI, themes, graphs, trajectory
-├── Utils/            SceneBootstrap, CameraFollow, BorderlessWindow
-└── Tests/            EditMode + PlayMode
-```
+- g ≈ 9.81, ρ(h), Cd, вітер  
+- Маса = **1-й ступінь** + залишок палива  
+- RK4 + TVC + lateral guidance  
 
-## Експорт
+## Візуал (презентація)
 
-Кожен запуск = **окремий каталог** у `SimulationLogs/` (нічого не розкидано в корені).
-
-```
-SimulationLogs/
-  Landing_<Algorithm>_<timestamp>/
-    00_README.md          ← з чого почати
-    01_SUMMARY.md         ← головний звіт
-    02_metrics.json
-    03_timeseries.csv
-    04_analysis.md
-    charts/*.svg
-  Comparison_<timestamp>/
-    00_README.md · 01_SUMMARY.md · 02_results.csv · 03_results.json
-```
-
-`BestWeights_Neural.json` — ваги MLP (корінь проєкту).
-
-## Тести
-
-**Window → General → Test Runner**
-
-- **EditMode** — PID, атмосфера, метрики, fuzzy, signs, export  
-- **PlayMode** — інтеграція, камера, логер  
-
-## Ключові гарантії
-
-- A–D мають **різну** mid-flight поведінку; Ideal `[I]` — стабільний soft-landing  
-- UI-вітер/шум діють на одиночний старт (`ApplyFlightDisturbances`)  
-- Траєкторія: Catmull-Rom + Chaikin, лишається після посадки  
-- Місяць: процедурний диск R≈2000 м, cool-gray, гладкі кратери  
-- Ракета: Falcon-class ~42 м, grid fins, ноги, bell-сопла  
-- HUD: UA/EN · 8 тем · компактна модалка результату · step strip  
+- **Stage-1 only** (боoster): білий корпус, чиста зона стиковки, ноги, fins, 9 сопел  
+- **Earth LZ**: meadow albedo (Poly Haven), природа (Kenney CC0), хмари (спрайти з sky photo)  
+- Світло узгоджене з диском Сонця (`EnvironmentBuilder.SunWorldPosition`)  
 
 ## Вердикт (тема)
 
-**Відповідність темі МКР: ТАК.**  
-**Готовність до повноцінної презентації: ТАК** (демо-сценарій нижче).
+| Фрагмент теми | Реалізація | Статус |
+|---------------|------------|--------|
+| Автономна посадка | GNC без пілота до touchdown | ✅ |
+| **Першого ступеня** | Візуал + маса + GNC лише Stage-1 | ✅ |
+| Нечітка логіка | Sugeno-0 5×5 (**B**) | ✅ |
+| Машинне навчання | MLP + ES (**C**) | ✅ |
+| Інтелектуальна система | Hybrid Neuro-Fuzzy (**D**) | ✅ |
+| Земні умови | Earth LZ, g=9.81 | ✅ |
 
-| Блок | Статус |
-|------|--------|
-| Автономна посадка | ✅ |
-| Нечітка логіка (Sugeno) | ✅ |
-| Машинне навчання (MLP+ES) | ✅ |
-| Гібрид Neuro-Fuzzy (тема) | ✅ |
-| Порівняння Monte-Carlo + export | ✅ |
-| 3D + UI UA/EN · 8 тем | ✅ |
-| SOLID control layer | ✅ |
-
-Рівень — дипломна симуляція GNC (не industrial avionics).  
-
-**Демо на захист:** `4` Hybrid → `I` Ideal → `Space` → GATE/score → `T` → `E` → `P`.  
-(Опційно: toggle **Train** + Neural — показати навчання ES.)
+**Готовність до захисту: ТАК.**
 
 ## Автор
 

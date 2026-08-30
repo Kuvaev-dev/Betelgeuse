@@ -86,7 +86,7 @@ public static class UILocale
     {
         // Top
         ["app_title"] = new("BETELGEUSE", "BETELGEUSE"),
-        ["app_sub"] = new("Посадка ракетоносія", "Booster landing"),
+        ["app_sub"] = new("1-й ступінь · Earth LZ", "First stage · Earth LZ"),
         ["time_fmt"] = new("t {0:F1}s", "t {0:F1}s"),
         ["algo_fmt"] = new("{0}", "{0}"),
         ["top_path"] = new("ШЛЯХ", "PATH"),
@@ -107,15 +107,17 @@ public static class UILocale
         ["top_show"] = new("ПОКАЗАТИ", "SHOW"),
 
         // Status (короткі — вміщуються в бейдж ~118 px)
-        ["st_ready"] = new("ГОТОВО ДО ПОСАДКИ", "READY TO LAND"),
+        ["st_ready"] = new("ГОТОВО · 1-й СТУПІНЬ", "READY · FIRST STAGE"),
         ["st_wait"] = new("ОЧІКУВАННЯ", "WAITING"),
-        ["st_start"] = new("СТАРТ ПОСАДКИ", "LANDING START"),
-        ["st_descent"] = new("СПУСК", "DESCENT"),
-        ["st_success"] = new("ПОСАДКА УСПІШНА", "LANDING SUCCESSFUL"),
-        ["st_fail"] = new("ПОСАДКА НЕВДАЛА", "LANDING FAILED"),
+        ["st_start"] = new("СТАРТ (ПАКЕТ→SEP)", "START (STACK→SEP)"),
+        ["st_descent"] = new("ПОСАДКА STAGE-1", "STAGE-1 LANDING"),
+        ["st_success"] = new("ПОСАДКА 1-го УСПІШНА", "STAGE-1 LANDING OK"),
+        ["st_fail"] = new("ПОСАДКА 1-го НЕВДАЛА", "STAGE-1 LANDING FAIL"),
         ["st_stop"] = new("ЗУПИНЕНО", "STOPPED"),
         ["st_pause"] = new("ПАУЗА", "PAUSED"),
-        ["st_batch"] = new("АВТО-ТЕСТ", "AUTO-TEST"),
+        ["st_batch"] = new("АВТО-ТЕСТ STAGE-1", "STAGE-1 AUTO-TEST"),
+        ["st_stack"] = new("ПІДЙОМ ПАКЕТА", "STACK ASCENT"),
+        ["st_sep"] = new("ВІДДІЛЕННЯ", "SEPARATION"),
 
         // Modes
         ["mode_pid"] = new("Класичний PID", "Classical PID"),
@@ -262,53 +264,53 @@ public static class UILocale
         ["msg_residual_on"] = new("Hybrid: Sugeno + MLP residual ON", "Hybrid: Sugeno + MLP residual ON"),
         ["msg_residual_off"] = new("Ablation: Hybrid = Fuzzy-only (residual OFF)",
             "Ablation: Hybrid = Fuzzy-only (residual OFF)"),
-        ["msg_demo_start"] = new("Демо захисту: Hybrid → Ideal → Start…",
-            "Defense demo: Hybrid → Ideal → Start…"),
-        ["msg_demo_flight"] = new("Демо: політ Hybrid (Ideal). Після посадки — огляд траєкторії.",
-            "Demo: Hybrid Ideal flight. After touchdown — trajectory overview."),
+        ["msg_demo_start"] = new("Демо: Hybrid · посадка 1-го ступеня (Earth LZ)…",
+            "Demo: Hybrid · first-stage landing (Earth LZ)…"),
+        ["msg_demo_flight"] = new("Демо: Hybrid садить 1-й ступінь на Earth LZ.",
+            "Demo: Hybrid lands first stage on Earth LZ."),
         ["msg_demo_done"] = new("Демо завершено. E — експорт · P — Monte-Carlo · F1 — довідка",
             "Demo done. E — export · P — Monte-Carlo · F1 — help"),
         ["help_title"] = new("ДОВІДКА · BETELGEUSE", "HELP · BETELGEUSE"),
         ["help_body"] = new(
+            "ОБ'ЄКТ: посадка 1-го ступеня після відділення · Earth LZ\n\n" +
             "КЕРУВАННЯ\n" +
-            "  1–4  PID / Fuzzy / Neural / Hybrid\n" +
-            "  Space старт · Esc стоп · I ідеал · U пауза\n" +
-            "  D демо захисту · P порівняти · X скасувати\n" +
+            "  1–4  PID / Fuzzy / Neural / Hybrid (лише після sep)\n" +
+            "  Space старт · Esc стоп · I ідеал Stage-1 · U пауза\n" +
+            "  D демо (пакет→sep→Hybrid) · P порівняти · X скасувати\n" +
             "  F/T/C/R камера · L шлях · E експорт · O папка\n" +
-            "  H панелі · G мова · Y тема · F1 довідка\n" +
-            "  «Швидкість симуляції» — Play · «Прискорення MC» — порівняння\n\n" +
-            "SOFT-LANDING\n" +
-            "  |Vy|<3.5 м/с · нахил<7° · промах<40 м · |Vh|<6.5 м/с\n\n" +
+            "  H панелі · G мова · Y тема · F1 довідка\n\n" +
+            "SOFT-LANDING (Stage-1)\n" +
+            "  |Vy|<3.5 м/с · нахил<7° · промах · |Vh|\n\n" +
             "ДОСЛІДЖЕННЯ\n" +
-            "  P — DefenseBaseline MC (paired seeds)\n" +
-            "  Residual OFF — ablation (Hybrid≈Fuzzy)\n" +
-            "  Train NN — ES · Експорт → SimulationLogs/",
+            "  P — MC лише ділянка посадки · paired seeds\n" +
+            "  Вітер/шум — після відділення",
+            "OBJECT: first-stage landing after separation · Earth LZ\n\n" +
             "CONTROLS\n" +
-            "  1–4  PID / Fuzzy / Neural / Hybrid\n" +
-            "  Space start · Esc stop · I ideal · U pause\n" +
-            "  D defense demo · P compare · X cancel\n" +
+            "  1–4  PID / Fuzzy / Neural / Hybrid (after sep only)\n" +
+            "  Space start · Esc stop · I ideal Stage-1 · U pause\n" +
+            "  D demo (stack→sep→Hybrid) · P compare · X cancel\n" +
             "  F/T/C/R camera · L path · E export · O folder\n" +
-            "  H panels · G lang · Y theme · F1 help\n" +
-            "  «Simulation speed» — Play · «MC speed» — compare\n\n" +
-            "SOFT-LANDING\n" +
-            "  |Vy|<3.5 m/s · tilt<7° · miss<40 m · |Vh|<6.5 m/s\n\n" +
+            "  H panels · G lang · Y theme · F1 help\n\n" +
+            "SOFT-LANDING (Stage-1)\n" +
+            "  |Vy|<3.5 m/s · tilt<7° · miss · |Vh|\n\n" +
             "RESEARCH\n" +
-            "  P — DefenseBaseline MC (paired seeds, seed 42)\n" +
-            "  Residual OFF — ablation (Hybrid≈Fuzzy)\n" +
-            "  Train NN — ES · Export → SimulationLogs/"),
+            "  P — MC landing segment only · paired seeds\n" +
+            "  Wind/noise — after separation"),
 
         // Смуга фази польоту (низ)
-        ["step_ready"] = new("Крок: готовність | оберіть алгоритм і Start", "Step: ready | pick algorithm and Start"),
-        ["step_high"] = new("Крок: високий спуск | профіль швидкості", "Step: high descent | speed profile"),
+        ["step_ready"] = new("Крок: готовність | пакет на Earth LZ", "Step: ready | stack on Earth LZ"),
+        ["step_stack"] = new("Крок: підйом пакета | до відділення", "Step: stack ascent | before separation"),
+        ["step_sep"] = new("Крок: відділення | далі лише 1-й ступінь", "Step: separation | first stage only"),
+        ["step_high"] = new("Крок: високий спуск Stage-1 | профіль", "Step: Stage-1 high descent | profile"),
         ["step_approach"] = new("Крок: підхід | гальмування + вирівнювання", "Step: approach | brake + upright"),
         ["step_powered"] = new("Крок: активне гальмування | T/W > 1", "Step: powered descent | T/W > 1"),
         ["step_terminal"] = new("Крок: термінал | м'яка посадка h<25 м", "Step: terminal | soft landing h<25 m"),
         ["step_soft"] = new("Крок: м'яке торкання | мала |Vy|", "Step: soft touch | low |Vy|"),
-        ["step_touch"] = new("Крок: контакт із pad", "Step: pad contact"),
-        ["step_ok"] = new("Крок: посадка успішна", "Step: landing success"),
-        ["step_fail"] = new("Крок: посадка невдала", "Step: landing failed"),
+        ["step_touch"] = new("Крок: контакт із Earth LZ pad", "Step: Earth LZ pad contact"),
+        ["step_ok"] = new("Крок: посадка 1-го ступеня успішна", "Step: first-stage landing success"),
+        ["step_fail"] = new("Крок: посадка 1-го ступеня невдала", "Step: first-stage landing failed"),
         ["step_stop"] = new("Крок: політ зупинено", "Step: flight stopped"),
-        ["step_batch"] = new("Крок: авто-порівняння алгоритмів", "Step: auto algorithm compare"),
+        ["step_batch"] = new("Крок: MC порівняння A–D на Stage-1", "Step: MC A–D compare on Stage-1"),
 
         // Results
         ["winner_none"] = new("Переможець: —", "Winner: --"),
@@ -329,12 +331,16 @@ public static class UILocale
             "Criteria failed — see cards below"),
 
         // Інсайти
-        ["ins_wait"] = new("Оберіть алгоритм (D — гібрид) і натисніть «ЗАПУСТИТИ ПОСАДКУ».",
-            "Select algorithm (D — hybrid) and press START LANDING."),
-        ["ins_batch"] = new("Йде авто-тест Monte-Carlo. Алгоритми змінюються автоматично.",
-            "Monte-Carlo auto-test running. Algorithms switch automatically."),
-        ["ins_ok"] = new("Посадку виконано. Score {0:F0}/100. Експортуйте звіт.",
-            "Landing complete. Score {0:F0}/100. Export the report."),
+        ["ins_wait"] = new("Об'єкт: 1-й ступінь · Earth LZ. D — демо пакета, 4 — Hybrid, Space — старт.",
+            "Object: first stage · Earth LZ. D — stack demo, 4 — Hybrid, Space — start."),
+        ["ins_batch"] = new("MC на ділянці посадки Stage-1 (після sep). A–D попарно.",
+            "MC on Stage-1 landing segment (after sep). Paired A–D."),
+        ["ins_ok"] = new("Посадку 1-го ступеня виконано. Score {0:F0}/100.",
+            "First-stage landing complete. Score {0:F0}/100."),
+        ["ins_stack"] = new("Підйом 3-ступеневого пакета. A–D ще не активні.",
+            "Three-stage stack ascent. A–D not active yet."),
+        ["ins_sep"] = new("Відділення: далі лише 1-й ступінь + GNC A–D.",
+            "Separation: first stage only + GNC A–D."),
         ["ins_high_low_twr"] = new("Високий спуск: тяга нижче зависання — гальмування ближче до землі.",
             "High altitude: thrust below hover — braking expected lower."),
         ["ins_high_ok"] = new("Високий спуск: контролер тримає профіль. Слідкуйте за нахилом.",
@@ -362,7 +368,8 @@ public static class UILocale
         ["prog_run"] = new("Авто-тест: {0}  ·  {1}/{2}", "Auto-test: {0}  ·  {1}/{2}"),
         ["msg_compare_export"] = new("Авто-тест завершено. Звіти: {0}", "Auto-test complete. Reports: {0}"),
         ["msg_compare_stopped"] = new("Авто-тест зупинено користувачем.", "Auto-test stopped by user."),
-        ["msg_started"] = new("Посадка: {0}. LMB — оберт навколо ракети.", "Landing: {0}. LMB — orbit around rocket."),
+        ["msg_started"] = new("Політ ({0}). Earth LZ · 1-й ступінь після sep.",
+            "Flight ({0}). Earth LZ · first stage after sep."),
         ["msg_stopped"] = new("Політ зупинено. ЗАПУСТИТИ — знову.", "Flight stopped. START — again."),
         ["msg_paused"] = new("Пауза. ПАУЗА / ДАЛІ — продовжити.", "Paused. PAUSE / RESUME — continue."),
         ["msg_resumed"] = new("Політ продовжено.", "Flight resumed."),

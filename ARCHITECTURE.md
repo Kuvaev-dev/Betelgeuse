@@ -1,92 +1,91 @@
-# Betelgeuse — Архітектура
+# Betelgeuse — архітектура
 
-**Версія:** 1.2.0 (готово до захисту)  
-**Стек:** Unity 6000 URP · C#
+**Версія:** 1.3.1  
+**Стек:** Unity 6000 URP · C#  
+**Середовище:** Earth LZ · об'єкт GNC — **1-й ступінь**
 
 ## Цілі
 
-- Стабільне демо для дипломної роботи (режими A–D, метрики, експорт, UI, 3D).
-- **SOLID** там, де це зменшує зв’язність без зайвого ускладнення сцен.
-- Додавання 5-го контролера = **реєстрація стратегії**, а не правка диспетчеризації фізики.
+- Демо захисту: посадка Stage-1 алгоритмами A–D на Earth LZ.
+- SOLID: новий контролер = реєстрація стратегії, без правки фізики.
+- DRY: спільні пресети, критерії, візуальні палітри в одному місці.
+
+## Фази місії
+
+```
+Idle ──Start──► [Stack опційно] ──sep──► Stage1 ──touchdown──► Finished
+                                      │
+                                      │ ILandingController A–D
+                                      │ stage1 mass + fuel
+```
+
+Презентація за замовчуванням: `skipStackPhase=true` → одразу **Stage1**.
+
+| Фаза | Власник фізики | Керування | Візуал |
+|------|----------------|-----------|--------|
+| **Idle** | — | — | Stage-1 на landing IC (типово) |
+| **Stack** | `UpdateStackControl` | open-loop | (якщо увімкнено) |
+| **Stage1** | `UpdateControl` + RK4 | **A–D** via Resolver | 1-й ступінь |
+
+Monte-Carlo і Ideal `[I]` — **Stage1** only.
 
 ## Шари
 
 ```
-Presentation     UI/ · Visual/ · Utils (камера, вікно)
+Presentation     UI/ · Visual/ (Earth LZ, booster) · Camera
        ↓
-Application      Control/* стратегії (Fuzzy/Neural/Hybrid MB + чистий PID)
+Application      Control/* (Fuzzy/Neural/Hybrid) · IdealLandingPresets
        ↓
 Domain           ILandingController · Context/Command · Resolver · Criteria
        ↓
-Core             RocketPhysics (RK4) · SimulationManager · Export · Logger
-Parameters       SimulationParameters (ScriptableObject)
+Core             RocketPhysics · SimulationManager · Export
+Parameters       SimulationParameters / LandingParams
 ```
-
-| Шар | Відповідальність |
-|-----|------------------|
-| **Domain** | Контракти GNC і правила soft-landing |
-| **Control** | Конкретні стратегії + спільний профіль наведення |
-| **Core** | Інтегрування, Monte-Carlo, метрики, експорт |
-| **Presentation** | HUD, меші, камера, splash |
 
 ## SOLID
 
 | | |
 |--|--|
-| **S** | PID у `PidLandingStrategy`; gate у `LandingCriteria`; UI окремо |
-| **O** | Новий режим → реалізувати `ILandingController` + `Register` |
-| **L** | Усі стратегії повертають `ControlCommand`; фізика застосовує спільний safety envelope |
-| **I** | Вузький інтерфейс: Mode / Evaluate / Reset / IsAvailable |
-| **D** | `RocketPhysics` залежить від resolver, а не від конкретних Fuzzy/NN для диспетчеризації |
+| **S** | PID у `PidLandingStrategy`; gate у `LandingCriteria`; візуал ≠ фізика |
+| **O** | Новий режим → `ILandingController` + `Register` |
+| **L** | Усі стратегії → `ControlCommand`; safety envelope спільний |
+| **I** | Mode / Evaluate / Reset / IsAvailable |
+| **D** | `RocketPhysics` → resolver, не конкретні Fuzzy/NN |
 
 ## Патерни
 
 | Патерн | Де |
 |--------|-----|
-| Strategy | `ILandingController.Evaluate` |
-| Registry | `LandingControllerResolver` |
-| DTO / Snapshot | `ControlContext`, `ControlCommand` |
-| Composition root | `RocketPhysics.Start` → `CreateDefault` |
-| Facade | `SoftLandingGuidance` |
-| Builder | `EnvironmentBuilder`, `RocketVisualBuilder` |
-| Observer | події змін `UILocale` / `UiTheme` |
+| **Strategy** | `ILandingController` + Resolver |
+| **Facade** | `EnvironmentBuilder`, `RocketVisualBuilder` |
+| **Factory / static builder** | `SmoothMesh`, `VisualMaterials`, `NatureLibrary` |
+| **Template scatter** | `NaturalPoint` у `BuildNatureProps` (єдиний розкид) |
 
-## Потік керування (FixedUpdate)
+## DRY (візуал)
 
-1. `SimulationTick` — RK4-трансляція + інтегрування орієнтації  
-2. `ControlContext.FromState`  
-3. `resolver.Resolve(mode).Evaluate(ctx)` → `ControlCommand`  
-4. Змішування gimbal стратегії з upright PD safety net  
-5. Бічне наведення × `LateralScale`  
-6. Touchdown → `LandingMetrics` + `LandingCriteria.ApplySuccessFlag`  
+| Відповідальність | Клас |
+|------------------|------|
+| Палітра / текстури | `EnvironmentTextures` |
+| Світло + Сонце (одна позиція) | `EnvironmentBuilder.SunWorldPosition` |
+| Висота рельєфу | `LunarTerrainMesh.SampleSurfaceY` (+ MeshCollider) |
+| Посадка props | `NatureLibrary.PlantOnGround` |
+| Матеріали URP | `VisualMaterials` |
 
-## Карта каталогів
+## Потік FixedUpdate
 
-```
-Assets/Scripts/
-├── Domain/Control/
-├── Control/
-├── Core/
-├── Parameters/
-├── Visual/
-├── UI/
-├── Utils/
-└── (тести в Assets/Tests)
-```
+1. (Опційно Stack) open-loop → sep  
+2. Stage1: `ControlContext` → `resolver.Evaluate` → lateral → RK4  
+3. Touchdown → `LandingCriteria`
 
-## Як додати контролер
+## Візуальний конвеєр (старт)
 
-1. Реалізувати `ILandingController` (MonoBehaviour або чистий клас).  
-2. `resolver.Register(instance)` у composition root.  
-3. Розширити `RocketPhysics.ControlMode` + кнопку UI, якщо режим для користувача.  
-4. **Не** додавати `switch` диспетчеризації в `UpdateControl`.  
-
-## Свідомі non-goals
-
-- Повний DI-контейнер (Zenject/VContainer)  
-- Розбиття `MissionControlUI` на багато файлів одним проходом  
-- Перепис на ECS  
+1. `SetupLighting` (напрям = від `SunWorldPosition`)  
+2. `LunarTerrainMesh.CreateRoutine` + collider  
+3. `BuildNatureProps` (Kenney FBX, natural scatter)  
+4. Pad / approach beacons  
+5. Sky dome + cloud quads + sun disc  
 
 ## Тести
 
-EditMode / PlayMode покривають PID, Fuzzy, знаки Neural, фізику, метрики, експорт, інтеграцію.
+- EditMode / PlayMode у `Assets/Tests/`  
+- Не запускати batchmode, якщо Editor тримає lock проєкту  

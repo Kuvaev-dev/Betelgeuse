@@ -3,22 +3,81 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-/// Процедурний диск Місяця (R≈2000 м): heightmap, круглі C2-кратери,
-/// cool-gray albedo у world-UV. Без зовнішніх тайлів.
+/// Процедурний диск поверхні LZ (R≈2000 м). За замовчуванням — <b>Earth</b>
+/// (поле/аеродром, без кратерів). Клас збережено для сумісності імен API.
 /// </summary>
 public static class LunarTerrainMesh
 {
-    /// <summary>Рівна зона під палубою (berm ~R64); кратери одразу за краєм.</summary>
+    /// <summary>true = земна LZ (трава/ґрунт); false = legacy lunar (не використовується в демо).</summary>
+    public static bool EarthSurface = true;
+
+    /// <summary>Рівна зона під палубою (berm ~R64).</summary>
     public const float PadClearRadius = 68f;
 
-    /// <summary>Радіус cratered-диска (HorizonDisk ≤ цього).</summary>
+    /// <summary>Радіус диска місцевості (HorizonDisk ≤ цього).</summary>
     public const float TerrainRadius = 2000f;
+
+    // Кеш згладженого height field — для props/beacons (bilinear sample)
+    static float[,] _hCache;
+    static int _hN;
+    static float _hHalf;
+    static float _hStep;
+    static MeshCollider _terrainCol;
+    static Transform _terrainXf;
 
     public sealed class BuildOutput
     {
         public Mesh mesh;
         public Texture2D albedo;
         public Texture2D normal;
+    }
+
+    /// <summary>Зареєструвати collider mesh для точного raycast props.</summary>
+    public static void BindTerrainCollider(MeshCollider col)
+    {
+        _terrainCol = col;
+        _terrainXf = col != null ? col.transform : null;
+    }
+
+    /// <summary>Y поверхні: raycast по mesh, fallback — smoothed height cache.</summary>
+    public static float SampleSurfaceY(float x, float z)
+    {
+        // Точний hit по реальному terrain mesh (усуває «паріння»)
+        if (_terrainCol != null)
+        {
+            float top = 400f;
+            var origin = new Vector3(x, top, z);
+            if (_terrainCol.Raycast(new Ray(origin, Vector3.down), out RaycastHit hit, 800f))
+                return hit.point.y;
+        }
+
+        if (_hCache == null || _hN < 2)
+            return ApproximateHeight(x, z);
+
+        float fx = (x + _hHalf) / _hStep;
+        float fz = (z + _hHalf) / _hStep;
+        int ix = Mathf.FloorToInt(fx);
+        int iz = Mathf.FloorToInt(fz);
+        float tx = fx - ix;
+        float tz = fz - iz;
+        ix = Mathf.Clamp(ix, 0, _hN - 2);
+        iz = Mathf.Clamp(iz, 0, _hN - 2);
+        float h00 = _hCache[ix, iz];
+        float h10 = _hCache[ix + 1, iz];
+        float h01 = _hCache[ix, iz + 1];
+        float h11 = _hCache[ix + 1, iz + 1];
+        float h = Mathf.Lerp(Mathf.Lerp(h00, h10, tx), Mathf.Lerp(h01, h11, tx), tz);
+
+        float dist = Mathf.Sqrt(x * x + z * z);
+        float edge = Mathf.Clamp01((TerrainRadius - dist) / (TerrainRadius * 0.04f));
+        if (edge < 1f)
+            h = Mathf.Lerp(h - 1.2f, h, Quintic01(edge));
+        return h;
+    }
+
+    static float ApproximateHeight(float x, float z)
+    {
+        return SampleHeight(x, z, System.Array.Empty<Crater>(), TerrainRadius);
     }
 
     public static Mesh Build(out Texture2D albedoTex, out Texture2D normalTex,
@@ -42,6 +101,21 @@ public static class LunarTerrainMesh
         }
     }
 
+    /// <summary>Опційний progress 0…1 під час довгої генерації (splash bar).</summary>
+    public static System.Action<float, string, string> ProgressHook;
+
+    static void ReportProgress(float t, string uk, string en)
+    {
+        ProgressHook?.Invoke(t, uk, en);
+        // Fallback на Splash напряму
+        if (ProgressHook == null)
+        {
+            var s = SplashScreenUI.Instance;
+            if (s != null)
+                s.SetProgress(t, UILocale.IsUK ? uk : en);
+        }
+    }
+
     /// <summary>Як Build, але yield кожні кілька рядків, щоб splash-спінер крутився.</summary>
     public static IEnumerator BuildRoutine(BuildOutput box,
         int resolution = 256, float radius = -1f, int seed = 42)
@@ -50,13 +124,15 @@ public static class LunarTerrainMesh
         if (radius < 1f) radius = TerrainRadius;
         resolution = Mathf.Clamp(resolution, 96, 320);
         var rng = new System.Random(seed);
-        var craters = BuildCraterField(rng, radius);
+        // Earth LZ: без кратерів; lunar legacy лише якщо EarthSurface=false
+        var craters = EarthSurface ? System.Array.Empty<Crater>() : BuildCraterField(rng, radius);
 
         int n = resolution + 1;
         float half = radius;
         float step = (half * 2f) / resolution;
         var height = new float[n, n];
 
+        ReportProgress(0.60f, "Меш: висоти…", "Mesh: heights…");
         for (int iz = 0; iz < n; iz++)
         {
             for (int ix = 0; ix < n; ix++)
@@ -65,19 +141,33 @@ public static class LunarTerrainMesh
                 float z = -half + iz * step;
                 height[ix, iz] = SampleHeight(x, z, craters, radius);
             }
-            if ((iz & 31) == 0) yield return null;
+            if ((iz & 31) == 0)
+            {
+                float p = 0.60f + 0.03f * (iz / (float)Mathf.Max(1, n - 1));
+                ReportProgress(p, "Меш: висоти…", "Mesh: heights…");
+                yield return null;
+            }
         }
 
         // Згладити → круглі чаші без multi-pass зависання
-        SmoothHeightField(height, n, 3);
+        SmoothHeightField(height, n, EarthSurface ? 2 : 3);
+        // Кеш для SampleSurfaceY (props сідають на mesh)
+        _hCache = height;
+        _hN = n;
+        _hHalf = half;
+        _hStep = step;
         yield return null;
 
-        // Albedo 512–1024 достатньо на місячному масштабі; 2K був головною причиною зависання завантаження
-        int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 3, 512, 1024));
+        ReportProgress(0.63f, "Меш: albedo…", "Mesh: albedo…");
+        yield return null;
+        // 512² — швидко; 1M GetPixel + PH sample раніше блокував splash
+        int texSize = Mathf.ClosestPowerOfTwo(Mathf.Clamp(resolution * 2, 256, 512));
         Texture2D albedoTex = null;
         Texture2D normalTex = null;
         yield return BuildSurfaceMapsRoutine(craters, radius, texSize, seed,
             t => albedoTex = t, t => normalTex = t);
+        ReportProgress(0.645f, "Меш: вершини…", "Mesh: vertices…");
+        yield return null;
 
         var vertList = new List<Vector3>(n * n / 2);
         var uvList = new List<Vector2>(n * n / 2);
@@ -108,9 +198,15 @@ public static class LunarTerrainMesh
                     (x * invR + 1f) * 0.5f,
                     (z * invR + 1f) * 0.5f));
             }
-            if ((iz & 31) == 0) yield return null;
+            if ((iz & 31) == 0)
+            {
+                float p = 0.645f + 0.01f * (iz / (float)Mathf.Max(1, n - 1));
+                ReportProgress(p, "Меш: вершини…", "Mesh: vertices…");
+                yield return null;
+            }
         }
 
+        ReportProgress(0.655f, "Меш: трикутники…", "Mesh: triangles…");
         var tris = new List<int>(resolution * resolution * 6);
         for (int iz = 0; iz < resolution; iz++)
         {
@@ -125,7 +221,12 @@ public static class LunarTerrainMesh
                 tris.Add(i00); tris.Add(i01); tris.Add(i10);
                 tris.Add(i10); tris.Add(i01); tris.Add(i11);
             }
-            if ((iz & 63) == 0) yield return null;
+            if ((iz & 63) == 0)
+            {
+                float p = 0.655f + 0.008f * (iz / (float)Mathf.Max(1, resolution));
+                ReportProgress(p, "Меш: трикутники…", "Mesh: triangles…");
+                yield return null;
+            }
         }
 
         var verts = vertList.ToArray();
@@ -174,7 +275,7 @@ public static class LunarTerrainMesh
 
         var mesh = new Mesh
         {
-            name = "LunarTerrainDisk",
+            name = EarthSurface ? "EarthTerrainDisk" : "LunarTerrainDisk",
             indexFormat = UnityEngine.Rendering.IndexFormat.UInt32
         };
         mesh.vertices = verts;
@@ -188,7 +289,7 @@ public static class LunarTerrainMesh
         box.mesh = mesh;
         box.albedo = albedoTex;
         box.normal = normalTex;
-        Debug.Log($"[LunarTerrain] verts={verts.Length} tris={triArr.Length / 3} craters={craters.Length} tex={texSize}");
+        Debug.Log($"[Terrain] earth={EarthSurface} verts={verts.Length} tris={triArr.Length / 3} craters={craters.Length} tex={texSize}");
     }
 
     /// <summary>
@@ -217,24 +318,40 @@ public static class LunarTerrainMesh
                 float dist = Mathf.Sqrt(wx * wx + wz * wz);
 
                 float h = 0f;
-                // Презентаційний mid-gray: читабельний під сонцем, ні крейда, ні вугілля
-                float g = 0.42f;
+                // g = luminance proxy; для Earth перефарбовується в RGB нижче
+                float g = EarthSurface ? 0.38f : 0.42f;
 
                 if (dist <= PadClearRadius)
                 {
-                    // Збігтись з ямою меша (лише albedo — висота з SampleHeight)
                     float padT = dist / Mathf.Max(1f, PadClearRadius);
-                    g = Mathf.Lerp(0.34f, 0.40f, padT * padT);
+                    g = EarthSurface
+                        ? Mathf.Lerp(0.32f, 0.40f, padT * padT)
+                        : Mathf.Lerp(0.34f, 0.40f, padT * padT);
                     g += Noise2(wx * 0.2f, wz * 0.2f) * 0.01f;
                 }
                 else
                 {
-                    // Лише низькочастотна хвилястість — high-freq grain виглядає рвано після bake
-                    h += Noise2(wx * 0.0016f, wz * 0.0016f) * 2.8f;
-                    h += Noise2(wx * 0.0048f + 11f, wz * 0.0048f - 7f) * 1.15f;
-                    h += Noise2(wx * 0.012f, wz * 0.012f) * 0.35f;
-                    float edgeN = dist * invHalf;
-                    h += edgeN * edgeN * 1.1f;
+                    if (EarthSurface)
+                    {
+                        h += Noise2(wx * 0.0007f, wz * 0.0007f) * 7.5f;
+                        h += Noise2(wx * 0.0016f + 3f, wz * 0.0016f - 2f) * 4.0f;
+                        h += Noise2(wx * 0.0035f + 9f, wz * 0.0035f - 4f) * 2.2f;
+                        h += Noise2(wx * 0.009f, wz * 0.009f) * 0.85f;
+                        h += Noise2(wx * 0.025f, wz * 0.025f) * 0.28f;
+                        float ridge = Mathf.Abs(Noise2(wx * 0.0012f + 1.5f, wz * 0.0012f));
+                        h += (1f - ridge) * 1.4f;
+                        float edgeN = dist * invHalf;
+                        h *= 1f - edgeN * edgeN * 0.25f;
+                        h -= edgeN * edgeN * 1.1f;
+                    }
+                    else
+                    {
+                        h += Noise2(wx * 0.0016f, wz * 0.0016f) * 2.8f;
+                        h += Noise2(wx * 0.0048f + 11f, wz * 0.0048f - 7f) * 1.15f;
+                        h += Noise2(wx * 0.012f, wz * 0.012f) * 0.28f;
+                        float edgeN = dist * invHalf;
+                        h += edgeN * edgeN * 1.1f;
+                    }
 
                     float blend = Mathf.SmoothStep(0f, 1f, (dist - PadClearRadius) / 32f);
                     h *= blend;
@@ -242,28 +359,34 @@ public static class LunarTerrainMesh
                     float grain = 0f;
                     grain += Noise2(wx * 0.018f, wz * 0.018f) * 0.016f;
                     grain += Noise2(wx * 0.045f + 4f, wz * 0.045f - 3f) * 0.008f;
-                    g = 0.42f + grain;
+                    g = (EarthSurface ? 0.40f : 0.42f) + grain;
 
-                    // Моря — трохи темніші базальтові рівнини
-                    float mare = Noise2(wx * 0.0009f + 2f, wz * 0.0009f - 1f);
-                    mare = Mathf.SmoothStep(0.20f, 0.58f, mare * 0.5f + 0.5f);
-                    g -= mare * 0.045f;
+                    if (!EarthSurface)
+                    {
+                        float mare = Noise2(wx * 0.0009f + 2f, wz * 0.0009f - 1f);
+                        mare = Mathf.SmoothStep(0.20f, 0.58f, mare * 0.5f + 0.5f);
+                        g -= mare * 0.045f;
+                    }
+                    else
+                    {
+                        // Поля / смуги ґрунту
+                        float field = Noise2(wx * 0.0011f + 3f, wz * 0.0011f - 2f);
+                        g += field * 0.04f;
+                    }
 
                     if (dist < PadClearRadius + 70f)
                     {
                         float pt = Mathf.SmoothStep(0f, 1f, dist / (PadClearRadius + 70f));
-                        g = Mathf.Lerp(0.38f, g, pt);
+                        g = Mathf.Lerp(EarthSurface ? 0.36f : 0.38f, g, pt);
                     }
                 }
 
-                // Поза геометричним диском: ЗАЛИШИТИ суцільний сірий (ніколи жорсткий чорний —
-                // чорні кути UV-квадрата давали рвані артефакти кілець).
                 if (dist > terrainRadius)
                 {
                     float over = (dist - terrainRadius) / Mathf.Max(1f, terrainRadius * 0.15f);
                     over = Mathf.Clamp01(over);
                     h = Mathf.Lerp(h, h - 0.8f, Quintic01(over));
-                    g = Mathf.Lerp(g, 0.38f, Quintic01(over) * 0.35f);
+                    g = Mathf.Lerp(g, EarthSurface ? 0.34f : 0.38f, Quintic01(over) * 0.35f);
                 }
 
                 hBuf[idx] = h;
@@ -286,14 +409,14 @@ public static class LunarTerrainMesh
         yield return null;
 
         var albedoTex = new Texture2D(texSize, texSize, TextureFormat.RGB24, true, false);
-        albedoTex.name = "LunarAlbedo_Final";
+        albedoTex.name = EarthSurface ? "EarthAlbedo_Final" : "LunarAlbedo_Final";
         albedoTex.wrapMode = TextureWrapMode.Clamp;
         albedoTex.filterMode = FilterMode.Trilinear;
         albedoTex.anisoLevel = 8;
 
         // Плоска normal map (рельєф несе меш). Bump maps дають double-shade і рваний вигляд.
         var normalTex = new Texture2D(4, 4, TextureFormat.RGBA32, false, true);
-        normalTex.name = "LunarNormal_Flat";
+        normalTex.name = EarthSurface ? "EarthNormal_Flat" : "LunarNormal_Flat";
         normalTex.wrapMode = TextureWrapMode.Clamp;
         normalTex.filterMode = FilterMode.Bilinear;
         var flatN = new Color(0.5f, 0.5f, 1f, 1f);
@@ -310,22 +433,112 @@ public static class LunarTerrainMesh
             {
                 float wx = -half + (x + 0.5f) * metersPerTexel;
                 int idx = y * texSize + x;
-                float g = Mathf.Clamp(aBuf[idx], 0.30f, 0.52f);
-
-                // М’яка радіальна віньєтка біля краю диска (не жорсткий зріз)
+                float g = Mathf.Clamp(aBuf[idx], 0.28f, 0.55f);
                 float dist = Mathf.Sqrt(wx * wx + wz * wz);
                 float rim = Mathf.SmoothStep(terrainRadius * 0.92f, terrainRadius * 1.02f, dist);
-                g = Mathf.Lerp(g, 0.38f, rim * 0.18f);
+                g = Mathf.Lerp(g, EarthSurface ? 0.36f : 0.38f, rim * 0.18f);
 
-                // Презентабельний холодний сріблясто-сірий
-                float v = Mathf.Lerp(0.40f, g, 0.88f);
-                albedoCols[idx] = new Color(
-                    Mathf.Clamp01(v * 0.97f),
-                    Mathf.Clamp01(v * 0.99f),
-                    Mathf.Clamp01(v * 1.035f),
-                    1f);
+                if (EarthSurface)
+                {
+                    float n1 = Noise2(wx * 0.0009f, wz * 0.0009f) * 0.5f + 0.5f;
+                    float n2 = Noise2(wx * 0.0038f + 2.3f, wz * 0.0038f - 1.4f) * 0.5f + 0.5f;
+                    float n3 = Noise2(wx * 0.012f, wz * 0.012f) * 0.5f + 0.5f;
+                    float n4 = Noise2(wx * 0.035f + 5f, wz * 0.035f) * 0.5f + 0.5f;
+                    float n5 = Noise2(wx * 0.09f, wz * 0.09f) * 0.5f + 0.5f;
+                    float n6 = Noise2(wx * 0.18f + 7f, wz * 0.18f) * 0.5f + 0.5f;
+                    float nearPad = 1f - Mathf.SmoothStep(PadClearRadius * 0.6f, PadClearRadius + 180f, dist);
+
+                    // Meadow bake — та сама dark-olive сім’я, що й FoliageGreen у props
+                    EnvironmentTextures.EnsureLoaded();
+                    Color ph = EnvironmentTextures.SampleGrassWorld(wx, wz,
+                        EnvironmentTextures.FoliageGreen.r,
+                        EnvironmentTextures.FoliageGreen.g,
+                        EnvironmentTextures.FoliageGreen.b);
+                    float r = ph.r * (0.95f + n1 * 0.1f);
+                    float grn = ph.g * (0.95f + n2 * 0.1f);
+                    float b = ph.b * (0.95f + n1 * 0.08f);
+
+                    // М’які варіації в межах тієї ж палітри (без яскравого green)
+                    float lush = Mathf.SmoothStep(0.25f, 0.85f, n2) * Mathf.SmoothStep(0.2f, 0.7f, 1f - n1);
+                    r = Mathf.Lerp(r, EnvironmentTextures.FoliageDark.r, lush * 0.25f);
+                    grn = Mathf.Lerp(grn, EnvironmentTextures.FoliageGreen.g * 1.05f, lush * 0.3f);
+                    b = Mathf.Lerp(b, EnvironmentTextures.FoliageDark.b, lush * 0.25f);
+
+                    float forest = Mathf.SmoothStep(0.55f, 0.9f, n1) * 0.35f;
+                    r = Mathf.Lerp(r, EnvironmentTextures.FoliageDark.r, forest);
+                    grn = Mathf.Lerp(grn, EnvironmentTextures.FoliageDark.g, forest);
+                    b = Mathf.Lerp(b, EnvironmentTextures.FoliageDark.b, forest);
+
+                    float dry = Mathf.SmoothStep(0.55f, 0.95f, n2) * Mathf.SmoothStep(0.4f, 0.8f, n1) * 0.28f;
+                    r = Mathf.Lerp(r, EnvironmentTextures.SoilBrown.r, dry);
+                    grn = Mathf.Lerp(grn, EnvironmentTextures.SoilBrown.g, dry);
+                    b = Mathf.Lerp(b, EnvironmentTextures.SoilBrown.b, dry);
+
+                    // Exposed soil
+                    float soil = Mathf.SmoothStep(0.62f, 0.96f, n3) * Mathf.SmoothStep(0.2f, 0.65f, n1) * 0.5f;
+                    r = Mathf.Lerp(r, 0.36f + n5 * 0.04f, soil);
+                    grn = Mathf.Lerp(grn, 0.27f + n5 * 0.03f, soil);
+                    b = Mathf.Lerp(b, 0.17f, soil);
+
+                    // Winding dirt tracks
+                    float path = Mathf.Abs(Mathf.Sin(wx * 0.0045f + wz * 0.0024f + n1));
+                    path = 1f - Mathf.SmoothStep(0.015f, 0.055f, path);
+                    float path2 = Mathf.Abs(Mathf.Sin(wz * 0.004f - wx * 0.0017f + 1.4f));
+                    path2 = 1f - Mathf.SmoothStep(0.015f, 0.05f, path2);
+                    float tracks = Mathf.Max(path, path2) * (1f - nearPad * 0.85f) * 0.42f;
+                    r = Mathf.Lerp(r, 0.38f, tracks);
+                    grn = Mathf.Lerp(grn, 0.30f, tracks);
+                    b = Mathf.Lerp(b, 0.19f, tracks);
+
+                    // Service ring road around pad
+                    float ring = Mathf.Abs(dist - (PadClearRadius + 55f));
+                    float road = 1f - Mathf.SmoothStep(4f, 14f, ring);
+                    road *= (1f - nearPad * 0.3f) * 0.55f;
+                    r = Mathf.Lerp(r, 0.34f, road);
+                    grn = Mathf.Lerp(grn, 0.31f, road);
+                    b = Mathf.Lerp(b, 0.26f, road);
+
+                    // Micro grain + subtle wildflower flecks
+                    grn += (n5 - 0.5f) * 0.035f;
+                    r += (n4 - 0.5f) * 0.012f;
+                    float fleck = 1f - Mathf.SmoothStep(0.02f, 0.07f, Mathf.Abs(n6 - 0.68f));
+                    fleck *= 0.08f * (1f - nearPad) * Mathf.SmoothStep(0.35f, 0.7f, n2);
+                    r = Mathf.Lerp(r, 0.55f, fleck);
+                    grn = Mathf.Lerp(grn, 0.4f, fleck);
+
+                    // Warm apron
+                    float apron = nearPad * 0.92f;
+                    r = Mathf.Lerp(r, 0.44f + n3 * 0.03f, apron);
+                    grn = Mathf.Lerp(grn, 0.39f + n3 * 0.02f, apron);
+                    b = Mathf.Lerp(b, 0.29f + n2 * 0.02f, apron);
+
+                    // Atmospheric edge
+                    float edge = Mathf.SmoothStep(0.88f, 1.05f, dist / Mathf.Max(1f, terrainRadius));
+                    r = Mathf.Lerp(r, 0.30f, edge * 0.55f);
+                    grn = Mathf.Lerp(grn, 0.34f, edge * 0.5f);
+                    b = Mathf.Lerp(b, 0.36f, edge * 0.6f);
+
+                    if (apron < 0.35f)
+                        grn = Mathf.Max(grn, r + 0.05f);
+
+                    albedoCols[idx] = new Color(Mathf.Clamp01(r), Mathf.Clamp01(grn), Mathf.Clamp01(b), 1f);
+                }
+                else
+                {
+                    float v = Mathf.Lerp(0.40f, g, 0.88f);
+                    albedoCols[idx] = new Color(
+                        Mathf.Clamp01(v * 0.97f),
+                        Mathf.Clamp01(v * 0.99f),
+                        Mathf.Clamp01(v * 1.035f),
+                        1f);
+                }
             }
-            if ((y & 31) == 0) yield return null;
+            if ((y & 31) == 0)
+            {
+                float p = 0.63f + 0.015f * (y / (float)Mathf.Max(1, texSize - 1));
+                ReportProgress(p, "Меш: albedo…", "Mesh: albedo…");
+                yield return null;
+            }
         }
 
         albedoTex.SetPixels(albedoCols);
@@ -621,11 +834,28 @@ public static class LunarTerrainMesh
         }
 
         float h = 0f;
-        h += Noise2(x * 0.0016f, z * 0.0016f) * 2.8f;
-        h += Noise2(x * 0.0048f + 11f, z * 0.0048f - 7f) * 1.15f;
-        h += Noise2(x * 0.012f, z * 0.012f) * 0.35f;
         float edgeN = dist / Mathf.Max(1f, terrainRadius);
-        h += edgeN * edgeN * 1.1f;
+        if (EarthSurface)
+        {
+            // Багатооктавні пагорби / долини (синхронно з SampleApproxHeight)
+            h += Noise2(x * 0.0007f, z * 0.0007f) * 7.5f;
+            h += Noise2(x * 0.0016f + 3f, z * 0.0016f - 2f) * 4.0f;
+            h += Noise2(x * 0.0035f + 9f, z * 0.0035f - 4f) * 2.2f;
+            h += Noise2(x * 0.009f, z * 0.009f) * 0.85f;
+            h += Noise2(x * 0.025f, z * 0.025f) * 0.28f;
+            // М’які «хребти» полів
+            float ridge = Mathf.Abs(Noise2(x * 0.0012f + 1.5f, z * 0.0012f));
+            h += (1f - ridge) * 1.4f;
+            h *= 1f - edgeN * edgeN * 0.25f;
+            h -= edgeN * edgeN * 1.1f;
+        }
+        else
+        {
+            h += Noise2(x * 0.0016f, z * 0.0016f) * 2.8f;
+            h += Noise2(x * 0.0048f + 11f, z * 0.0048f - 7f) * 1.15f;
+            h += Noise2(x * 0.012f, z * 0.012f) * 0.35f;
+            h += edgeN * edgeN * 1.1f;
+        }
 
         float blend = Mathf.SmoothStep(0f, 1f, (dist - PadClearRadius) / 32f);
         h *= blend;
@@ -800,7 +1030,7 @@ public static class LunarTerrainMesh
         System.Action<GameObject> onDone, int resolution = 256, float radius = -1f)
     {
         if (radius < 1f) radius = TerrainRadius;
-        var go = new GameObject("LunarTerrain");
+        var go = new GameObject(EarthSurface ? "EarthTerrain" : "LunarTerrain");
         go.transform.SetParent(parent, false);
         go.transform.localPosition = Vector3.zero;
 
@@ -848,6 +1078,14 @@ public static class LunarTerrainMesh
         mr.receiveShadows = true;
         if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 2f);
         mat.doubleSidedGI = false;
+
+        // Collider для SampleSurfaceY raycast (props на точну висоту mesh)
+        var oldCol = go.GetComponent<MeshCollider>();
+        if (oldCol != null) Object.Destroy(oldCol);
+        var mc = go.AddComponent<MeshCollider>();
+        mc.sharedMesh = box.mesh;
+        mc.convex = false;
+        BindTerrainCollider(mc);
 
         onDone?.Invoke(go);
     }

@@ -1,51 +1,47 @@
-# Betelgeuse — Як запустити (захист / демо)
+# Betelgeuse — як запустити (захист / демо)
 
 ## Unity Editor
 
 1. Встановити **Unity 6000.x** з **URP**.
 2. Відкрити теку проєкту `Betelgeuse`.
 3. Сцена: `Assets/Scenes/SampleScene.unity` → **Play**.
-4. Дочекатися splash (процедурний Місяць + побудова ракети).
+4. Splash: **Earth LZ** + **1-й ступінь** (booster; `skipStackPhase=true`).
 
 ## Демо для захисту (одним натиском)
 
 | Крок | Дія |
 |------|-----|
-| 1 | Натиснути **`D`** або кнопку **ДЕМО ЗАХИСТУ** (права панель) |
-| 2 | Автоматично: Hybrid → Ideal → старт посадки |
+| 1 | **`D`** або **ДЕМО ЗАХИСТУ** |
+| 2 | Авто: Hybrid · **посадка 1-го ступеня** (Ideal IC) |
 | 3 | Після touchdown: огляд траєкторії |
-| 4 | Опційно: **`E`** — експорт пакета посадки |
-| 5 | Опційно: **`P`** — порівняння Monte-Carlo (DefenseBaseline, paired) |
+| 4 | **`E`** — експорт (Earth LZ · first stage · after sep) |
+| 5 | **`P`** — Monte-Carlo A–D **лише на Stage-1** (DefenseBaseline) |
 
-Довідка в будь-який момент: **F1** / **?** або кнопка **HELP** у топ-барі (одразу після Export).
+Довідка: **F1** — об'єкт роботи: посадка першого ступеня · Earth LZ.
+
+## Ideal (стабільний soft-landing)
+
+**`I`** → IC посадки Stage-1, вітер/шум OFF → **Space**.
 
 ## Відтворюваний Monte-Carlo
 
-Протокол **`DefenseBaseline` v2** застосовується автоматично при Порівнянні:
+**DefenseBaseline** при **P**:
 
-- seed **42** · N **15** · вітер **8** · jitter **±18 м** · шум **УВІМК**
-- **paired seeds** — trial `i` однаковий для PID / Fuzzy / Neural / Hybrid
-- фіксовані ваги NN, навчання ВИМК · residual Hybrid УВІМК
+- seed **42** · N **15** · paired seeds  
+- лише **landing after separation**  
+- вітер/шум на Stage-1  
 
-1. Натиснути **P** або кнопку **ПОРІВНЯТИ** (слайдери UI синхронізуються з baseline).
-2. Дочекатися A→D → `SimulationLogs/Comparison_*`.
-3. Повтор **P** → та сама статистика пакета (SimRng + paired-протокол).
+Результат: `SimulationLogs/Comparison_*/01_SUMMARY.md`  
+(старі «місячні» звіти **не** цитувати)
 
-### Ablation (для тези)
+### Ablation
 
-Вимкнути **Hybrid residual NN** → Hybrid стає leave-one-out лише Fuzzy.  
-Повторити Порівняння і зіставити success % / Score±σ у `01_SUMMARY.md`.
-
-## Standalone-збірка (опційно)
-
-1. **File → Build Settings → PC, Mac & Linux Standalone** (Windows x86_64).
-2. Додати `SampleScene`, **Build**.
-3. Запустити `.exe` — ті самі клавіші, що в Editor (Unity для комісії не потрібен).
+Residual OFF → Hybrid ≈ Fuzzy-only → повторити **P**.
 
 ## Критерії soft-landing
 
-|Vy| &lt; 3.5 м/с · нахил &lt; 7° · промах &lt; 25 м · |Vh| &lt; 5 м/с
+|Vᵧ| &lt; 3.5 м/с · нахил &lt; 7° · промах &lt; 25 м · |Vₕ| &lt; 5 м/с
 
-## Гарячі клавіші (коротко)
+## Гарячі клавіші
 
-`1–4` режим · `Space` старт · `Esc` стоп · `I` ідеал · `D` демо · `P`/`X` порівняти · `E`/`O` експорт · `F1` довідка · `H` UI · `G` мова · `Y` тема
+`1–4` режим · `Space` старт · `D` демо Hybrid · `I` ідеал Stage-1 · `P`/`X` MC · `E`/`O` експорт · `F1` help · `Y` тема UI · `G` мова
