@@ -1,21 +1,22 @@
 # Betelgeuse — архітектура
 
-**Версія:** 1.3.1  
+**Версія:** 1.3.2  
 **Стек:** Unity 6000 URP · C#  
-**Середовище:** Earth LZ · об'єкт GNC — **1-й ступінь**
+**Середовище:** Earth LZ · об'єкт GNC — **1-й ступінь** (Falcon 9-class analogue)
 
 ## Цілі
 
 - Демо захисту: посадка Stage-1 алгоритмами A–D на Earth LZ.
 - SOLID: новий контролер = реєстрація стратегії, без правки фізики.
 - DRY: спільні пресети, критерії, візуальні палітри в одному місці.
+- Автономія: GNC читає `NavigationEstimator`, а не god-mode plant.
 
 ## Фази місії
 
 ```
 Idle ──Start──► [Stack опційно] ──sep──► Stage1 ──touchdown──► Finished
                                       │
-                                      │ ILandingController A–D
+                                      │ NavigationEstimator → ILandingController A–D
                                       │ stage1 mass + fuel
 ```
 
@@ -25,7 +26,7 @@ Idle ──Start──► [Stack опційно] ──sep──► Stage1 ─�
 |------|----------------|-----------|--------|
 | **Idle** | — | — | Stage-1 на landing IC (типово) |
 | **Stack** | `UpdateStackControl` | open-loop | (якщо увімкнено) |
-| **Stage1** | `UpdateControl` + RK4 | **A–D** via Resolver | 1-й ступінь |
+| **Stage1** | `UpdateControl` + RK4 | **A–D** via Resolver, state from NAV | 1-й ступінь |
 
 Monte-Carlo і Ideal `[I]` — **Stage1** only.
 
@@ -38,15 +39,15 @@ Application      Control/* (Fuzzy/Neural/Hybrid) · IdealLandingPresets
        ↓
 Domain           ILandingController · Context/Command · Resolver · Criteria
        ↓
-Core             RocketPhysics · SimulationManager · Export
-Parameters       SimulationParameters / LandingParams
+Core             RocketPhysics · NavigationEstimator · SimulationManager · Export
+Parameters       SimulationParameters / Stage1Vehicle
 ```
 
 ## SOLID
 
 | | |
 |--|--|
-| **S** | PID у `PidLandingStrategy`; gate у `LandingCriteria`; візуал ≠ фізика |
+| **S** | PID у `PidLandingStrategy`; gate у `LandingCriteria`; NAV ≠ plant; візуал ≠ фізика |
 | **O** | Новий режим → `ILandingController` + `Register` |
 | **L** | Усі стратегії → `ControlCommand`; safety envelope спільний |
 | **I** | Mode / Evaluate / Reset / IsAvailable |
@@ -70,12 +71,13 @@ Parameters       SimulationParameters / LandingParams
 | Висота рельєфу | `LunarTerrainMesh.SampleSurfaceY` (+ MeshCollider) |
 | Посадка props | `NatureLibrary.PlantOnGround` |
 | Матеріали URP | `VisualMaterials` |
+| Ідентичність 1-го ступеня | `Stage1Vehicle` |
 
 ## Потік FixedUpdate
 
 1. (Опційно Stack) open-loop → sep  
-2. Stage1: `ControlContext` → `resolver.Evaluate` → lateral → RK4  
-3. Touchdown → `LandingCriteria`
+2. Stage1: `navigation.Step` (IMU/GPS/alt) → `ControlContext` → `resolver.Evaluate` → lateral (оцінка x,z) → RK4  
+3. Touchdown → `LandingCriteria` на **істинному** plant (оцінка лише для закону)
 
 ## Візуальний конвеєр (старт)
 

@@ -89,6 +89,36 @@ public static class VisualMaterials
         return mat;
     }
 
+    public static Material Plume(Color hot, Color mid, Color cool, float intensity)
+    {
+        var sh = Shader.Find("Betelgeuse/EnginePlume");
+        if (sh == null)
+            return ParticleAdditive(mid);
+
+        var tex = new Texture2D(128, 4, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        tex.name = "PlumeRamp";
+        for (int i = 0; i < 128; i++)
+        {
+            float u = i / 127f;
+            Color c;
+            if (u < 0.18f) c = Color.Lerp(hot, mid, u / 0.18f);
+            else if (u < 0.55f) c = Color.Lerp(mid, cool, (u - 0.18f) / 0.37f);
+            else c = Color.Lerp(cool, new Color(cool.r * 0.15f, cool.g * 0.08f, 0f, 0f), (u - 0.55f) / 0.45f);
+            for (int y = 0; y < 4; y++) tex.SetPixel(i, y, c);
+        }
+        tex.Apply(false, false);
+
+        var mat = new Material(sh);
+        mat.SetTexture("_MainTex", tex);
+        mat.SetFloat("_Intensity", intensity);
+        mat.SetFloat("_Flicker", 1f);
+        mat.SetFloat("_NoiseAmt", 0.28f);
+        mat.renderQueue = 3100;
+        return mat;
+    }
+
     public static void Apply(GameObject go, Material mat)
     {
         var r = go.GetComponent<MeshRenderer>();

@@ -64,6 +64,10 @@ public class RocketPhysics : MonoBehaviour
     public NeuralController neuralController;
     public HybridController hybridController;
     public LandingMetrics metrics = new LandingMetrics();
+    public readonly NavigationEstimator navigation = new NavigationEstimator();
+    public float NavNoiseScale;
+    public uint NavSeed = 1;
+    Vector3 lastAccel;
 
     private float maxHeightRecorded;
     private float currentTime;
@@ -73,6 +77,7 @@ public class RocketPhysics : MonoBehaviour
     const float AngularDamping = 980000f; // сильніше — без mid-flight PIO
     const float InertiaFactor = 55f;
     const float MaxOmega = 0.85f; // rad/s
+    // Lumped Cd*S = booster body + 4 grid fins (F9-class analogue). Product unchanged.
     const float Cd = 0.85f;
     const float RefArea = 8.5f;
     const float G0 = 9.80665f;
@@ -139,6 +144,7 @@ public class RocketPhysics : MonoBehaviour
         state.simulationFinished = false;
         SyncTransformWithState();
         RocketVisualBuilder.SetUpperStackVisible(transform, false);
+        AlignNavigationToTruth();
     }
 
     void EnterStack()
@@ -193,6 +199,7 @@ public class RocketPhysics : MonoBehaviour
         {
             RocketVisualBuilder.SetUpperStackVisible(transform, false, animateAway: false);
         }
+        AlignNavigationToTruth();
     }
 
     void CheckSeparation()
@@ -271,8 +278,10 @@ public class RocketPhysics : MonoBehaviour
         else
         {
             // A–D лише після відділення (Stage1)
+            navigation.Step(state, lastAccel, dt, NavNoiseScale);
             UpdateControl();
             RungeKutta4Step(dt);
+            lastAccel = CalculateAccelerationAt(state.position, state.velocity);
         }
 
         // Тримати physics origin на/над поверхнею pad (верх палуби ≈ PadSurfaceY)
@@ -301,14 +310,16 @@ public class RocketPhysics : MonoBehaviour
         if (phase != FlightPhase.Stage1) return;
 
         float dt = parameters != null ? parameters.fixedTimeStep : Time.fixedDeltaTime;
-        var ctx = ControlContext.FromState(state, dt);
+        var ctx = navigation.Current.valid
+            ? navigation.ToContext(state, dt)
+            : ControlContext.FromState(state, dt);
         float h = ctx.Height;
         float mass = ctx.Mass;
         float tilt = ctx.TiltDeg;
 
         // Захисний PD upright gimbal — спільний envelope для всіх стратегій
         Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(
-            state.rotation, state.angularVelocity, maxDeg: 16f, kp: 0.7f, kd: 0.92f);
+            ctx.Rotation, ctx.AngularVelocity, maxDeg: 16f, kp: 0.7f, kd: 0.92f);
 
         if (controllerResolver == null)
             controllerResolver = LandingControllerResolver.CreateDefault(this, pidStrategy);
@@ -321,14 +332,15 @@ public class RocketPhysics : MonoBehaviour
         float thrustCmd = cmd.Thrust;
         Vector3 gCmd = Vector3.Lerp(baseGimbal, cmd.GimbalEuler, cmd.GimbalBlend);
 
-        // Великий нахил — пріоритет вирівнювання
+        // Великий нахил — пріоритет вирівнювання, але не душимо посадковий burn
         float upright = SoftLandingGuidance.UprightThrustScale(tilt);
         thrustCmd *= upright;
-        if (tilt > 20f)
+        if (tilt > 34f)
         {
             gCmd = baseGimbal;
             float hover = mass * AtmosphereModel.GetGravity(h);
-            thrustCmd = Mathf.Clamp(thrustCmd, hover * 0.65f, hover * 1.3f);
+            // Allow braking (1.05–2.1 × hover) instead of hover-only
+            thrustCmd = Mathf.Clamp(thrustCmd, hover * 1.05f, hover * 2.1f);
         }
 
         gCmd.x = Mathf.Clamp(gCmd.x, -16f, 16f);
@@ -336,44 +348,44 @@ public class RocketPhysics : MonoBehaviour
         gCmd.z = Mathf.Clamp(gCmd.z, -16f, 16f);
         state.thrustDirection = (Quaternion.Euler(gCmd) * Vector3.up).normalized;
 
-        // Бічне наведення — scale from strategy (PID weak … Hybrid strong)
-        if (tilt < 18f)
-            ApplyLateralGuidance(cmd.LateralScale);
+        // Бічне наведення — не відключати при робочому lean (~30°)
+        if (tilt < 30f)
+            ApplyLateralGuidance(cmd.LateralScale, in ctx);
 
         state.currentThrust = Mathf.Clamp(thrustCmd, 0f, state.maxThrust);
         if (state.currentFuelMass <= 0f) state.currentThrust = 0f;
     }
 
     /// <summary>
-    /// Бічне наведення до pad. Знаки TVC:
+    /// Бічне наведення до pad. Tail TVC: lean TOWARD pad
+    /// (x&gt;0 ⇒ gz&lt;0 ⇒ td.x&gt;0 ⇒ τz&gt;0 ⇒ lean to −X).
     /// td = R(gx,0,gz)·up ⇒ td.x≈−sin(gz), td.z≈sin(gx).
-    /// Щоб тягнути до −x (коли x&gt;0): td.x&lt;0 ⇒ gz&gt;0.
-    /// Щоб тягнути до −z (коли z&gt;0): td.z&lt;0 ⇒ gx&lt;0.
-    /// gainScale (PID weak … Hybrid strong) — головна різниця A–D у Monte-Carlo.
+    /// gainScale raises kVel (Hybrid damps Vh), not lean angle.
+    /// Shared lean envelope lim = 8.5° (terminal 2.8° at h&lt;20).
     /// </summary>
-    void ApplyLateralGuidance(float gainScale = 1f)
+    void ApplyLateralGuidance(float gainScale, in ControlContext ctx)
     {
-        float h = Mathf.Max(0f, state.position.y);
+        float h = Mathf.Max(0f, ctx.Height);
         if (h > 2800f || h < 0.8f) return;
 
         float tilt = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
-        if (tilt > 28f) return;
+        if (tilt > 30f) return;
 
         float scale = Mathf.Clamp(gainScale, 0.45f, 1.8f);
         // Авторитет з апогею завжди увімкнений — ранній drift давав універсальні 0%
         float shape = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(h / 2200f));
-        float fade = Mathf.Lerp(0.7f, 1.25f, shape) * scale;
+        float fade = Mathf.Lerp(0.7f, 1.25f, shape);
 
-        float px = state.position.x;
-        float pz = state.position.z;
-        float vx = state.velocity.x;
-        float vz = state.velocity.z;
+        float px = ctx.PositionX;
+        float pz = ctx.PositionZ;
+        float vx = ctx.VelX;
+        float vz = ctx.VelZ;
         float miss = Mathf.Sqrt(px * px + pz * pz);
         float vh = Mathf.Sqrt(vx * vx + vz * vz);
 
         // Сильний PD; далеко від pad — на позицію, біля pad — гасити Vh
         float kPos = 0.22f * fade;
-        float kVel = 0.95f * fade;
+        float kVel = 0.95f * fade * scale; // gainScale raises kVel (Hybrid damps Vh), not lean
         if (h < 700f) { kPos *= 1.3f; kVel *= 1.4f; }
         if (h < 250f) { kPos *= 1.25f; kVel *= 1.5f; }
         if (h < 80f)  { kPos *= 0.9f;  kVel *= 2.0f; }
@@ -383,13 +395,14 @@ public class RocketPhysics : MonoBehaviour
         if (miss > 40f) kPos *= 1.35f;
         if (vh > 8f) kVel *= 1.25f;
 
-        float lim = 14f * Mathf.Clamp(scale, 0.55f, 1.6f);
-        if (h < 70f) lim = Mathf.Min(lim, 9f);
-        if (h < 20f) lim = Mathf.Min(lim, 6.5f);
+        // Shared lean envelope — not 14*scale (that let Hybrid lean 18–20°)
+        float lim = 8.5f;
+        if (h < 20f) lim = 2.8f;
         if (tilt > 12f) lim *= Mathf.Lerp(1f, 0.5f, (tilt - 12f) / 16f);
 
-        float gx = Mathf.Clamp(-(kPos * pz + kVel * vz), -lim, lim);
-        float gz = Mathf.Clamp(+(kPos * px + kVel * vx), -lim, lim);
+        // Tail TVC lean TOWARD pad (x>0 ⇒ gz<0 ⇒ td.x>0 ⇒ τz>0 ⇒ lean to −X)
+        float gx = Mathf.Clamp(+(kPos * pz + kVel * vz), -lim, lim);
+        float gz = Mathf.Clamp(-(kPos * px + kVel * vx), -lim, lim);
 
         // Здебільшого замінити upright TVC на бічну команду (лишити трохи PD upright)
         Vector3 td = state.thrustDirection.normalized;
@@ -636,6 +649,7 @@ public class RocketPhysics : MonoBehaviour
         }
 
         SyncTransformWithState();
+        AlignNavigationToTruth();
     }
 
     /// <summary>Лише вибір режиму — без старту. Показує пакет на pad (idle Stack visual).</summary>
@@ -674,6 +688,7 @@ public class RocketPhysics : MonoBehaviour
             state.time = 0f;
             RocketVisualBuilder.SetUpperStackVisible(transform, false);
             SyncTransformWithState();
+            AlignNavigationToTruth();
         }
         if (logger != null) logger.Initialize();
         if (cachedVisualizer == null)
@@ -752,6 +767,13 @@ public class RocketPhysics : MonoBehaviour
         float vOut = Vector3.Dot(state.velocity, radial);
         if (vOut > 0f)
             state.velocity -= radial * vOut;
+    }
+
+    public void AlignNavigationToTruth()
+    {
+        if (state == null) return;
+        navigation.Reset(state, NavSeed);
+        lastAccel = CalculateAccelerationAt(state.position, state.velocity);
     }
 
     public void SyncTransformWithState()

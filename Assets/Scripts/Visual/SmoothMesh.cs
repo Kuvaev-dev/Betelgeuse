@@ -6,7 +6,7 @@ using UnityEngine;
 /// </summary>
 public static class SmoothMesh
 {
-    const int DefaultSeg = 64;
+    const int DefaultSeg = 96;
     const int SphereLat = 32;
     const int SphereLon = 48;
 
@@ -357,14 +357,14 @@ public static class SmoothMesh
         return go;
     }
 
-    public static GameObject MakeCylinder(string name, Transform parent, Vector3 pos, float diameter, float halfHeight, Material mat)
+    public static GameObject MakeCylinder(string name, Transform parent, Vector3 pos, float diameter, float halfHeight, Material mat, int segments = DefaultSeg)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         go.transform.localPosition = pos;
         go.transform.localScale = new Vector3(diameter, halfHeight, diameter);
         var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = Cylinder(DefaultSeg);
+        mf.sharedMesh = Cylinder(segments);
         var mr = go.AddComponent<MeshRenderer>();
         mr.sharedMaterial = mat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -488,7 +488,7 @@ public static class SmoothMesh
         go.transform.localPosition = pos;
         go.transform.localScale = new Vector3(diameter, halfHeight, diameter);
         var mf = go.AddComponent<MeshFilter>();
-        mf.sharedMesh = Bell(DefaultSeg, 16);
+        mf.sharedMesh = Bell(DefaultSeg, 18);
         var mr = go.AddComponent<MeshRenderer>();
         mr.sharedMaterial = mat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
@@ -734,4 +734,205 @@ public static class SmoothMesh
         mr.receiveShadows = true;
         return go;
     }
+
+    /// <summary>
+    /// Watertight trapezoid prism (6 faces). Root sits in the tank cylinder.
+    /// Unique verts per face so RecalculateNormals cannot open the edges.
+    /// </summary>
+    public static Mesh Fin(
+        float span,
+        float rootChord,
+        float tipChord,
+        float rootThick,
+        float tipThick,
+        float embed,
+        float hullRadius,
+        float leSweepDeg = 26f)
+    {
+        float tanLe = Mathf.Tan(leSweepDeg * Mathf.Deg2Rad);
+        float yLe0 = rootChord * 0.42f;
+        float yTe0 = yLe0 - rootChord;
+        float yLe1 = yLe0 - span * tanLe;
+        float yTe1 = yLe1 - tipChord;
+
+        float hx0 = rootThick * 0.5f;
+        float hx1 = tipThick * 0.5f;
+        float r2 = hullRadius * hullRadius - hx0 * hx0;
+        float zRoot = (r2 > 0f ? Mathf.Sqrt(r2) - hullRadius : 0f) - embed;
+
+        // 8 corners: root 0-3, tip 4-7.  0:+X+LE  1:+X+TE  2:-X+TE  3:-X+LE
+        var c = new Vector3[8];
+        c[0] = new Vector3( hx0, yLe0, zRoot);
+        c[1] = new Vector3( hx0, yTe0, zRoot);
+        c[2] = new Vector3(-hx0, yTe0, zRoot);
+        c[3] = new Vector3(-hx0, yLe0, zRoot);
+        c[4] = new Vector3( hx1, yLe1, span);
+        c[5] = new Vector3( hx1, yTe1, span);
+        c[6] = new Vector3(-hx1, yTe1, span);
+        c[7] = new Vector3(-hx1, yLe1, span);
+
+        var verts = new List<Vector3>();
+        var norms = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var tris = new List<int>();
+
+        void Face(int ia, int ib, int ic, int id, Vector3 outward)
+        {
+            Vector3 a = c[ia], b = c[ib], cc = c[ic], d = c[id];
+            Vector3 n = Vector3.Cross(b - a, d - a);
+            if (n.sqrMagnitude < 1e-12f) n = Vector3.Cross(b - a, cc - a);
+            if (Vector3.Dot(n, outward) < 0f)
+            {
+                var tmp = b; b = d; d = tmp;
+                int it = ib; ib = id; id = it;
+                n = -n;
+            }
+            n = n.sqrMagnitude > 1e-12f ? n.normalized : outward.normalized;
+            int o = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(cc); verts.Add(d);
+            norms.Add(n); norms.Add(n); norms.Add(n); norms.Add(n);
+            uvs.Add(new Vector2(0f, 1f));
+            uvs.Add(new Vector2(1f, 1f));
+            uvs.Add(new Vector2(1f, 0f));
+            uvs.Add(new Vector2(0f, 0f));
+            tris.Add(o); tris.Add(o + 1); tris.Add(o + 2);
+            tris.Add(o); tris.Add(o + 2); tris.Add(o + 3);
+        }
+
+        Face(0, 4, 5, 1, Vector3.right);     // +X
+        Face(3, 2, 6, 7, Vector3.left);      // -X
+        Face(3, 7, 4, 0, Vector3.up);        // LE
+        Face(1, 5, 6, 2, Vector3.down);      // TE
+        Face(4, 7, 6, 5, Vector3.forward);   // tip
+        Face(0, 1, 2, 3, Vector3.back);      // root
+
+        var mesh = new Mesh { name = "TrapFin" };
+        mesh.SetVertices(verts);
+        mesh.SetNormals(norms);
+        mesh.SetUVs(0, uvs);
+        mesh.SetTriangles(tris, 0);
+        mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
+        return mesh;
+    }
+
+    public static GameObject MakeFin(string name, Transform parent, Vector3 pos, Quaternion rot, Material mat,
+        float span, float rootChord, float tipChord, float rootThick, float tipThick, float embed, float hullRadius)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = pos;
+        go.transform.localRotation = rot;
+        var mf = go.AddComponent<MeshFilter>();
+        mf.sharedMesh = Fin(span, rootChord, tipChord, rootThick, tipThick, embed, hullRadius);
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+        mr.receiveShadows = true;
+        return go;
+    }
+
+
+    /// <summary>
+    /// Sea-level overexpanded jet: y=0 nozzle (r=0.5) → y=1 tip, with decaying Mach diamonds.
+    /// </summary>
+    public static Mesh Plume(int segments = 48, int rings = 32)
+    {
+        segments = Mathf.Clamp(segments, 24, 96);
+        rings = Mathf.Clamp(rings, 12, 64);
+        int stride = segments + 1;
+        int vCount = stride * (rings + 1) + 1;
+        var verts = new Vector3[vCount];
+        var norms = new Vector3[vCount];
+        var uvs = new Vector2[vCount];
+
+        float RadiusAt(float t)
+        {
+            t = Mathf.Clamp01(t);
+            float envelope = Mathf.Lerp(1f, 1.58f, Mathf.Pow(t, 0.62f));
+            float diamond = 1f + 0.20f * Mathf.Sin(t * 6.4f * Mathf.PI) * Mathf.Exp(-t * 2.35f);
+            float taper = 1f - 0.78f * t * t;
+            return 0.5f * envelope * diamond * Mathf.Max(0.10f, taper);
+        }
+
+        for (int r = 0; r <= rings; r++)
+        {
+            float t = r / (float)rings;
+            float y = t;
+            float rad = RadiusAt(t);
+            float t0 = Mathf.Max(0f, t - 0.02f);
+            float t1 = Mathf.Min(1f, t + 0.02f);
+            float dr = (RadiusAt(t1) - RadiusAt(t0)) / Mathf.Max(1e-4f, t1 - t0);
+            float nRad = 1f;
+            float nY = -dr;
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = i * Mathf.PI * 2f / segments;
+                float c = Mathf.Cos(a), s = Mathf.Sin(a);
+                int idx = r * stride + i;
+                verts[idx] = new Vector3(c * rad, y, s * rad);
+                Vector3 n = new Vector3(c * nRad, nY, s * nRad);
+                norms[idx] = n.sqrMagnitude > 1e-10f ? n.normalized : new Vector3(c, 0f, s);
+                uvs[idx] = new Vector2(i / (float)segments, t);
+            }
+        }
+
+        int pole = stride * (rings + 1);
+        verts[pole] = new Vector3(0f, 1f, 0f);
+        norms[pole] = Vector3.up;
+        uvs[pole] = new Vector2(0.5f, 1f);
+
+        var tris = new int[rings * segments * 6 + segments * 3];
+        int o = 0;
+        for (int r = 0; r < rings; r++)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                int i0 = r * stride + i;
+                int i1 = i0 + 1;
+                int i2 = i0 + stride;
+                int i3 = i2 + 1;
+                tris[o++] = i0; tris[o++] = i2; tris[o++] = i1;
+                tris[o++] = i1; tris[o++] = i2; tris[o++] = i3;
+            }
+        }
+        int last = rings * stride;
+        for (int i = 0; i < segments; i++)
+        {
+            tris[o++] = last + i;
+            tris[o++] = pole;
+            tris[o++] = last + i + 1;
+        }
+
+        var mesh = new Mesh { name = $"EnginePlume_{segments}x{rings}" };
+        mesh.vertices = verts;
+        mesh.normals = norms;
+        mesh.uv = uvs;
+        mesh.triangles = tris;
+        mesh.RecalculateBounds();
+        mesh.RecalculateTangents();
+        return mesh;
+    }
+
+    static Mesh cachedPlume;
+
+    public static GameObject MakePlume(string name, Transform parent, Vector3 pos, Quaternion rot,
+        float diameter, float length, Material mat)
+    {
+        if (cachedPlume == null) cachedPlume = Plume(48, 36);
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = pos;
+        go.transform.localRotation = rot;
+        go.transform.localScale = new Vector3(diameter, length, diameter);
+        var mf = go.AddComponent<MeshFilter>();
+        mf.sharedMesh = cachedPlume;
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+        mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+        return go;
+    }
+
 }

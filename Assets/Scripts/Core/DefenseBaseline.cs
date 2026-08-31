@@ -4,7 +4,7 @@
 /// </summary>
 public static class DefenseBaseline
 {
-    public const int ProtocolVersion = 4;
+    public const int ProtocolVersion = 5;
     public const int Seed = 42;
     public const int TestsPerAlgorithm = 15;
     // v4: м’якший wind/jitter, щоб lateral GNC диференціював A–D замість універсального промаху
@@ -14,7 +14,7 @@ public static class DefenseBaseline
     public const float PositionJitterMeters = 12f;
     public const bool EnableNoise = true;
     public const bool ContinuousWind = true;
-    public const bool HybridResidualOn = false;
+    public const bool HybridResidualOn = true;
     public const float StartHeight = 1600f;
     public const float StartDescentSpeed = 60f;
     public const float StartTiltDeg = 2f;

@@ -1,7 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Знімок стану апарата для одного кроку GNC (<see cref="ILandingController"/>).
+/// Знімок стану для одного кроку GNC (<see cref="ILandingController"/>).
+/// Типово заповнюється з бортової оцінки <see cref="NavigationEstimator"/>, не з god-mode.
 /// </summary>
 public readonly struct ControlContext
 {
@@ -19,12 +20,29 @@ public readonly struct ControlContext
     public readonly float Dt;
     public readonly Quaternion Rotation;
     public readonly Vector3 AngularVelocity;
+    public readonly float PositionX;
+    public readonly float PositionZ;
+    public readonly float VelX;
+    public readonly float VelZ;
 
     public ControlContext(
         float height, float verticalVelocity, float mass, float currentThrust, float maxThrust,
         float pitchErrorDeg, float yawErrorDeg, float pitchRateDeg, float yawRateDeg,
         float horizSpeed, float tiltDeg, float dt,
         Quaternion rotation, Vector3 angularVelocity)
+        : this(height, verticalVelocity, mass, currentThrust, maxThrust,
+            pitchErrorDeg, yawErrorDeg, pitchRateDeg, yawRateDeg,
+            horizSpeed, tiltDeg, dt, rotation, angularVelocity,
+            0f, 0f, 0f, 0f)
+    {
+    }
+
+    public ControlContext(
+        float height, float verticalVelocity, float mass, float currentThrust, float maxThrust,
+        float pitchErrorDeg, float yawErrorDeg, float pitchRateDeg, float yawRateDeg,
+        float horizSpeed, float tiltDeg, float dt,
+        Quaternion rotation, Vector3 angularVelocity,
+        float positionX, float positionZ, float velX, float velZ)
     {
         Height = height;
         VerticalVelocity = verticalVelocity;
@@ -40,8 +58,13 @@ public readonly struct ControlContext
         Dt = dt;
         Rotation = rotation;
         AngularVelocity = angularVelocity;
+        PositionX = positionX;
+        PositionZ = positionZ;
+        VelX = velX;
+        VelZ = velZ;
     }
 
+    /// <summary>God-mode знімок (тести / fallback). Бойовий контур використовує <see cref="NavigationEstimator.ToContext"/>.</summary>
     public static ControlContext FromState(RocketState state, float dt)
     {
         Vector3 up = state.rotation * Vector3.up;
@@ -54,6 +77,7 @@ public readonly struct ControlContext
         return new ControlContext(
             state.position.y, state.velocity.y, state.TotalMass, state.currentThrust, state.maxThrust,
             pitchError, yawError, pitchRate, yawRate, horizSpeed, tilt, dt,
-            state.rotation, state.angularVelocity);
+            state.rotation, state.angularVelocity,
+            state.position.x, state.position.z, state.velocity.x, state.velocity.z);
     }
 }

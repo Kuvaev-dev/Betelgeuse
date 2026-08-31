@@ -1,38 +1,37 @@
-# Betelgeuse v1.3.1 — нотатки релізу
+# Betelgeuse v1.3.2 — нотатки релізу
 
-**Дата:** 2026-08-30  
+**Дата:** 2026-08-31  
 **Статус:** GNC-симулятор посадки **1-го ступеня** · Earth LZ · готовий до захисту  
 **Unity:** 6000.x URP  
 
-## Фокус v1.3.1
+## Фокус v1.3.2
 
 | Вимога | Результат |
 |--------|-----------|
+| Об'єкт = 1-й ступінь F9-class | `Stage1Vehicle` + маса/Ø/9 РРД/ноги/fins |
+| Автономна навігація | `NavigationEstimator` (IMU+GPS+висотомір) |
+| Hybrid реально Neuro-Fuzzy | residual **ON** за замовч. (ablation лишається) |
 | Сцена Земля, не Місяць | Earth terrain, meadow, природа, небо |
-| Об'єкт = 1-й ступінь | Stage-1 only visual + mass + GNC |
-| Маса/GNC на посадці | Stage1 dry+fuel; A–D лише Stage1 |
 | MC на ділянці посадки | `skipStackPhase` у SimulationManager |
 | UI/логи Earth · Stage-1 | UILocale, ResearchExporter metadata |
-| Візуальний polish | **Одне** світло = Сонце; хмари-спрайти; природа на mesh |
-| Документація | README / DOCS / ARCH / HOW_TO_RUN (UA) |
 
 ## Покриття теми
 
 | Вимога | Результат |
 |--------|-----------|
-| Автономна посадка **1-го ступеня** | RK4 + `LandingCriteria` |
+| Автономна посадка **1-го ступеня** | RK4 + NAV + `LandingCriteria` |
 | Нечітка логіка | Sugeno 5×5 |
-| ML | MLP + ES |
-| Гібрид | Neuro-Fuzzy |
-| Порівняння | DefenseBaseline paired MC |
+| ML | MLP + ES (`BestWeights_Neural.json`) |
+| Гібрид | Neuro-Fuzzy residual ON |
+| Порівняння | DefenseBaseline paired MC v5 |
 | Демо | **D**: Hybrid Stage-1 Ideal path |
 
 ## Сценарій захисту
 
-1. **F1** — «посадка першого ступеня · Earth LZ»  
+1. **F1** — «посадка першого ступеня · Earth LZ · NAV»  
 2. **D** — Hybrid садить 1-й ступінь  
 3. **E** експорт · **P** MC  
-4. Опційно residual OFF  
+4. Опційно residual OFF (ablation)
 
 Baseline seed: **42** (див. `DefenseBaseline`).
 

@@ -95,6 +95,7 @@ public static class UILocale
         ["top_start"] = new("СТАРТ", "START"),
         ["top_stop"] = new("СТОП", "STOP"),
         ["top_pause"] = new("ПАУЗА", "PAUSE"),
+        ["top_demo"] = new("ДЕМО", "DEMO"),
         ["top_resume"] = new("ДАЛІ", "RESUME"),
         ["top_ideal"] = new("ІДЕАЛ", "IDEAL"),
         ["top_view"] = new("ОГЛЯД", "VIEW"),
@@ -136,7 +137,7 @@ public static class UILocale
         ["mode_sub_a"] = new("еталон", "baseline"),
         ["mode_sub_b"] = new("Sugeno", "Sugeno"),
         ["mode_sub_c"] = new("MLP + ES", "MLP + ES"),
-        ["mode_sub_d"] = new("Fuzzy+NN", "Fuzzy+NN"),
+        ["mode_sub_d"] = new("Sugeno+MLP", "Sugeno+MLP"),
 
         // Заголовки (ліва панель — короткі, для швидкого сканування)
         ["h_telem"] = new("ПОЛІТ", "FLIGHT"),
@@ -260,8 +261,8 @@ public static class UILocale
         ["sl_angn_u"] = new("°", "°"),
         ["tg_noise"] = new("Шум маси/кута", "Mass/angle noise"),
         ["tg_train"] = new("Навчання NN", "Train NN"),
-        ["tg_residual"] = new("Hybrid residual NN (ablation)", "Hybrid residual NN (ablation)"),
-        ["msg_residual_on"] = new("Hybrid: Sugeno + MLP residual ON", "Hybrid: Sugeno + MLP residual ON"),
+        ["tg_residual"] = new("Hybrid residual NN (ON = Neuro-Fuzzy)", "Hybrid residual NN (ON = Neuro-Fuzzy)"),
+        ["msg_residual_on"] = new("Hybrid Neuro-Fuzzy: Sugeno + MLP residual ON", "Hybrid Neuro-Fuzzy: Sugeno + MLP residual ON"),
         ["msg_residual_off"] = new("Ablation: Hybrid = Fuzzy-only (residual OFF)",
             "Ablation: Hybrid = Fuzzy-only (residual OFF)"),
         ["msg_demo_start"] = new("Демо: Hybrid · посадка 1-го ступеня (Earth LZ)…",
@@ -288,13 +289,14 @@ public static class UILocale
             "CONTROLS\n" +
             "  1–4  PID / Fuzzy / Neural / Hybrid (after sep only)\n" +
             "  Space start · Esc stop · I ideal Stage-1 · U pause\n" +
-            "  D demo (stack→sep→Hybrid) · P compare · X cancel\n" +
+            "  D demo Hybrid Stage-1 · NAV IMU/GPS→sep→Hybrid) · P compare · X cancel\n" +
             "  F/T/C/R camera · L path · E export · O folder\n" +
             "  H panels · G lang · Y theme · F1 help\n\n" +
             "SOFT-LANDING (Stage-1)\n" +
             "  |Vy|<3.5 m/s · tilt<7° · miss · |Vh|\n\n" +
             "RESEARCH\n" +
             "  P — MC landing segment only · paired seeds\n" +
+            "  NAV: IMU + altimeter + GPS complementary\n" +
             "  Wind/noise — after separation"),
 
         // Смуга фази польоту (низ)

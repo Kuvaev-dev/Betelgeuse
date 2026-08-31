@@ -13,7 +13,7 @@ public class HybridController : MonoBehaviour, ILandingController
     [Header("Hybrid Neuro-Fuzzy")]
     public bool isActive = true;
     /// <summary>Ablation: false = чистий Sugeno (без MLP residual) — leave-one-out для тези.</summary>
-    public bool useNeuralResidual = false;
+    public bool useNeuralResidual = true;
     [Range(0f, 0.5f)] public float neuralThrustBlend = 0.25f;
     [Range(0f, 0.45f)] public float neuralGimbalBlend = 0.2f;
     [Range(0.05f, 0.6f)] public float maxResidualMult = 0.3f;

@@ -14,10 +14,10 @@ public class SimulationParameters : ScriptableObject
     public Vector3 startEulerAngles = new Vector3(0, 0, 2f);
 
     [Header("1-й ступінь (об'єкт GNC A–D)")]
-    public float dryMass = 25600f;
-    public float fuelMass = 14000f;
-    public float maxThrust = 845000f;
-    public float isp = 311f;
+    public float dryMass = 25600f; // F9-class first-stage dry mass, kg
+    public float fuelMass = 14000f; // landing residual propellant (not full ascent tank)
+    public float maxThrust = 845000f; // 1x Merlin-class SL; 9 engines, landing uses center
+    public float isp = 311f; // Merlin-class Isp, s
 
     [Header("Пакет Stack (до відділення, спрощений підйом)")]
     [Tooltip("Старт пакета біля pad / низький підйом")]
@@ -59,9 +59,9 @@ public class SimulationParameters : ScriptableObject
             stackStartVelocity = new Vector3(0f, 35f, 0f);
         if (separationAltitude < 100f) separationAltitude = 2400f;
         if (separationTime < 1f) separationTime = 18f;
-        if (dryMass < 1000f) dryMass = 25600f;
-        if (fuelMass < 100f) fuelMass = 14000f;
-        if (maxThrust < 1000f) maxThrust = 845000f;
+        if (dryMass < 1000f) dryMass = Stage1Vehicle.DryMassKg;
+        if (fuelMass < 100f) fuelMass = Stage1Vehicle.LandingFuelKg;
+        if (maxThrust < 1000f) maxThrust = Stage1Vehicle.LandingThrustN;
         if (startPosition.y < 100f) startPosition = new Vector3(0f, 1600f, 0f);
         if (startVelocity.y > -1f) startVelocity = new Vector3(0f, -60f, 0f);
     }

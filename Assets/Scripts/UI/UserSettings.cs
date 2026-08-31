@@ -91,8 +91,8 @@ public static class UserSettings
     public static bool HybridResidual
     {
         // Ключ v2: старий HybRes за замовч. був 1 і лишав residual завжди увімкненим
-        get => PlayerPrefs.GetInt(P + "HybRes2", 0) != 0;
-        set => PlayerPrefs.SetInt(P + "HybRes2", value ? 1 : 0);
+        get => PlayerPrefs.GetInt(P + "HybRes3", 1) != 0;
+        set => PlayerPrefs.SetInt(P + "HybRes3", value ? 1 : 0);
     }
 
     public static bool TrajectoryVisible

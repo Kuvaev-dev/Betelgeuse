@@ -49,6 +49,8 @@ public class MissionControlUI : MonoBehaviour
     /// <summary>Переживає RebuildUi — слайдери/інпути умов ніколи не знищуються → без миготіння NumField.</summary>
     GameObject conditionSectionGo;
     float conditionSectionHeight;
+    const int kSliderLook = 4;
+    int conditionLookVer;
     readonly List<(TMP_Text label, TMP_Text unit, string labelKey, string unitKey)> conditionLabelBindings = new();
     readonly List<(Toggle toggle, TMP_Text label, string key)> conditionToggleBindings = new();
     bool panelsHidden;
@@ -478,6 +480,7 @@ public class MissionControlUI : MonoBehaviour
             {
                 if (outline == null) continue;
                 if (outline.GetComponent<TMP_InputField>() != null) continue;
+                if (outline.gameObject.name == "Handle") continue;
                 if (UiTheme.IsLightBackground)
                 {
                     outline.effectColor = new Color(0.55f, 0.62f, 0.72f, 0.42f);
@@ -542,6 +545,8 @@ public class MissionControlUI : MonoBehaviour
                 bg = BtnRed();
             else if (n == "MBtn_Pause")
                 bg = BtnBlue();
+            else if (n == "MBtn_Demo")
+                bg = BtnAmber();
             else if (n.StartsWith("MBtn_"))
                 bg = C_Btn;
             else if (n == "Action_Demo")
@@ -1164,7 +1169,101 @@ public class MissionControlUI : MonoBehaviour
         img.preserveAspect = false;
     }
 
-    enum MenuBtnKind { Normal, Start, Stop, Pause }
+    static Sprite s_uiCircle;
+    static Sprite s_uiRound;
+
+    static Sprite UiCircle()
+    {
+        if (s_uiCircle != null) return s_uiCircle;
+        const int n = 64;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        float r = (n - 1) * 0.5f;
+        var px = new Color32[n * n];
+        for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++)
+        {
+            float d = Mathf.Sqrt((x - r) * (x - r) + (y - r) * (y - r));
+            float a = Mathf.Clamp01(r - d + 0.65f);
+            px[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+        }
+        tex.SetPixels32(px);
+        tex.Apply(false, true);
+        s_uiCircle = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+        return s_uiCircle;
+    }
+
+    static Sprite UiRound()
+    {
+        if (s_uiRound != null) return s_uiRound;
+        const int n = 32;
+        const int rad = 14;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        var px = new Color32[n * n];
+        for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++)
+        {
+            float cx = Mathf.Clamp(x, rad, n - 1 - rad);
+            float cy = Mathf.Clamp(y, rad, n - 1 - rad);
+            float d = Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+            float a = Mathf.Clamp01(rad - d + 0.65f);
+            px[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+        }
+        tex.SetPixels32(px);
+        tex.Apply(false, true);
+        s_uiRound = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), 100f,
+            0, SpriteMeshType.FullRect, new Vector4(rad, rad, rad, rad));
+        return s_uiRound;
+    }
+
+    static void StyleTrack(Image img, Color c)
+    {
+        if (img == null) return;
+        img.sprite = UiRound();
+        img.type = Image.Type.Sliced;
+        img.pixelsPerUnitMultiplier = 6.5f;
+        img.color = c;
+        img.raycastTarget = false;
+        img.preserveAspect = false;
+    }
+
+    static void StyleKnob(Image img, Color c)
+    {
+        if (img == null) return;
+        img.sprite = UiCircle();
+        img.type = Image.Type.Simple;
+        img.preserveAspect = true;
+        img.color = c;
+        img.raycastTarget = true;
+    }
+
+    static Color SliderTrackColor()
+    {
+        Color track = UiTheme.IsLightBackground
+            ? new Color(0.80f, 0.83f, 0.88f, 1f)
+            : Color.Lerp(C_Edge, C_Panel, 0.45f);
+        track.a = 1f;
+        return track;
+    }
+
+    static Color SliderFillColor()
+    {
+        var c = Color.Lerp(C_Accent, C_Cyan, 0.22f);
+        c.a = 1f;
+        return c;
+    }
+
+    static Color SliderKnobColor()
+    {
+        return UiTheme.IsLightBackground
+            ? Color.white
+            : Color.Lerp(C_Amber, Color.white, 0.55f);
+    }
+
+    enum MenuBtnKind { Normal, Start, Stop, Pause, Demo }
 
     /// <summary>
     /// Єдиний top chrome: identity + flight state | actions | settings.
@@ -1276,6 +1375,7 @@ public class MissionControlUI : MonoBehaviour
         pauseBtn = MenuBtn(row2.transform, PauseButtonLabel(), OnPause, MenuBtnKind.Pause, chipW, out txtPauseBtn);
         pauseBtnImg = pauseBtn != null ? pauseBtn.targetGraphic as Image : null;
         UpdatePauseButtonVisual();
+        MenuBtn(row2.transform, (UILocale.T("top_demo") + "  D").ToUpperInvariant(), OnDefenseDemo, MenuBtnKind.Demo, chipW);
 
         MenuBtn(row2.transform, (UILocale.T("top_ideal") + "  I").ToUpperInvariant(), OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
         trajToggleBtn = MenuBtn(row2.transform, PathButtonLabel(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
@@ -1556,6 +1656,10 @@ public class MissionControlUI : MonoBehaviour
                 break;
             case MenuBtnKind.Pause:
                 bg = BtnBlue();
+                txtCol = ButtonLabelOn(bg);
+                break;
+            case MenuBtnKind.Demo:
+                bg = BtnAmber();
                 txtCol = ButtonLabelOn(bg);
                 break;
             default:
@@ -1998,9 +2102,6 @@ public class MissionControlUI : MonoBehaviour
             "Action_Compare", BtnViolet(), OnStartCompare);
         ActionButtonAt(root, pad + halfW + gap, y, halfW, btnH, UILocale.T("btn_cancel"),
             "Action_Cancel", BtnPink(), OnCancelCompare);
-        y -= btnH + gap;
-        ActionButtonAt(root, pad, y, inner, btnH, UILocale.T("btn_demo"),
-            "Action_Demo", BtnAmber(), OnDefenseDemo);
         y -= btnH + 10f;
 
         // ── 4. Результати порівняння 2x2 ──
@@ -3168,9 +3269,11 @@ public class MissionControlUI : MonoBehaviour
             if (txtDeltaStrip)
             {
                 // Лише ASCII-роздільники (без middle-dot «тофу»)
+                float navR = rocket.navigation != null && rocket.navigation.Current.valid
+                    ? rocket.navigation.Current.horizResid : 0f;
                 txtDeltaStrip.text =
                     $"dh {Arrow(dAlt)}{Mathf.Abs(dAlt):F1}  |  dVy {Arrow(dVy)}{Mathf.Abs(dVy):F2}  |  " +
-                    $"dTilt {Arrow(dTilt)}{Mathf.Abs(dTilt):F2}  |  dF {Arrow(dThr)}{Mathf.Abs(dThr):F1}";
+                    $"dTilt {Arrow(dTilt)}{Mathf.Abs(dTilt):F2}  |  NAV {navR:F1}m";
                 txtDeltaStrip.color = C_Muted;
             }
             prevAlt = s.position.y;
@@ -4084,7 +4187,7 @@ public class MissionControlUI : MonoBehaviour
         }
     }
 
-    // Спільна палітра дій — top Start/Stop/Pause і right Compare/Cancel/Demo
+    // Спільна палітра дій — top Start/Stop/Pause/Demo і right Compare/Cancel
     static Color BtnGreen() => UiTheme.IsLightBackground
         ? new Color(0.12f, 0.50f, 0.30f, 1f)
         : new Color(0.14f, 0.40f, 0.26f, 1f);
@@ -4127,6 +4230,17 @@ public class MissionControlUI : MonoBehaviour
     void PlaceConditionSection(Transform root, ref float y, float pad, float inner, float gap)
     {
         float halfW = (inner - gap) * 0.5f;
+        if (conditionSectionGo != null && conditionLookVer != kSliderLook)
+        {
+            Destroy(conditionSectionGo);
+            conditionSectionGo = null;
+            conditionLabelBindings.Clear();
+            conditionToggleBindings.Clear();
+            heightSlider = descentSlider = tilt0Slider = windSlider = null;
+            massNoiseSlider = angleNoiseSlider = liveSpeedSlider = null;
+            testsSlider = timeScaleSlider = seedSlider = null;
+            noiseToggle = trainToggle = residualToggle = null;
+        }
         bool fresh = conditionSectionGo == null;
 
         if (fresh)
@@ -4170,6 +4284,7 @@ public class MissionControlUI : MonoBehaviour
             ly -= 32f;
 
             conditionSectionHeight = Mathf.Max(40f, -ly);
+            conditionLookVer = kSliderLook;
         }
         else
         {

@@ -254,6 +254,8 @@ public class SimulationManager : MonoBehaviour
             // Paired seed: trial i використовує ТІ САМІ збурення для кожного алгоритму
             SimRng.Reseed(SimRng.DeriveSeed(experimentSeed, i));
 
+            rocketPhysics.NavSeed = (uint)SimRng.DeriveSeed(experimentSeed, i);
+            rocketPhysics.NavNoiseScale = enableNoise ? 0.2f : 0f;
             rocketPhysics.ResetSimulation();
             rocketPhysics.controlMode = mode;
             rocketPhysics.batchDrivenTicks = true;
@@ -262,6 +264,7 @@ public class SimulationManager : MonoBehaviour
 
             // Вітер + маса/кут/offset (ідентично для A–D на цьому індексі trial)
             ApplyRandomNoiseToState();
+            rocketPhysics.AlignNavigationToTruth();
 
             float dt = rocketPhysics.parameters != null ? rocketPhysics.parameters.fixedTimeStep : 0.005f;
             dt = Mathf.Clamp(dt, 0.002f, 0.02f);
@@ -334,9 +337,7 @@ public class SimulationManager : MonoBehaviour
         p.startPosition = new Vector3(0f, h0, 0f);
         p.startVelocity = new Vector3(0f, -vy, 0f);
         p.startEulerAngles = new Vector3(0f, 0f, tilt);
-        p.dryMass = 25600f;
-        p.fuelMass = 14000f;
-        p.maxThrust = 845000f;
+        Stage1Vehicle.ApplyTo(p);
         // Тримати soft-landing gates узгодженими з defaults LandingCriteria
         p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
         p.maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;

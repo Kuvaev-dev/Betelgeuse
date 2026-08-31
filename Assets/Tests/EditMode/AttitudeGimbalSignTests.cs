@@ -64,12 +64,21 @@ public class AttitudeGimbalSignTests
     [Test]
     public void LateralTvc_SignsPullTowardOrigin()
     {
-        // x>0 ⇒ gz>0 ⇒ td.x < 0 (тяга до −x)
-        Vector3 tdEast = (Quaternion.Euler(0f, 0f, 5f) * Vector3.up).normalized;
-        Assert.Less(tdEast.x, 0f);
-        // z>0 ⇒ gx<0 ⇒ td.z < 0
-        Vector3 tdNorth = (Quaternion.Euler(-5f, 0f, 0f) * Vector3.up).normalized;
-        Assert.Less(tdNorth.z, 0f);
+        // PD: x>0 ⇒ gz<0 ⇒ td.x>0 ⇒ τz>0 ⇒ lean to −X (toward pad)
+        const float kPos = 0.22f;
+        float px = 40f, pz = 0f;
+        float gx = +(kPos * pz);
+        float gz = -(kPos * px);
+        Assert.Less(gz, 0f, "x>0 must command gz<0 (tail TVC toward pad)");
+
+        Vector3 td = (Quaternion.Euler(gx, 0f, gz) * Vector3.up).normalized;
+        Assert.Greater(td.x, 0f, "gz<0 ⇒ td.x>0 ⇒ τz>0 ⇒ lean to −X");
+
+        // z>0 ⇒ gx>0 ⇒ td.z>0 ⇒ τx=-td.z<0 ⇒ lean to −Z
+        float gxZ = +(kPos * 40f);
+        Assert.Greater(gxZ, 0f, "z>0 must command gx>0");
+        Vector3 tdZ = (Quaternion.Euler(gxZ, 0f, 0f) * Vector3.up).normalized;
+        Assert.Greater(tdZ.z, 0f, "gx>0 ⇒ td.z>0 ⇒ lean to −Z");
     }
 
     [Test]

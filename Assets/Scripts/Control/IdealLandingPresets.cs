@@ -34,6 +34,7 @@ public static class IdealLandingPresets
             rocket.parameters.startPosition = new Vector3(0f, StartHeight, 0f);
             rocket.parameters.startVelocity = new Vector3(0f, StartVy, 0f);
             rocket.parameters.startEulerAngles = new Vector3(0f, 0f, StartTiltDeg);
+            Stage1Vehicle.ApplyTo(rocket.parameters);
             rocket.parameters.dryMass = DryMass;
             rocket.parameters.fuelMass = FuelMass;
             rocket.parameters.maxThrust = MaxThrust;
@@ -117,6 +118,7 @@ public static class IdealLandingPresets
         if (hybrid != null)
         {
             hybrid.isActive = true;
+            hybrid.useNeuralResidual = true;
             hybrid.neuralThrustBlend = 0.2f;
             hybrid.neuralGimbalBlend = 0.15f;
             hybrid.maxResidualMult = 0.25f;
@@ -182,6 +184,7 @@ public static class IdealLandingPresets
                 }
                 if (hybrid != null)
                 {
+                    hybrid.useNeuralResidual = true;
                     hybrid.neuralThrustBlend = 0.12f;
                     hybrid.neuralGimbalBlend = 0.1f;
                     hybrid.maxResidualMult = 0.18f;

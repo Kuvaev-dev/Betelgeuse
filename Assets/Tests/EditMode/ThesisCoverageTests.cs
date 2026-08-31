@@ -123,6 +123,14 @@ public class ThesisCoverageTests
             var hCmd = hybrid.Evaluate(in ctx);
             Assert.Greater(hCmd.Thrust, hover * 0.5f);
             Assert.Less(hCmd.Thrust, hover * 3.5f);
+
+            hybrid.useNeuralResidual = false;
+            var offCmd = hybrid.Evaluate(in ctx);
+            hybrid.useNeuralResidual = true;
+            hybrid.neuralThrustBlend = 0.4f;
+            var onCmd = hybrid.Evaluate(in ctx);
+            Assert.Greater(Mathf.Abs(onCmd.Thrust - offCmd.Thrust), 1f,
+                "Hybrid residual ON must change thrust vs Fuzzy-only");
         }
         finally
         {

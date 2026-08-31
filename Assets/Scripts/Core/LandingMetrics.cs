@@ -48,7 +48,7 @@ public class LandingMetrics
 
     /// <summary>Текстовий висновок UA/EN для експорту та діалогів.</summary>
     /// <param name="includeTitle">false — якщо заголовок уже в UI</param>
-    public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 25f, float maxH = 5f,
+    public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 40f, float maxH = 6.5f,
         bool includeTitle = true)
     {
         bool uk = UILocale.IsUK;

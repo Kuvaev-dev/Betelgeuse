@@ -77,6 +77,8 @@ public class MonteCarloFairnessTests
         rp.state.position.x += SimRng.Range(-jit, jit);
         rp.state.position.z += SimRng.Range(-jit, jit);
         rp.SyncTransformWithState();
+        rp.NavNoiseScale = 0f;
+        rp.AlignNavigationToTruth();
 
         float dt = rp.parameters.fixedTimeStep;
         int maxSteps = Mathf.CeilToInt(400f / dt) + 64;
@@ -149,6 +151,21 @@ public class MonteCarloFairnessTests
             Assert.Greater(Mathf.Max(rPid, Mathf.Max(rFz, Mathf.Max(rNn, rHy))), 0.1f,
                 "All algorithms 0% — lateral GNC / protocol still too harsh");
 
+            // PID must not be the only non-zero algorithm
+            bool pidOnly = rPid > 0.1f && rFz <= 0.1f && rNn <= 0.1f && rHy <= 0.1f;
+            Assert.IsFalse(pidOnly,
+                $"PID-only-nonzero (PID={rPid:F0}% Fuzzy={rFz:F0} NN={rNn:F0} Hybrid={rHy:F0}%)");
+
+            float vyFz = AvgVy(fuzzy);
+            float vyNn = AvgVy(neural);
+            float vyHy = AvgVy(hybrid);
+            Debug.Log($"[MC-test] mean |Vy| Fuzzy={vyFz:F1} NN={vyNn:F1} Hybrid={vyHy:F1}");
+            // Ballistic (no landing burn) is ~21 / 31 m/s for this IC
+            const float ballisticVy = 18f;
+            Assert.Less(vyFz, ballisticVy, $"Fuzzy mean Vy={vyFz:F1} looks ballistic (~21/31)");
+            Assert.Less(vyNn, ballisticVy, $"Neural mean Vy={vyNn:F1} looks ballistic (~21/31)");
+            Assert.Less(vyHy, ballisticVy, $"Hybrid mean Vy={vyHy:F1} looks ballistic (~21/31)");
+
             // Hybrid має перевершити або зрівнятись з PID за success rate (або mean miss, якщо обидва ~0)
             if (rHy + rPid > 0.1f)
             {
@@ -179,6 +196,14 @@ public class MonteCarloFairnessTests
         if (list.Count == 0) return 0f;
         float s = 0f;
         foreach (var m in list) s += m.horizontalMiss;
+        return s / list.Count;
+    }
+
+    static float AvgVy(List<LandingMetrics> list)
+    {
+        if (list.Count == 0) return 0f;
+        float s = 0f;
+        foreach (var m in list) s += m.touchdownVelocity;
         return s / list.Count;
     }
 }
