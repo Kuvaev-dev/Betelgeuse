@@ -118,6 +118,8 @@ public class SimulationManager : MonoBehaviour
 
         // Справедливий paired Monte-Carlo протокол (seeded, однакові ПУ/збурення для A–D)
         DefenseBaseline.ApplyTo(this);
+        // Ideal [I] softens lateral GNC; must not stick into noisy Monte-Carlo (universal 0%).
+        IdealLandingPresets.ClearActive();
         if (rocketPhysics.hybridController != null)
             rocketPhysics.hybridController.useNeuralResidual = DefenseBaseline.HybridResidualOn;
 
@@ -255,7 +257,7 @@ public class SimulationManager : MonoBehaviour
             SimRng.Reseed(SimRng.DeriveSeed(experimentSeed, i));
 
             rocketPhysics.NavSeed = (uint)SimRng.DeriveSeed(experimentSeed, i);
-            rocketPhysics.NavNoiseScale = enableNoise ? 0.2f : 0f;
+            rocketPhysics.NavNoiseScale = 0f; // paired plant noise only; sensor noise + Ideal-soft GNC caused 0%
             rocketPhysics.ResetSimulation();
             rocketPhysics.controlMode = mode;
             rocketPhysics.batchDrivenTicks = true;
@@ -454,6 +456,18 @@ public class SimulationManager : MonoBehaviour
     public IReadOnlyList<LandingMetrics> FuzzyResults => fuzzyResults;
     public IReadOnlyList<LandingMetrics> NeuralResults => neuralResults;
     public IReadOnlyList<LandingMetrics> HybridResults => hybridResults;
+
+    /// <summary>Re-push last comparison % to UI (after language/theme rebuild).</summary>
+    public void RepublishComparisonStatistics()
+    {
+        if (!HasComparisonResults) return;
+        float pid = GetSuccessRate(pidResults);
+        float fuzzy = GetSuccessRate(fuzzyResults);
+        float neural = GetSuccessRate(neuralResults);
+        float hybrid = GetSuccessRate(hybridResults);
+        dashboard?.UpdateStatistics(pid, fuzzy, neural, hybrid);
+        MissionControlUI.Instance?.UpdateStatistics(pid, fuzzy, neural, hybrid);
+    }
 
     public bool HasComparisonResults =>
         pidResults.Count > 0 || fuzzyResults.Count > 0 || neuralResults.Count > 0 || hybridResults.Count > 0;

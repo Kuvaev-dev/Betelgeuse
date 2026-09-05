@@ -192,12 +192,9 @@ public class BootstrapRunner : MonoBehaviour
 
         try { cam.tag = "MainCamera"; } catch { /* tag missing */ }
 
-        cam.farClipPlane = 18000f;
+        cam.farClipPlane = 16000f;
         cam.fieldOfView = 48f;
         cam.nearClipPlane = 0.3f;
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        EnvironmentTextures.EnsureLoaded();
-        cam.backgroundColor = Color.Lerp(EnvironmentTextures.FogColor, EnvironmentTextures.SkyZenith, 0.42f);
 
         var follow = cam.GetComponent<CameraFollow>();
         if (follow == null) follow = cam.gameObject.AddComponent<CameraFollow>();

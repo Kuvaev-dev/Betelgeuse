@@ -11,6 +11,9 @@ Shader "Betelgeuse/LandingRangeGround"
         _MacroBright ("Macro Brightness", Range(0.4, 2.5)) = 1.35
         _TileMeters ("Tile Size (m)", Float) = 16
         _Smoothness ("Smoothness", Range(0, 1)) = 0.16
+        _TerrainRadius ("Terrain Radius (m)", Float) = 2000
+        _RimFadeWidth ("Rim Fade Width (m)", Float) = 80
+        _RimFogColor ("Rim Fog Color", Color) = (0.48, 0.56, 0.60, 1)
     }
 
     SubShader
@@ -18,12 +21,13 @@ Shader "Betelgeuse/LandingRangeGround"
         Tags
         {
             "RenderPipeline" = "UniversalPipeline"
-            "RenderType" = "Opaque"
-            "Queue" = "Geometry"
+            "RenderType" = "Transparent"
+            "Queue" = "Transparent"
         }
         LOD 200
         Cull Back
         ZWrite On
+        Blend SrcAlpha OneMinusSrcAlpha
 
         Pass
         {
@@ -46,6 +50,8 @@ Shader "Betelgeuse/LandingRangeGround"
             TEXTURE2D(_BaseMap);     SAMPLER(sampler_BaseMap);
             TEXTURE2D(_BumpMap);     SAMPLER(sampler_BumpMap);
             TEXTURE2D(_MacroMap);    SAMPLER(sampler_MacroMap);
+            // Force tiling even if a bound texture/import sampler is Clamp (avoids square patch on disk).
+            SAMPLER(sampler_LinearRepeat);
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
@@ -55,6 +61,9 @@ Shader "Betelgeuse/LandingRangeGround"
                 half _MacroBright;
                 float _TileMeters;
                 half _Smoothness;
+                float _TerrainRadius;
+                float _RimFadeWidth;
+                half4 _RimFogColor;
             CBUFFER_END
 
             struct Attributes
@@ -104,20 +113,48 @@ Shader "Betelgeuse/LandingRangeGround"
                 return chroma * lum;
             }
 
+            // Soft rim coverage: 1 in interior, 0 past outer radius. Quintic ease.
+            half RimAlpha(float3 positionWS)
+            {
+                float radius = max(_TerrainRadius, 1.0);
+                float fade = max(_RimFadeWidth, 8.0);
+                float dist = length(positionWS.xz);
+                float t = saturate((radius - dist) / fade);
+                // quintic smoothstep
+                return t * t * t * (t * (t * 6.0h - 15.0h) + 10.0h);
+            }
+
+            // World XZ tiling that always wraps (frac), independent of texture wrapMode.
+            float2 WorldTileUV(float3 positionWS)
+            {
+                float tile = max(_TileMeters, 0.5);
+                return frac(positionWS.xz / tile);
+            }
+
+            // Macro bake covers world AABB [-R,R]^2 in UV [0,1]^2 — same mapping as mesh UV at origin.
+            float2 WorldMacroUV(float3 positionWS)
+            {
+                float r = max(_TerrainRadius, 1.0);
+                return positionWS.xz / (r * 2.0) + 0.5;
+            }
+
             half4 frag(Varyings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
 
-                float tile = max(_TileMeters, 0.5);
-                float2 uvTile = input.positionWS.xz / tile;
+                half rim = RimAlpha(input.positionWS);
+                clip(rim - 0.004h);
 
-                half3 grass = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvTile).rgb;
-                half3 macro = SAMPLE_TEXTURE2D(_MacroMap, sampler_MacroMap, input.uv).rgb;
+                float2 uvTile = WorldTileUV(input.positionWS);
+                float2 uvMacro = WorldMacroUV(input.positionWS);
+
+                half3 grass = SAMPLE_TEXTURE2D(_BaseMap, sampler_LinearRepeat, uvTile).rgb;
+                half3 macro = SAMPLE_TEXTURE2D(_MacroMap, sampler_MacroMap, uvMacro).rgb;
                 half3 albedo = ApplyMacro(grass, macro) * _BaseColor.rgb;
 
                 half3 nMesh = normalize(input.normalWS);
-                half3 bumpTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uvTile), _BumpScale);
-                // Terrain is mostly +Y: tangent ≈ +X, bitangent ≈ +Z.
+                half3 bumpTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_LinearRepeat, uvTile), _BumpScale);
+                // Terrain is mostly +Y: tangent ~ +X, bitangent ~ +Z.
                 half3 bumpWS = half3(bumpTS.x, bumpTS.z, bumpTS.y);
                 half3 n = normalize(nMesh + bumpWS * half3(1.0h, 0.35h, 1.0h));
 
@@ -134,7 +171,10 @@ Shader "Betelgeuse/LandingRangeGround"
                 color += spec * mainLight.color * albedo * 0.22h;
 
                 color = MixFog(color, input.fogFactor);
-                return half4(color, 1);
+
+                // Keep grass chroma through the soft alpha dissolve — do not paint fog-gray onto the rim band.
+                // (_RimFogColor kept for material API / skirt matching elsewhere.)
+                return half4(color, rim);
             }
             ENDHLSL
         }
@@ -159,6 +199,19 @@ Shader "Betelgeuse/LandingRangeGround"
             float3 _LightDirection;
             float3 _LightPosition;
 
+            CBUFFER_START(UnityPerMaterial)
+                float4 _BaseMap_ST;
+                half4 _BaseColor;
+                half _BumpScale;
+                half _MacroStrength;
+                half _MacroBright;
+                float _TileMeters;
+                half _Smoothness;
+                float _TerrainRadius;
+                float _RimFadeWidth;
+                half4 _RimFogColor;
+            CBUFFER_END
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -169,6 +222,7 @@ Shader "Betelgeuse/LandingRangeGround"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                float3 positionWS : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -195,12 +249,19 @@ Shader "Betelgeuse/LandingRangeGround"
                 Varyings output = (Varyings)0;
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
+                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 output.positionCS = GetShadowPositionHClip(input);
                 return output;
             }
 
             half4 ShadowPassFragment(Varyings input) : SV_TARGET
             {
+                float radius = max(_TerrainRadius, 1.0);
+                float fade = max(_RimFadeWidth, 8.0);
+                float dist = length(input.positionWS.xz);
+                float t = saturate((radius - dist) / fade);
+                half rim = t * t * t * (t * (t * 6.0h - 15.0h) + 10.0h);
+                clip(rim - 0.35h);
                 return 0;
             }
             ENDHLSL
@@ -221,6 +282,19 @@ Shader "Betelgeuse/LandingRangeGround"
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
+            CBUFFER_START(UnityPerMaterial)
+                float4 _BaseMap_ST;
+                half4 _BaseColor;
+                half _BumpScale;
+                half _MacroStrength;
+                half _MacroBright;
+                float _TileMeters;
+                half _Smoothness;
+                float _TerrainRadius;
+                float _RimFadeWidth;
+                half4 _RimFogColor;
+            CBUFFER_END
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -229,6 +303,7 @@ Shader "Betelgeuse/LandingRangeGround"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                float3 positionWS : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -237,12 +312,19 @@ Shader "Betelgeuse/LandingRangeGround"
                 Varyings output = (Varyings)0;
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
+                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 return output;
             }
 
             half DepthOnlyFragment(Varyings input) : SV_TARGET
             {
+                float radius = max(_TerrainRadius, 1.0);
+                float fade = max(_RimFadeWidth, 8.0);
+                float dist = length(input.positionWS.xz);
+                float t = saturate((radius - dist) / fade);
+                half rim = t * t * t * (t * (t * 6.0h - 15.0h) + 10.0h);
+                clip(rim - 0.35h);
                 return input.positionCS.z;
             }
             ENDHLSL

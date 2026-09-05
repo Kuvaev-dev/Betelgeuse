@@ -2,12 +2,12 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// Процедурна модель лише 1-го ступеня ~28 м: корпус, fins, ноги, сопла, FX.
+/// ÐŸÑ€Ð¾Ñ†ÐµÐ´ÑƒÑ€Ð½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð»Ð¸ÑˆÐµ 1-Ð³Ð¾ ÑÑ‚ÑƒÐ¿ÐµÐ½Ñ ~28 Ð¼: ÐºÐ¾Ñ€Ð¿ÑƒÑ, fins, Ð½Ð¾Ð³Ð¸, ÑÐ¾Ð¿Ð»Ð°, FX.
 /// </summary>
 public static class RocketVisualBuilder
 {
-    public const float Height = 28f;   // compact visual proxy of F9 first stage ~42.6 m; компактний 1-й ступінь (не весь носій)
-    public const float Radius = 1.83f; // Ø3.66 м
+    public const float Height = 28f;   // compact visual proxy of F9 first stage ~42.6 m; ÐºÐ¾Ð¼Ð¿Ð°ÐºÑ‚Ð½Ð¸Ð¹ 1-Ð¹ ÑÑ‚ÑƒÐ¿Ñ–Ð½ÑŒ (Ð½Ðµ Ð²ÐµÑÑŒ Ð½Ð¾ÑÑ–Ð¹)
+    public const float Radius = 1.83f; // Ã˜3.66 Ð¼
     public const string UpperStackName = "UpperStack";
 
     public static void Build(RocketPhysics rocket)
@@ -15,7 +15,7 @@ public static class RocketVisualBuilder
         LunarTerrainMesh.Drain(BuildRoutine(rocket));
     }
 
-    /// <summary>No-op: верхні ступені не моделюються (лише 1-й).</summary>
+    /// <summary>No-op: Ð²ÐµÑ€Ñ…Ð½Ñ– ÑÑ‚ÑƒÐ¿ÐµÐ½Ñ– Ð½Ðµ Ð¼Ð¾Ð´ÐµÐ»ÑŽÑŽÑ‚ÑŒÑÑ (Ð»Ð¸ÑˆÐµ 1-Ð¹).</summary>
     public static void SetUpperStackVisible(Transform rocketRoot, bool visible, bool animateAway = false)
     {
         if (rocketRoot == null) return;
@@ -25,7 +25,7 @@ public static class RocketVisualBuilder
         if (orphan != null) Object.Destroy(orphan);
     }
 
-    /// <summary>Покрокова збірка — yield між важкими skins, щоб splash-спінер крутився.</summary>
+    /// <summary>ÐŸÐ¾ÐºÑ€Ð¾ÐºÐ¾Ð²Ð° Ð·Ð±Ñ–Ñ€ÐºÐ° â€” yield Ð¼Ñ–Ð¶ Ð²Ð°Ð¶ÐºÐ¸Ð¼Ð¸ skins, Ñ‰Ð¾Ð± splash-ÑÐ¿Ñ–Ð½ÐµÑ€ ÐºÑ€ÑƒÑ‚Ð¸Ð²ÑÑ.</summary>
     public static IEnumerator BuildRoutine(RocketPhysics rocket)
     {
         if (rocket == null) yield break;
@@ -55,7 +55,7 @@ public static class RocketVisualBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(root, false);
 
-        // ── Палітра recoverable 1st-stage analogue (no logos) ──
+        // â”€â”€ ÐŸÐ°Ð»Ñ–Ñ‚Ñ€Ð° recoverable 1st-stage analogue (no logos) â”€â”€
         var white = MakeTankSkin("TankWhite", sootAmount: 0.10f, panelContrast: 0.62f, seed: 11);
         yield return null;
         var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.78f, panelContrast: 0.45f, seed: 29);
@@ -74,14 +74,14 @@ public static class RocketVisualBuilder
         yield return null;
         var legWhite = VisualMaterials.Lit(new Color(0.93f, 0.935f, 0.94f), 0.08f, 0.55f);
 
-        // ── Aft: clustered 9-engine octaweb (not toy cubes) ──
+        // â”€â”€ Aft: clustered 9-engine octaweb (not toy cubes) â”€â”€
         BuildOctaweb(visual.transform, black, darkMetal, titanium, carbon);
         yield return null;
 
         float dBody = Radius * 2.0f;
         float yBot = 2.1f;
 
-        // Tall sooty lower tank — reads from afar
+        // Tall sooty lower tank â€” reads from afar
         SmoothCyl("SootLo", visual.transform, yBot + 2.55f, dBody * 1.004f, 2.55f, whiteLower, 96);
         float bodyBot = yBot;
 
@@ -90,7 +90,7 @@ public static class RocketVisualBuilder
         float bodyTop = yBot + bodyH;
         yBot = bodyTop;
 
-        // Thin barrel / weld hoops — no vertical raceway
+        // Thin barrel / weld hoops â€” no vertical raceway
         const int nRings = 6;
         float ringLo = bodyBot + 1.15f;
         float ringHi = bodyTop - 0.85f;
@@ -128,13 +128,13 @@ public static class RocketVisualBuilder
     }
 
     /// <summary>
-    /// Ідеальна зона стиковки: пропорційний interstage + чистий sep flange.
+    /// Ð†Ð´ÐµÐ°Ð»ÑŒÐ½Ð° Ð·Ð¾Ð½Ð° ÑÑ‚Ð¸ÐºÐ¾Ð²ÐºÐ¸: Ð¿Ñ€Ð¾Ð¿Ð¾Ñ€Ñ†Ñ–Ð¹Ð½Ð¸Ð¹ interstage + Ñ‡Ð¸ÑÑ‚Ð¸Ð¹ sep flange.
     /// </summary>
     static void BuildDockingInterface(Transform visual, float bodyTop, float dBody,
         Material interstageMat, Material metal, Material titanium, Material carbon,
         Material darkMetal, Material silver)
     {
-        // CFRP interstage + one sep plane — not a stack of random cylinders
+        // CFRP interstage + one sep plane â€” not a stack of random cylinders
         float interH = 1.75f;
         float interBot = bodyTop - 0.02f;
         float interCenter = interBot + interH * 0.5f;
@@ -157,9 +157,9 @@ public static class RocketVisualBuilder
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Процедурні циліндричні skins — гладкий білий (без панелей)
-    // ─────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÐŸÑ€Ð¾Ñ†ÐµÐ´ÑƒÑ€Ð½Ñ– Ñ†Ð¸Ð»Ñ–Ð½Ð´Ñ€Ð¸Ñ‡Ð½Ñ– skins â€” Ð³Ð»Ð°Ð´ÐºÐ¸Ð¹ Ð±Ñ–Ð»Ð¸Ð¹ (Ð±ÐµÐ· Ð¿Ð°Ð½ÐµÐ»ÐµÐ¹)
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     static Material MakeTankSkin(string name, float sootAmount, float panelContrast, int seed)
     {
@@ -204,7 +204,7 @@ public static class RocketVisualBuilder
                     line = Mathf.Max(line, 1f - Mathf.SmoothStep(0.0005f, halfW, d));
                 }
 
-                // No vertical stringers — they read as a black raceway from the camera.
+                // No vertical stringers â€” they read as a black raceway from the camera.
 
                 // Rivets on two major rings
                 float rivetV = v0 + 3 * step;
@@ -253,7 +253,7 @@ public static class RocketVisualBuilder
         }
         if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
         mat.mainTexture = tex;
-        // Без normal map панелей — ідеально гладкий корпус
+        // Ð‘ÐµÐ· normal map Ð¿Ð°Ð½ÐµÐ»ÐµÐ¹ â€” Ñ–Ð´ÐµÐ°Ð»ÑŒÐ½Ð¾ Ð³Ð»Ð°Ð´ÐºÐ¸Ð¹ ÐºÐ¾Ñ€Ð¿ÑƒÑ
         if (mat.HasProperty("_BumpMap"))
         {
             mat.SetTexture("_BumpMap", null);
@@ -298,7 +298,7 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Глибоке плетиво CFRP з легкими смугами блиску
+                // Ð“Ð»Ð¸Ð±Ð¾ÐºÐµ Ð¿Ð»ÐµÑ‚Ð¸Ð²Ð¾ CFRP Ð· Ð»ÐµÐ³ÐºÐ¸Ð¼Ð¸ ÑÐ¼ÑƒÐ³Ð°Ð¼Ð¸ Ð±Ð»Ð¸ÑÐºÑƒ
                 float g = 0.055f;
                 float weaveU = Mathf.Abs((u * 40f) - Mathf.Round(u * 40f));
                 float weaveV = Mathf.Abs((v * 22f) - Mathf.Round(v * 22f));
@@ -307,7 +307,7 @@ public static class RocketVisualBuilder
                 g += HashNoise(u * 48f + ox, v * 48f) * 0.012f;
                 float band = Mathf.Abs((v * 5f) - Mathf.Round(v * 5f));
                 g += (1f - Mathf.SmoothStep(0f, 0.07f, band)) * 0.045f;
-                // Легкий вертикальний градієнт блиску
+                // Ð›ÐµÐ³ÐºÐ¸Ð¹ Ð²ÐµÑ€Ñ‚Ð¸ÐºÐ°Ð»ÑŒÐ½Ð¸Ð¹ Ð³Ñ€Ð°Ð´Ñ–Ñ”Ð½Ñ‚ Ð±Ð»Ð¸ÑÐºÑƒ
                 g += (0.5f - Mathf.Abs(v - 0.5f)) * 0.02f;
                 g = Mathf.Clamp01(g);
                 cols[y * tw + x] = new Color(g * 0.92f, g * 0.95f, g * 1.08f, 1f);
@@ -358,17 +358,17 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Чистий обтічник: легкий micro-noise + лише 2 поздовжні half-seams
+                // Ð§Ð¸ÑÑ‚Ð¸Ð¹ Ð¾Ð±Ñ‚Ñ–Ñ‡Ð½Ð¸Ðº: Ð»ÐµÐ³ÐºÐ¸Ð¹ micro-noise + Ð»Ð¸ÑˆÐµ 2 Ð¿Ð¾Ð·Ð´Ð¾Ð²Ð¶Ð½Ñ– half-seams
                 float g = 0.94f;
                 g += HashNoise(u * 28f + ox, v * 36f) * 0.008f;
-                float petal = u * 2f; // дві половини обтічника
+                float petal = u * 2f; // Ð´Ð²Ñ– Ð¿Ð¾Ð»Ð¾Ð²Ð¸Ð½Ð¸ Ð¾Ð±Ñ‚Ñ–Ñ‡Ð½Ð¸ÐºÐ°
                 float seam = Mathf.Abs(petal - Mathf.Round(petal));
                 float seamW = 1f - Mathf.SmoothStep(0f, 0.012f, seam);
                 g -= seamW * 0.06f;
-                // лише одне access-кільце біля основи
+                // Ð»Ð¸ÑˆÐµ Ð¾Ð´Ð½Ðµ access-ÐºÑ–Ð»ÑŒÑ†Ðµ Ð±Ñ–Ð»Ñ Ð¾ÑÐ½Ð¾Ð²Ð¸
                 float h = Mathf.Abs(v - 0.12f);
                 g -= (1f - Mathf.SmoothStep(0f, 0.025f, h)) * 0.03f;
-                // tip трохи світліший (гладка фарба)
+                // tip Ñ‚Ñ€Ð¾Ñ…Ð¸ ÑÐ²Ñ–Ñ‚Ð»Ñ–ÑˆÐ¸Ð¹ (Ð³Ð»Ð°Ð´ÐºÐ° Ñ„Ð°Ñ€Ð±Ð°)
                 g *= Mathf.Lerp(0.97f, 1.0f, v);
                 g = Mathf.Clamp01(g);
                 cols[y * tw + x] = new Color(g * 0.995f, g, g * 1.01f, 1f);
@@ -425,7 +425,7 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Regen-cooled niobium bell: sooty exit → heat-stained copper mid → steel throat
+                // Regen-cooled niobium bell: sooty exit â†’ heat-stained copper mid â†’ steel throat
                 float mid = Mathf.Sin(v * Mathf.PI);
                 float body = Mathf.Lerp(0.22f, 0.58f, mid);
                 float ring = Mathf.Abs((v * 28f) - Mathf.Round(v * 28f));
@@ -503,9 +503,9 @@ public static class RocketVisualBuilder
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // Підвузли
-    // ─────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ÐŸÑ–Ð´Ð²ÑƒÐ·Ð»Ð¸
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     static void BuildWings(Transform visual, Material skin, Material fair, Material edge, float mountY)
     {
@@ -709,7 +709,7 @@ public static class RocketVisualBuilder
 
     static void BuildEngineFX(Transform visual)
     {
-        // Кромка exit сопла біля y≈0. Дев'ять струменів Merlin (RP-1): glow + core + sheath.
+        // ÐšÑ€Ð¾Ð¼ÐºÐ° exit ÑÐ¾Ð¿Ð»Ð° Ð±Ñ–Ð»Ñ yâ‰ˆ0. Ð”ÐµÐ²'ÑÑ‚ÑŒ ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ–Ð² Merlin (RP-1): glow + core + sheath.
         const float exitY = -0.08f;
         var down = Quaternion.Euler(90f, 0f, 0f);
 
@@ -719,14 +719,15 @@ public static class RocketVisualBuilder
         var jetRoots = new Transform[9];
         var jetRenderers = new MeshRenderer[18];
         var glowBalls = new Transform[9];
+        // Core white-blue -> gold/orange sheath -> translucent tip smoke.
         var sheathMat = VisualMaterials.Plume(
-            new Color(1f, 0.96f, 0.72f),
-            new Color(1f, 0.52f, 0.12f),
-            new Color(0.9f, 0.18f, 0.03f), 2.6f);
+            new Color(0.75f, 0.92f, 1.00f),
+            new Color(1.00f, 0.62f, 0.18f),
+            new Color(0.95f, 0.22f, 0.04f), 3.1f);
         var coreMat = VisualMaterials.Plume(
-            new Color(1f, 1f, 0.97f),
-            new Color(1f, 0.86f, 0.42f),
-            new Color(1f, 0.42f, 0.08f), 4.8f);
+            new Color(0.82f, 0.95f, 1.00f),
+            new Color(1.00f, 0.98f, 0.88f),
+            new Color(1.00f, 0.55f, 0.14f), 5.6f);
         var glowMat = VisualMaterials.Lit(
             new Color(1f, 0.85f, 0.45f), 0.05f, 0.9f,
             new Color(2.4f, 1.4f, 0.35f));
@@ -752,12 +753,12 @@ public static class RocketVisualBuilder
             jet.transform.localPosition = new Vector3(xz.x, exitY, xz.z);
             jet.transform.localRotation = Quaternion.Euler(180f, 0f, 0f);
             jetRoots[i] = jet.transform;
-            float diam = 0.95f * s;
-            float len = 13.2f * s;
+            float diam = 0.88f * s;
+            float len = 15.5f * s;
             var sheathGo = SmoothMesh.MakePlume("Sheath", jet.transform, Vector3.zero, Quaternion.identity,
                 diam, len, sheathMat);
             var coreMesh = SmoothMesh.MakePlume("Core", jet.transform, Vector3.zero, Quaternion.identity,
-                diam * 0.40f, len * 1.10f, coreMat);
+                diam * 0.36f, len * 1.18f, coreMat);
             jetRenderers[i * 2] = sheathGo.GetComponent<MeshRenderer>();
             jetRenderers[i * 2 + 1] = coreMesh.GetComponent<MeshRenderer>();
 
@@ -832,14 +833,14 @@ public static class RocketVisualBuilder
         fx.sparks = sparks;
         fx.dust = dust;
         fx.engineLight = light;
-        fx.maxFlameRate = 56f;
-        fx.maxCoreRate = 44f;
-        fx.maxGlowRate = 70f;
-        fx.maxLightIntensity = 190f;
-        fx.lightRange = 175f;
+        fx.maxFlameRate = 64f;
+        fx.maxCoreRate = 52f;
+        fx.maxGlowRate = 78f;
+        fx.maxLightIntensity = 210f;
+        fx.lightRange = 185f;
     }
 
-    /// <summary>Unity вимагає, щоб УСІ осі velocityOverLifetime були в одному режимі MinMaxCurve.</summary>
+    /// <summary>Unity Ð²Ð¸Ð¼Ð°Ð³Ð°Ñ”, Ñ‰Ð¾Ð± Ð£Ð¡Ð† Ð¾ÑÑ– velocityOverLifetime Ð±ÑƒÐ»Ð¸ Ð² Ð¾Ð´Ð½Ð¾Ð¼Ñƒ Ñ€ÐµÐ¶Ð¸Ð¼Ñ– MinMaxCurve.</summary>
     static void DisableVelocityOverLifetime(ParticleSystem ps)
     {
         var vel = ps.velocityOverLifetime;
@@ -867,33 +868,33 @@ public static class RocketVisualBuilder
         rend.allowRoll = false;
     }
 
-    static void ConfigureFlameGlow(ParticleSystem ps, float s = 1f)
+        static void ConfigureFlameGlow(ParticleSystem ps, float s = 1f)
     {
-        // Soft luminous plug in the bell — reads as a hot throat, not a particle spray.
+        // Soft luminous plug in the bell — hot throat bloom, not a particle spray.
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
         main.loop = true;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.04f, 0.09f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f * s, 6f * s);
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.05f, 0.11f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(1.2f * s, 5.5f * s);
         main.startSize3D = false;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.55f * s, 1.15f * s);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.48f * s, 0.95f * s);
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(1f, 0.98f, 0.88f, 1f),
-            new Color(1f, 0.72f, 0.28f, 0.85f));
-        main.maxParticles = 80;
+            new Color(0.85f, 0.95f, 1f, 0.9f),
+            new Color(1f, 0.78f, 0.35f, 0.75f));
+        main.maxParticles = 64;
         main.gravityModifier = 0f;
 
         var emission = ps.emission;
         emission.rateOverTime = 0f;
-        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 8) });
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 6) });
 
         var shape = ps.shape;
         shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Hemisphere;
-        shape.radius = 0.22f * s;
+        shape.radius = 0.20f * s;
         shape.radiusThickness = 1f;
 
         DisableVelocityOverLifetime(ps);
@@ -904,15 +905,15 @@ public static class RocketVisualBuilder
         g.SetKeys(
             new[]
             {
-                new GradientColorKey(new Color(1f, 0.98f, 0.9f), 0f),
-                new GradientColorKey(new Color(1f, 0.78f, 0.32f), 0.45f),
-                new GradientColorKey(new Color(1f, 0.42f, 0.08f), 1f)
+                new GradientColorKey(new Color(0.90f, 0.97f, 1.00f), 0f),
+                new GradientColorKey(new Color(1.00f, 0.88f, 0.55f), 0.35f),
+                new GradientColorKey(new Color(1.00f, 0.48f, 0.12f), 1f)
             },
             new[]
             {
-                new GradientAlphaKey(0.35f, 0f),
-                new GradientAlphaKey(1f, 0.18f),
-                new GradientAlphaKey(0.45f, 0.6f),
+                new GradientAlphaKey(0.25f, 0f),
+                new GradientAlphaKey(0.85f, 0.16f),
+                new GradientAlphaKey(0.35f, 0.62f),
                 new GradientAlphaKey(0f, 1f)
             });
         col.color = g;
@@ -922,47 +923,46 @@ public static class RocketVisualBuilder
         size.separateAxes = false;
         size.size = new ParticleSystem.MinMaxCurve(1f,
             new AnimationCurve(
-                new Keyframe(0f, 0.65f),
-                new Keyframe(0.25f, 1.15f),
-                new Keyframe(1f, 0.4f)));
+                new Keyframe(0f, 0.55f),
+                new Keyframe(0.28f, 1.20f),
+                new Keyframe(1f, 0.35f)));
 
         StyleFlameRenderer(ps, ParticleSystemRenderMode.Billboard,
-            new Color(1f, 0.82f, 0.38f, 1f), 1f, 0f, -8f);
+            new Color(1f, 0.86f, 0.48f, 1f), 1f, 0f, -8f);
     }
-
     static void ConfigureFlameOuter(ParticleSystem ps, float s = 1f)
     {
-        // Long kerosene sheath — gold throat, orange body, red tip.
+        // Soft stretched sheath: pale throat, orange body, translucent smoke tip.
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
         main.loop = true;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.11f, 0.22f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(78f * s, 128f * s);
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.13f, 0.26f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(82f * s, 138f * s);
         main.startSize3D = false;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.32f * s, 0.78f * s);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.18f * s, 0.48f * s);
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(1f, 0.92f, 0.55f, 0.95f),
-            new Color(1f, 0.48f, 0.10f, 0.75f));
-        main.maxParticles = 420;
-        main.gravityModifier = 0.015f;
+            new Color(0.92f, 0.96f, 1.00f, 0.70f),
+            new Color(1.00f, 0.52f, 0.12f, 0.55f));
+        main.maxParticles = 360;
+        main.gravityModifier = 0.012f;
         main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
 
         var emission = ps.emission;
         emission.rateOverTime = 0f;
-        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 18) });
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 14) });
 
         var shape = ps.shape;
         shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 3.4f;
-        shape.radius = 0.34f * s;
-        shape.radiusThickness = 0.7f;
+        shape.angle = 2.8f;
+        shape.radius = 0.30f * s;
+        shape.radiusThickness = 0.55f;
         shape.arc = 360f;
         shape.alignToDirection = false;
-        shape.randomDirectionAmount = 0.04f;
+        shape.randomDirectionAmount = 0.055f;
 
         DisableVelocityOverLifetime(ps);
 
@@ -972,18 +972,18 @@ public static class RocketVisualBuilder
         g.SetKeys(
             new[]
             {
-                new GradientColorKey(new Color(1.00f, 0.96f, 0.72f), 0f),
-                new GradientColorKey(new Color(1.00f, 0.78f, 0.28f), 0.16f),
-                new GradientColorKey(new Color(1.00f, 0.50f, 0.10f), 0.42f),
-                new GradientColorKey(new Color(0.92f, 0.22f, 0.04f), 0.72f),
-                new GradientColorKey(new Color(0.28f, 0.05f, 0.01f), 1f)
+                new GradientColorKey(new Color(0.88f, 0.95f, 1.00f), 0f),
+                new GradientColorKey(new Color(1.00f, 0.90f, 0.55f), 0.12f),
+                new GradientColorKey(new Color(1.00f, 0.55f, 0.14f), 0.38f),
+                new GradientColorKey(new Color(0.88f, 0.20f, 0.04f), 0.70f),
+                new GradientColorKey(new Color(0.20f, 0.10f, 0.06f), 1f)
             },
             new[]
             {
-                new GradientAlphaKey(0.15f, 0f),
-                new GradientAlphaKey(0.95f, 0.08f),
-                new GradientAlphaKey(0.70f, 0.32f),
-                new GradientAlphaKey(0.32f, 0.68f),
+                new GradientAlphaKey(0.08f, 0f),
+                new GradientAlphaKey(0.72f, 0.07f),
+                new GradientAlphaKey(0.48f, 0.30f),
+                new GradientAlphaKey(0.18f, 0.68f),
                 new GradientAlphaKey(0f, 1f)
             });
         col.color = g;
@@ -993,55 +993,54 @@ public static class RocketVisualBuilder
         size.separateAxes = false;
         size.size = new ParticleSystem.MinMaxCurve(1f,
             new AnimationCurve(
-                new Keyframe(0f, 0.45f),
-                new Keyframe(0.12f, 1.12f),
-                new Keyframe(0.45f, 0.95f),
-                new Keyframe(0.78f, 0.62f),
-                new Keyframe(1f, 0.18f)));
+                new Keyframe(0f, 0.38f),
+                new Keyframe(0.10f, 1.05f),
+                new Keyframe(0.42f, 1.15f),
+                new Keyframe(0.75f, 0.78f),
+                new Keyframe(1f, 0.12f)));
 
         var noise = ps.noise;
         noise.enabled = true;
         noise.separateAxes = false;
-        noise.strength = new ParticleSystem.MinMaxCurve(0.18f);
-        noise.frequency = 0.85f;
-        noise.scrollSpeed = new ParticleSystem.MinMaxCurve(1.8f);
+        noise.strength = new ParticleSystem.MinMaxCurve(0.28f);
+        noise.frequency = 1.05f;
+        noise.scrollSpeed = new ParticleSystem.MinMaxCurve(2.4f);
         noise.damping = true;
         noise.octaveCount = 2;
         noise.quality = ParticleSystemNoiseQuality.High;
 
         StyleFlameRenderer(ps, ParticleSystemRenderMode.Stretch,
-            new Color(1f, 0.55f, 0.14f, 1f), 4.2f, 0.016f, -2f);
+            new Color(1f, 0.58f, 0.18f, 0.9f), 5.6f, 0.020f, -2f);
     }
-
     static void ConfigureFlameCore(ParticleSystem ps, float s = 1f)
     {
-        // Tight white-gold needle with faint shock-diamond pulses.
+        // Tight white-blue needle with soft shock-diamond pulses.
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
         main.loop = true;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.08f, 0.16f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(110f * s, 175f * s);
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.09f, 0.18f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(118f * s, 185f * s);
         main.startSize3D = false;
-        main.startSize = new ParticleSystem.MinMaxCurve(0.10f * s, 0.26f * s);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.06f * s, 0.16f * s);
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(1f, 1f, 0.97f, 1f),
-            new Color(1f, 0.88f, 0.48f, 0.95f));
-        main.maxParticles = 280;
+            new Color(0.78f, 0.93f, 1.00f, 1f),
+            new Color(1.00f, 0.96f, 0.78f, 0.9f));
+        main.maxParticles = 240;
         main.gravityModifier = 0f;
 
         var emission = ps.emission;
         emission.rateOverTime = 0f;
-        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 12) });
+        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 10) });
 
         var shape = ps.shape;
         shape.enabled = true;
         shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 1.15f;
-        shape.radius = 0.13f * s;
-        shape.radiusThickness = 0.35f;
+        shape.angle = 0.95f;
+        shape.radius = 0.11f * s;
+        shape.radiusThickness = 0.30f;
         shape.alignToDirection = false;
 
         DisableVelocityOverLifetime(ps);
@@ -1052,17 +1051,17 @@ public static class RocketVisualBuilder
         g.SetKeys(
             new[]
             {
-                new GradientColorKey(new Color(1.00f, 1.00f, 0.98f), 0f),
-                new GradientColorKey(new Color(1.00f, 0.94f, 0.62f), 0.22f),
-                new GradientColorKey(new Color(1.00f, 0.72f, 0.22f), 0.55f),
-                new GradientColorKey(new Color(1.00f, 0.40f, 0.08f), 1f)
+                new GradientColorKey(new Color(0.80f, 0.94f, 1.00f), 0f),
+                new GradientColorKey(new Color(1.00f, 1.00f, 0.95f), 0.18f),
+                new GradientColorKey(new Color(1.00f, 0.82f, 0.40f), 0.48f),
+                new GradientColorKey(new Color(1.00f, 0.45f, 0.10f), 1f)
             },
             new[]
             {
-                new GradientAlphaKey(0.4f, 0f),
-                new GradientAlphaKey(1f, 0.08f),
-                new GradientAlphaKey(0.85f, 0.35f),
-                new GradientAlphaKey(0.28f, 0.75f),
+                new GradientAlphaKey(0.35f, 0f),
+                new GradientAlphaKey(0.95f, 0.07f),
+                new GradientAlphaKey(0.70f, 0.35f),
+                new GradientAlphaKey(0.22f, 0.78f),
                 new GradientAlphaKey(0f, 1f)
             });
         col.color = g;
@@ -1072,28 +1071,27 @@ public static class RocketVisualBuilder
         size.separateAxes = false;
         size.size = new ParticleSystem.MinMaxCurve(1f,
             new AnimationCurve(
-                new Keyframe(0.00f, 0.50f),
-                new Keyframe(0.10f, 1.05f),
-                new Keyframe(0.22f, 0.78f),
-                new Keyframe(0.34f, 1.12f),
-                new Keyframe(0.50f, 0.72f),
-                new Keyframe(0.64f, 0.98f),
-                new Keyframe(1.00f, 0.18f)));
+                new Keyframe(0.00f, 0.45f),
+                new Keyframe(0.08f, 1.00f),
+                new Keyframe(0.20f, 0.72f),
+                new Keyframe(0.32f, 1.10f),
+                new Keyframe(0.48f, 0.68f),
+                new Keyframe(0.62f, 0.95f),
+                new Keyframe(1.00f, 0.14f)));
 
         var noise = ps.noise;
         noise.enabled = true;
         noise.separateAxes = false;
-        noise.strength = new ParticleSystem.MinMaxCurve(0.10f);
-        noise.frequency = 0.7f;
-        noise.scrollSpeed = new ParticleSystem.MinMaxCurve(1.6f);
+        noise.strength = new ParticleSystem.MinMaxCurve(0.14f);
+        noise.frequency = 0.85f;
+        noise.scrollSpeed = new ParticleSystem.MinMaxCurve(2.0f);
         noise.damping = true;
         noise.quality = ParticleSystemNoiseQuality.High;
 
         StyleFlameRenderer(ps, ParticleSystemRenderMode.Stretch,
-            new Color(1f, 0.93f, 0.62f, 1f), 5.4f, 0.024f, -7f);
+            new Color(0.90f, 0.96f, 1.00f, 1f), 6.4f, 0.028f, -7f);
     }
-
-    static void ConfigureSmoke(ParticleSystem ps)
+static void ConfigureSmoke(ParticleSystem ps)
     {
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
@@ -1161,7 +1159,7 @@ public static class RocketVisualBuilder
         rot.enabled = true;
         rot.separateAxes = false;
         rot.z = new ParticleSystem.MinMaxCurve(-0.6f, 0.6f);
-        // Тримати x/y у тому ж mode, що z, коли separateAxes=false — Unity використовує лише z
+        // Ð¢Ñ€Ð¸Ð¼Ð°Ñ‚Ð¸ x/y Ñƒ Ñ‚Ð¾Ð¼Ñƒ Ð¶ mode, Ñ‰Ð¾ z, ÐºÐ¾Ð»Ð¸ separateAxes=false â€” Unity Ð²Ð¸ÐºÐ¾Ñ€Ð¸ÑÑ‚Ð¾Ð²ÑƒÑ” Ð»Ð¸ÑˆÐµ z
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;
@@ -1360,3 +1358,4 @@ public static class RocketVisualBuilder
         if (t != null) Object.Destroy(t.gameObject);
     }
 }
+

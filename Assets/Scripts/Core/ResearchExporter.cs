@@ -246,19 +246,80 @@ public static class ResearchExporter
 
     public static void OpenLogsFolder()
     {
-        string dir = LogsDirectory;
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        RevealPath(LogsDirectory);
+    }
+
+    /// <summary>
+    /// Opens OS file manager for an export path.
+    /// Prefer selecting a concrete file (/select on Windows); otherwise open the folder.
+    /// </summary>
+    public static void RevealPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        path = Path.GetFullPath(path);
+        string target = path;
+        bool selectFile = false;
+
+        if (File.Exists(path))
         {
-            FileName = "explorer.exe",
-            Arguments = $"\"{dir}\"",
-            UseShellExecute = true
-        });
+            target = path;
+            selectFile = true;
+        }
+        else if (Directory.Exists(path))
+        {
+            // Prefer highlighting a known pack artifact inside the export folder.
+            string[] prefer =
+            {
+                "00_README.md",
+                "01_SUMMARY.md",
+                "02_results.csv",
+                "02_metrics.json",
+                "03_timeseries.csv"
+            };
+            foreach (string name in prefer)
+            {
+                string candidate = Path.Combine(path, name);
+                if (File.Exists(candidate))
+                {
+                    target = candidate;
+                    selectFile = true;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[Export] RevealPath: path not found: {path}");
+            return;
+        }
+
+        try
+        {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            string args = selectFile
+                ? "/select,\"" + target + "\""
+                : "\"" + target + "\"";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = args,
+                UseShellExecute = true
+            });
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-        System.Diagnostics.Process.Start("open", dir);
+            if (selectFile)
+                System.Diagnostics.Process.Start("open", "-R \"" + target + "\"");
+            else
+                System.Diagnostics.Process.Start("open", "\"" + target + "\"");
 #else
-        Application.OpenURL("file://" + dir.Replace("\\", "/"));
+            string folder = selectFile ? Path.GetDirectoryName(target) : target;
+            Application.OpenURL("file://" + folder.Replace("\\", "/"));
 #endif
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[Export] RevealPath failed: {ex.Message}");
+        }
     }
 
     // ─── builders ───

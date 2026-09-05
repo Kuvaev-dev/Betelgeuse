@@ -122,6 +122,7 @@ public class MonteCarloFairnessTests
     {
         var p = MakeParams();
         var rp = BuildRocket(p);
+        IdealLandingPresets.ClearActive();
 
         const int n = 6;
         var pid = new List<LandingMetrics>();

@@ -35,12 +35,16 @@ public sealed class PidLandingStrategy : ILandingController
             ctx.Rotation, ctx.AngularVelocity, maxDeg: 16f, kp: 0.7f, kd: 0.92f);
         float pc = Pitch.Calculate(0f, ctx.PitchErrorDeg, ctx.Dt);
         float yc = Yaw.Calculate(0f, ctx.YawErrorDeg, ctx.Dt);
+        // Ideal: less PID-on-top-of-PD (was double-loop rock near pad)
+        float pidLean = IdealLandingPresets.Active ? 0.18f : 0.35f;
         var g = new Vector3(
-            Mathf.Clamp(baseGimbal.x + pc * 0.35f, -16f, 16f),
+            Mathf.Clamp(baseGimbal.x + pc * pidLean, -16f, 16f),
             0f,
-            Mathf.Clamp(baseGimbal.z + yc * 0.35f, -16f, 16f));
+            Mathf.Clamp(baseGimbal.z + yc * pidLean, -16f, 16f));
         // Найслабше бічне наведення — baseline для диференціації Monte-Carlo
-        return new ControlCommand(thrust, g, lateralScale: 0.78f, gimbalBlend: 1f);
+        float lat = IdealLandingPresets.Active ? 0.55f : 0.78f;
+        float gb = IdealLandingPresets.Active ? 0.75f : 1f;
+        return new ControlCommand(thrust, g, lateralScale: lat, gimbalBlend: gb);
     }
 
     float CalculateThrust(in ControlContext ctx)

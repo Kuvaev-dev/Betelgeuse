@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Високополігональні круглі меші (Unity Cylinder/Sphere ≈ 20 граней — кутасті).
+/// Ð’Ð¸ÑÐ¾ÐºÐ¾Ð¿Ð¾Ð»Ñ–Ð³Ð¾Ð½Ð°Ð»ÑŒÐ½Ñ– ÐºÑ€ÑƒÐ³Ð»Ñ– Ð¼ÐµÑˆÑ– (Unity Cylinder/Sphere â‰ˆ 20 Ð³Ñ€Ð°Ð½ÐµÐ¹ â€” ÐºÑƒÑ‚Ð°ÑÑ‚Ñ–).
 /// </summary>
 public static class SmoothMesh
 {
@@ -11,11 +11,11 @@ public static class SmoothMesh
     const int SphereLon = 48;
 
     static Mesh cachedDisc;
-    static Mesh cachedCylinder;
+    static readonly System.Collections.Generic.Dictionary<int, Mesh> cachedCylinders = new();
     static Mesh cachedSphere;
     static Mesh cachedCapsule;
 
-    /// <summary>Плоский диск у площині XZ, нормаль +Y, радіус 0.5 (scale.x/z = діаметр).</summary>
+    /// <summary>ÐŸÐ»Ð¾ÑÐºÐ¸Ð¹ Ð´Ð¸ÑÐº Ñƒ Ð¿Ð»Ð¾Ñ‰Ð¸Ð½Ñ– XZ, Ð½Ð¾Ñ€Ð¼Ð°Ð»ÑŒ +Y, Ñ€Ð°Ð´Ñ–ÑƒÑ 0.5 (scale.x/z = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€).</summary>
     public static Mesh Disc(int segments = DefaultSeg)
     {
         segments = Mathf.Clamp(segments, 32, 256);
@@ -56,8 +56,8 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Кільце (annulus) у XZ: outerR=0.5, inner = 0.5 * innerRatio.
-    /// scale.x/z = зовнішній діаметр.
+    /// ÐšÑ–Ð»ÑŒÑ†Ðµ (annulus) Ñƒ XZ: outerR=0.5, inner = 0.5 * innerRatio.
+    /// scale.x/z = Ð·Ð¾Ð²Ð½Ñ–ÑˆÐ½Ñ–Ð¹ Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€.
     /// </summary>
     public static Mesh Ring(float innerRatio = 0.92f, int segments = DefaultSeg)
     {
@@ -100,12 +100,12 @@ public static class SmoothMesh
         return mesh;
     }
 
-    /// <summary>Циліндр радіусом 0.5, висотою 2 (як Unity default).</summary>
+    /// <summary>Ð¦Ð¸Ð»Ñ–Ð½Ð´Ñ€ Ñ€Ð°Ð´Ñ–ÑƒÑÐ¾Ð¼ 0.5, Ð²Ð¸ÑÐ¾Ñ‚Ð¾ÑŽ 2 (ÑÐº Unity default).</summary>
     public static Mesh Cylinder(int segments = DefaultSeg)
     {
         segments = Mathf.Clamp(segments, 32, 256);
-        if (cachedCylinder != null && cachedCylinder.name == $"SmoothCyl_{segments}")
-            return cachedCylinder;
+        if (cachedCylinders.TryGetValue(segments, out var hit) && hit != null)
+            return hit;
 
         var mesh = new Mesh { name = $"SmoothCyl_{segments}" };
         int sideV = (segments + 1) * 2;
@@ -175,11 +175,11 @@ public static class SmoothMesh
         mesh.triangles = tris.ToArray();
         mesh.RecalculateBounds();
         mesh.RecalculateTangents();
-        cachedCylinder = mesh;
+        cachedCylinders[segments] = mesh;
         return mesh;
     }
 
-    /// <summary>Сфера радіусом 0.5 (scale = діаметр).</summary>
+    /// <summary>Ð¡Ñ„ÐµÑ€Ð° Ñ€Ð°Ð´Ñ–ÑƒÑÐ¾Ð¼ 0.5 (scale = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€).</summary>
     public static Mesh Sphere(int lat = SphereLat, int lon = SphereLon)
     {
         lat = Mathf.Clamp(lat, 12, 96);
@@ -235,7 +235,7 @@ public static class SmoothMesh
         return mesh;
     }
 
-    /// <summary>Капсула: циліндр + півсфери, total height ≈ 2, radius 0.5 (як Unity Capsule).</summary>
+    /// <summary>ÐšÐ°Ð¿ÑÑƒÐ»Ð°: Ñ†Ð¸Ð»Ñ–Ð½Ð´Ñ€ + Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð¸, total height â‰ˆ 2, radius 0.5 (ÑÐº Unity Capsule).</summary>
     public static Mesh Capsule(int segments = 48, int hemiRings = 12)
     {
         segments = Mathf.Clamp(segments, 24, 96);
@@ -243,7 +243,7 @@ public static class SmoothMesh
         if (cachedCapsule != null && cachedCapsule.name == $"SmoothCap_{segments}_{hemiRings}")
             return cachedCapsule;
 
-        // висота 2, радіус 0.5 → висота корпусу 1 (−0.5..+0.5), півсфери радіус 0.5
+        // Ð²Ð¸ÑÐ¾Ñ‚Ð° 2, Ñ€Ð°Ð´Ñ–ÑƒÑ 0.5 â†’ Ð²Ð¸ÑÐ¾Ñ‚Ð° ÐºÐ¾Ñ€Ð¿ÑƒÑÑƒ 1 (âˆ’0.5..+0.5), Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð¸ Ñ€Ð°Ð´Ñ–ÑƒÑ 0.5
         float R = 0.5f;
         float halfBody = 0.5f;
 
@@ -269,7 +269,7 @@ public static class SmoothMesh
             }
         }
 
-        // Нижня півсфера: південний полюс → екватор на y = -halfBody
+        // ÐÐ¸Ð¶Ð½Ñ Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð°: Ð¿Ñ–Ð²Ð´ÐµÐ½Ð½Ð¸Ð¹ Ð¿Ð¾Ð»ÑŽÑ â†’ ÐµÐºÐ²Ð°Ñ‚Ð¾Ñ€ Ð½Ð° y = -halfBody
         for (int ring = 0; ring <= hemiRings; ring++)
         {
             float t = ring / (float)hemiRings;
@@ -280,7 +280,7 @@ public static class SmoothMesh
             AddRing(y, rr, Vector3.up * sy, t * 0.3f);
         }
 
-        // Циліндричний корпус (без дубльованого нижнього екватора)
+        // Ð¦Ð¸Ð»Ñ–Ð½Ð´Ñ€Ð¸Ñ‡Ð½Ð¸Ð¹ ÐºÐ¾Ñ€Ð¿ÑƒÑ (Ð±ÐµÐ· Ð´ÑƒÐ±Ð»ÑŒÐ¾Ð²Ð°Ð½Ð¾Ð³Ð¾ Ð½Ð¸Ð¶Ð½ÑŒÐ¾Ð³Ð¾ ÐµÐºÐ²Ð°Ñ‚Ð¾Ñ€Ð°)
         const int bodySteps = 2;
         for (int b = 1; b <= bodySteps; b++)
         {
@@ -289,7 +289,7 @@ public static class SmoothMesh
             AddRing(y, R, Vector3.zero, 0.3f + t * 0.4f);
         }
 
-        // Верхня півсфера (екватор уже додано як кінець корпусу — пропустити)
+        // Ð’ÐµÑ€Ñ…Ð½Ñ Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð° (ÐµÐºÐ²Ð°Ñ‚Ð¾Ñ€ ÑƒÐ¶Ðµ Ð´Ð¾Ð´Ð°Ð½Ð¾ ÑÐº ÐºÑ–Ð½ÐµÑ†ÑŒ ÐºÐ¾Ñ€Ð¿ÑƒÑÑƒ â€” Ð¿Ñ€Ð¾Ð¿ÑƒÑÑ‚Ð¸Ñ‚Ð¸)
         for (int ring = 1; ring <= hemiRings; ring++)
         {
             float t = ring / (float)hemiRings;
@@ -403,8 +403,8 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Дзвін сопла з криволінійним профілем (кілька кілець) — без «прямого конуса».
-    /// висота 2 (−1..1), exit r=0.5, throat r≈0.20.
+    /// Ð”Ð·Ð²Ñ–Ð½ ÑÐ¾Ð¿Ð»Ð° Ð· ÐºÑ€Ð¸Ð²Ð¾Ð»Ñ–Ð½Ñ–Ð¹Ð½Ð¸Ð¼ Ð¿Ñ€Ð¾Ñ„Ñ–Ð»ÐµÐ¼ (ÐºÑ–Ð»ÑŒÐºÐ° ÐºÑ–Ð»ÐµÑ†ÑŒ) â€” Ð±ÐµÐ· Â«Ð¿Ñ€ÑÐ¼Ð¾Ð³Ð¾ ÐºÐ¾Ð½ÑƒÑÐ°Â».
+    /// Ð²Ð¸ÑÐ¾Ñ‚Ð° 2 (âˆ’1..1), exit r=0.5, throat râ‰ˆ0.20.
     /// </summary>
     public static Mesh Bell(int segments = 64, int rings = 14)
     {
@@ -418,28 +418,28 @@ public static class SmoothMesh
         var norms = new Vector3[vCount];
         var uvs = new Vector2[vCount];
 
-        // Гладкий радіус bell: t=0 exit (низ) → t=1 throat (верх)
+        // Ð“Ð»Ð°Ð´ÐºÐ¸Ð¹ Ñ€Ð°Ð´Ñ–ÑƒÑ bell: t=0 exit (Ð½Ð¸Ð·) â†’ t=1 throat (Ð²ÐµÑ€Ñ…)
         float RadiusAt(float t)
         {
             t = Mathf.Clamp01(t);
             float exitR = 0.50f;
             float throatR = 0.195f;
-            // Ширший flare біля exit; м’яке звуження до throat
+            // Ð¨Ð¸Ñ€ÑˆÐ¸Ð¹ flare Ð±Ñ–Ð»Ñ exit; Ð¼â€™ÑÐºÐµ Ð·Ð²ÑƒÐ¶ÐµÐ½Ð½Ñ Ð´Ð¾ throat
             float flare = Mathf.Pow(1f - t, 1.55f);
             return Mathf.Lerp(throatR, exitR, flare);
         }
 
         for (int r = 0; r <= rings; r++)
         {
-            float t = r / (float)rings;          // 0 низ .. 1 верх
+            float t = r / (float)rings;          // 0 Ð½Ð¸Ð· .. 1 Ð²ÐµÑ€Ñ…
             float y = Mathf.Lerp(-1f, 1f, t);
             float rad = RadiusAt(t);
-            // d(radius)/d(t): від’ємне (звужується вгору)
+            // d(radius)/d(t): Ð²Ñ–Ð´â€™Ñ”Ð¼Ð½Ðµ (Ð·Ð²ÑƒÐ¶ÑƒÑ”Ñ‚ÑŒÑÑ Ð²Ð³Ð¾Ñ€Ñƒ)
             float t0 = Mathf.Max(0f, t - 0.02f);
             float t1 = Mathf.Min(1f, t + 0.02f);
             float drDt = (RadiusAt(t1) - RadiusAt(t0)) / Mathf.Max(1e-4f, t1 - t0);
-            // Дотична профілю в (radial, y): (drDt, 2), бо y охоплює 2 при t∈[0,1]
-            // Зовнішня нормаль ⊥ дотичної: (2, -drDt) у (radial, y)
+            // Ð”Ð¾Ñ‚Ð¸Ñ‡Ð½Ð° Ð¿Ñ€Ð¾Ñ„Ñ–Ð»ÑŽ Ð² (radial, y): (drDt, 2), Ð±Ð¾ y Ð¾Ñ…Ð¾Ð¿Ð»ÑŽÑ” 2 Ð¿Ñ€Ð¸ tâˆˆ[0,1]
+            // Ð—Ð¾Ð²Ð½Ñ–ÑˆÐ½Ñ Ð½Ð¾Ñ€Ð¼Ð°Ð»ÑŒ âŠ¥ Ð´Ð¾Ñ‚Ð¸Ñ‡Ð½Ð¾Ñ—: (2, -drDt) Ñƒ (radial, y)
             float nRad = 2f;
             float nY = -drDt;
 
@@ -497,7 +497,7 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Усічений конус (frustum): height 2 (−1..1), bottom r=0.5, top r = 0.5 * topRatio.
+    /// Ð£ÑÑ–Ñ‡ÐµÐ½Ð¸Ð¹ ÐºÐ¾Ð½ÑƒÑ (frustum): height 2 (âˆ’1..1), bottom r=0.5, top r = 0.5 * topRatio.
     /// </summary>
     public static Mesh Frustum(float topRatio = 0.7f, int segments = 96, int rings = 10)
     {
@@ -513,9 +513,9 @@ public static class SmoothMesh
 
         float rBot = 0.5f;
         float rTop = 0.5f * topRatio;
-        float dr = rTop - rBot; // по t 0→1
+        float dr = rTop - rBot; // Ð¿Ð¾ t 0â†’1
         float nRad = 2f;
-        float nY = -dr; // компонента зовнішньої нормалі
+        float nY = -dr; // ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ð° Ð·Ð¾Ð²Ð½Ñ–ÑˆÐ½ÑŒÐ¾Ñ— Ð½Ð¾Ñ€Ð¼Ð°Ð»Ñ–
 
         for (int r = 0; r <= rings; r++)
         {
@@ -559,8 +559,8 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Нос tangent ogive: base r=0.5 при y=-1, гладкий сферичний tip при y=+1.
-    /// Єдиний неперервний профіль (без накладених сфер). tipBlunt = tip radius / base R.
+    /// ÐÐ¾Ñ tangent ogive: base r=0.5 Ð¿Ñ€Ð¸ y=-1, Ð³Ð»Ð°Ð´ÐºÐ¸Ð¹ ÑÑ„ÐµÑ€Ð¸Ñ‡Ð½Ð¸Ð¹ tip Ð¿Ñ€Ð¸ y=+1.
+    /// Ð„Ð´Ð¸Ð½Ð¸Ð¹ Ð½ÐµÐ¿ÐµÑ€ÐµÑ€Ð²Ð½Ð¸Ð¹ Ð¿Ñ€Ð¾Ñ„Ñ–Ð»ÑŒ (Ð±ÐµÐ· Ð½Ð°ÐºÐ»Ð°Ð´ÐµÐ½Ð¸Ñ… ÑÑ„ÐµÑ€). tipBlunt = tip radius / base R.
     /// </summary>
     public static Mesh Ogive(float tipBlunt = 0.06f, int segments = 96, int rings = 36)
     {
@@ -569,21 +569,21 @@ public static class SmoothMesh
         tipBlunt = Mathf.Clamp(tipBlunt, 0.02f, 0.14f);
         var mesh = new Mesh { name = $"SmoothOgive_{segments}x{rings}" };
 
-        // Одиниця: висота H=2 (−1..+1), base R=0.5
+        // ÐžÐ´Ð¸Ð½Ð¸Ñ†Ñ: Ð²Ð¸ÑÐ¾Ñ‚Ð° H=2 (âˆ’1..+1), base R=0.5
         const float H = 2f;
         const float R = 0.5f;
         float tipR = R * tipBlunt;
-        // Класичний радіус tangent-ogive на повну висоту, далі раннє обрізання під tip-сферу
+        // ÐšÐ»Ð°ÑÐ¸Ñ‡Ð½Ð¸Ð¹ Ñ€Ð°Ð´Ñ–ÑƒÑ tangent-ogive Ð½Ð° Ð¿Ð¾Ð²Ð½Ñƒ Ð²Ð¸ÑÐ¾Ñ‚Ñƒ, Ð´Ð°Ð»Ñ– Ñ€Ð°Ð½Ð½Ñ” Ð¾Ð±Ñ€Ñ–Ð·Ð°Ð½Ð½Ñ Ð¿Ñ–Ð´ tip-ÑÑ„ÐµÑ€Ñƒ
         float rho = (R * R + H * H) / (2f * R);
 
-        // Стик ogive → сферичний tip, де збігаються нахили (приблизно на радіусі tipR)
-        // x від основи: r(x) = sqrt(rho^2 - (H-x)^2) + R - rho
-        // Центр tip-сфери на осі, щоб бути дотичною до ogive на стику.
-        float joinR = tipR * 1.15f; // трохи вище tip radius на ogive
+        // Ð¡Ñ‚Ð¸Ðº ogive â†’ ÑÑ„ÐµÑ€Ð¸Ñ‡Ð½Ð¸Ð¹ tip, Ð´Ðµ Ð·Ð±Ñ–Ð³Ð°ÑŽÑ‚ÑŒÑÑ Ð½Ð°Ñ…Ð¸Ð»Ð¸ (Ð¿Ñ€Ð¸Ð±Ð»Ð¸Ð·Ð½Ð¾ Ð½Ð° Ñ€Ð°Ð´Ñ–ÑƒÑÑ– tipR)
+        // x Ð²Ñ–Ð´ Ð¾ÑÐ½Ð¾Ð²Ð¸: r(x) = sqrt(rho^2 - (H-x)^2) + R - rho
+        // Ð¦ÐµÐ½Ñ‚Ñ€ tip-ÑÑ„ÐµÑ€Ð¸ Ð½Ð° Ð¾ÑÑ–, Ñ‰Ð¾Ð± Ð±ÑƒÑ‚Ð¸ Ð´Ð¾Ñ‚Ð¸Ñ‡Ð½Ð¾ÑŽ Ð´Ð¾ ogive Ð½Ð° ÑÑ‚Ð¸ÐºÑƒ.
+        float joinR = tipR * 1.15f; // Ñ‚Ñ€Ð¾Ñ…Ð¸ Ð²Ð¸Ñ‰Ðµ tip radius Ð½Ð° ogive
         float joinX = 0f;
         for (int iter = 0; iter < 24; iter++)
         {
-            // приблизно бінарний пошук x, де ogive r ≈ joinR
+            // Ð¿Ñ€Ð¸Ð±Ð»Ð¸Ð·Ð½Ð¾ Ð±Ñ–Ð½Ð°Ñ€Ð½Ð¸Ð¹ Ð¿Ð¾ÑˆÑƒÐº x, Ð´Ðµ ogive r â‰ˆ joinR
             float lo = 0f, hi = H * 0.98f;
             for (int k = 0; k < 20; k++)
             {
@@ -597,10 +597,10 @@ public static class SmoothMesh
         joinX = Mathf.Clamp(joinX, H * 0.55f, H * 0.92f);
         float underJ = rho * rho - (H - joinX) * (H - joinX);
         float rJoin = underJ > 0f ? Mathf.Sqrt(underJ) + R - rho : joinR;
-        // Центр сферичного tip: на осі, радіус tipR, приблизно через (rJoin, joinX)
-        // (rJoin)^2 + (joinX - cY_from_base)^2 = tipR^2  → place center so apex is at H
-        float tipCenterFromBase = H - tipR; // верхівка на H
-        // Підтягнути стик на ту сферу за потреби
+        // Ð¦ÐµÐ½Ñ‚Ñ€ ÑÑ„ÐµÑ€Ð¸Ñ‡Ð½Ð¾Ð³Ð¾ tip: Ð½Ð° Ð¾ÑÑ–, Ñ€Ð°Ð´Ñ–ÑƒÑ tipR, Ð¿Ñ€Ð¸Ð±Ð»Ð¸Ð·Ð½Ð¾ Ñ‡ÐµÑ€ÐµÐ· (rJoin, joinX)
+        // (rJoin)^2 + (joinX - cY_from_base)^2 = tipR^2  â†’ place center so apex is at H
+        float tipCenterFromBase = H - tipR; // Ð²ÐµÑ€Ñ…Ñ–Ð²ÐºÐ° Ð½Ð° H
+        // ÐŸÑ–Ð´Ñ‚ÑÐ³Ð½ÑƒÑ‚Ð¸ ÑÑ‚Ð¸Ðº Ð½Ð° Ñ‚Ñƒ ÑÑ„ÐµÑ€Ñƒ Ð·Ð° Ð¿Ð¾Ñ‚Ñ€ÐµÐ±Ð¸
         float maxROnSphere = Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - (joinX - tipCenterFromBase) * (joinX - tipCenterFromBase)));
         if (maxROnSphere > 1e-4f && rJoin > maxROnSphere)
             rJoin = maxROnSphere;
@@ -608,12 +608,12 @@ public static class SmoothMesh
         float RadiusAt(float t)
         {
             t = Mathf.Clamp01(t);
-            float x = t * H; // від основи
+            float x = t * H; // Ð²Ñ–Ð´ Ð¾ÑÐ½Ð¾Ð²Ð¸
             if (x <= joinX)
             {
                 float under = rho * rho - (H - x) * (H - x);
                 float r = under > 0f ? Mathf.Sqrt(under) + R - rho : 0f;
-                // плавний blend у сферу біля стику
+                // Ð¿Ð»Ð°Ð²Ð½Ð¸Ð¹ blend Ñƒ ÑÑ„ÐµÑ€Ñƒ Ð±Ñ–Ð»Ñ ÑÑ‚Ð¸ÐºÑƒ
                 float blendStart = joinX * 0.88f;
                 if (x > blendStart)
                 {
@@ -625,7 +625,7 @@ public static class SmoothMesh
                 }
                 return Mathf.Max(0.001f, r);
             }
-            // Сферичний tip
+            // Ð¡Ñ„ÐµÑ€Ð¸Ñ‡Ð½Ð¸Ð¹ tip
             float d = x - tipCenterFromBase;
             if (d >= tipR) return 0.001f;
             return Mathf.Max(0.001f, Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - d * d)));
@@ -663,7 +663,7 @@ public static class SmoothMesh
             }
         }
 
-        // Справжній полюс (tip без гостряка)
+        // Ð¡Ð¿Ñ€Ð°Ð²Ð¶Ð½Ñ–Ð¹ Ð¿Ð¾Ð»ÑŽÑ (tip Ð±ÐµÐ· Ð³Ð¾ÑÑ‚Ñ€ÑÐºÐ°)
         verts[pole] = new Vector3(0f, 1f, 0f);
         norms[pole] = Vector3.up;
         uvs[pole] = new Vector2(0.5f, 1f);
@@ -679,7 +679,7 @@ public static class SmoothMesh
             tris.Add(i0); tris.Add(i2); tris.Add(i1);
             tris.Add(i1); tris.Add(i2); tris.Add(i3);
         }
-        // Замкнути останнє кільце → полюс (останнє кільце вже на кінці; fan покращує tip)
+        // Ð—Ð°Ð¼ÐºÐ½ÑƒÑ‚Ð¸ Ð¾ÑÑ‚Ð°Ð½Ð½Ñ” ÐºÑ–Ð»ÑŒÑ†Ðµ â†’ Ð¿Ð¾Ð»ÑŽÑ (Ð¾ÑÑ‚Ð°Ð½Ð½Ñ” ÐºÑ–Ð»ÑŒÑ†Ðµ Ð²Ð¶Ðµ Ð½Ð° ÐºÑ–Ð½Ñ†Ñ–; fan Ð¿Ð¾ÐºÑ€Ð°Ñ‰ÑƒÑ” tip)
         int last = rings * stride;
         for (int i = 0; i < segments; i++)
         {
@@ -698,7 +698,7 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Frustum GO: diameter = діаметр основи, topRatio = top/base, halfHeight = піввисота.
+    /// Frustum GO: diameter = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€ Ð¾ÑÐ½Ð¾Ð²Ð¸, topRatio = top/base, halfHeight = Ð¿Ñ–Ð²Ð²Ð¸ÑÐ¾Ñ‚Ð°.
     /// </summary>
     public static GameObject MakeFrustum(string name, Transform parent, Vector3 pos,
         float baseDiameter, float halfHeight, float topRatio, Material mat)
@@ -717,7 +717,7 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Ogive GO: diameter = діаметр основи, halfHeight = піввисота ogive.
+    /// Ogive GO: diameter = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€ Ð¾ÑÐ½Ð¾Ð²Ð¸, halfHeight = Ð¿Ñ–Ð²Ð²Ð¸ÑÐ¾Ñ‚Ð° ogive.
     /// </summary>
     public static GameObject MakeOgive(string name, Transform parent, Vector3 pos,
         float baseDiameter, float halfHeight, Material mat, float tipBlunt = 0.06f)
@@ -834,7 +834,7 @@ public static class SmoothMesh
 
 
     /// <summary>
-    /// Sea-level overexpanded jet: y=0 nozzle (r=0.5) → y=1 tip, with decaying Mach diamonds.
+    /// Sea-level overexpanded jet: y=0 nozzle (r=0.5) â†’ y=1 tip, with decaying Mach diamonds.
     /// </summary>
     public static Mesh Plume(int segments = 48, int rings = 32)
     {
@@ -849,10 +849,11 @@ public static class SmoothMesh
         float RadiusAt(float t)
         {
             t = Mathf.Clamp01(t);
-            float envelope = Mathf.Lerp(1f, 1.58f, Mathf.Pow(t, 0.62f));
-            float diamond = 1f + 0.20f * Mathf.Sin(t * 6.4f * Mathf.PI) * Mathf.Exp(-t * 2.35f);
-            float taper = 1f - 0.78f * t * t;
-            return 0.5f * envelope * diamond * Mathf.Max(0.10f, taper);
+            // Slightly narrower sheath with softer tip and subtler Mach diamonds.
+            float envelope = Mathf.Lerp(1f, 1.42f, Mathf.Pow(t, 0.70f));
+            float diamond = 1f + 0.16f * Mathf.Sin(t * 6.8f * Mathf.PI) * Mathf.Exp(-t * 2.6f);
+            float taper = 1f - 0.88f * Mathf.Pow(t, 1.35f);
+            return 0.5f * envelope * diamond * Mathf.Max(0.06f, taper);
         }
 
         for (int r = 0; r <= rings; r++)
@@ -919,7 +920,7 @@ public static class SmoothMesh
     public static GameObject MakePlume(string name, Transform parent, Vector3 pos, Quaternion rot,
         float diameter, float length, Material mat)
     {
-        if (cachedPlume == null) cachedPlume = Plume(48, 36);
+        if (cachedPlume == null) cachedPlume = Plume(56, 40);
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         go.transform.localPosition = pos;

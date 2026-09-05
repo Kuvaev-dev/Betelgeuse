@@ -1,9 +1,9 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
-/// Візуальні ефекти двигуна: core/outer plume, дим, іскри, ground dust, light.
-/// Інтенсивність ∝ currentThrust / maxThrust (згладжено).
-/// Не чіпає velocityOverLifetime (різні mode X/Y/Z → Unity error).
+/// Визуал огня двигателей: core/outer plume, дым, искры, ground dust, light.
+/// Интенсивность от currentThrust / maxThrust (сглаженно).
+/// Не трогать velocityOverLifetime (режим X/Y/Z → Unity error).
 /// </summary>
 public class RocketEngineFX : MonoBehaviour
 {
@@ -98,18 +98,19 @@ public class RocketEngineFX : MonoBehaviour
 
         if (engineLight != null)
         {
-            float flicker = on ? 0.88f + 0.12f * Mathf.PerlinNoise(Time.time * 32f, 0.4f) : 1f;
+            float flicker = on ? EngineFlicker(0.4f) : 1f;
             engineLight.intensity = smoothThrust * maxLightIntensity * flicker;
             engineLight.range = lightRange * (0.55f + 0.45f * smoothThrust);
+            // Hotter / bluer at high throttle, warmer orange at low.
             engineLight.color = Color.Lerp(
-                new Color(1f, 0.38f, 0.08f),
-                new Color(1f, 0.78f, 0.32f),
-                0.25f + 0.75f * smoothThrust);
+                new Color(1f, 0.42f, 0.10f),
+                new Color(0.85f, 0.92f, 1.00f),
+                0.15f + 0.55f * smoothThrust);
         }
 
         DriveJets(on);
 
-        // Лише startSpeed / startSize (single-axis) — ніколи не змішувати curve modes на осях VOL
+        // Только startSpeed / startSize (single-axis) — избегать кривых VOL.
         void Tune(ParticleSystem ps, float spd0, float spd1, float sz0, float sz1)
         {
             if (ps == null) return;
@@ -120,10 +121,12 @@ public class RocketEngineFX : MonoBehaviour
         }
         if (on)
         {
-            float f0 = 70f + smoothThrust * 45f, f1 = 115f + smoothThrust * 50f;
-            float fs0 = 0.28f + smoothThrust * 0.18f, fs1 = 0.62f + smoothThrust * 0.28f;
-            float c0 = 100f + smoothThrust * 50f, c1 = 155f + smoothThrust * 55f;
-            float cs0 = 0.09f + smoothThrust * 0.07f, cs1 = 0.22f + smoothThrust * 0.10f;
+            // Length via speed; width via size — both track throttle with soft floor.
+            float thrustCurve = Mathf.Pow(smoothThrust, 0.72f);
+            float f0 = 74f + thrustCurve * 58f, f1 = 120f + thrustCurve * 70f;
+            float fs0 = 0.16f + thrustCurve * 0.14f, fs1 = 0.38f + thrustCurve * 0.22f;
+            float c0 = 108f + thrustCurve * 62f, c1 = 165f + thrustCurve * 72f;
+            float cs0 = 0.055f + thrustCurve * 0.055f, cs1 = 0.14f + thrustCurve * 0.08f;
             if (plumes != null)
                 for (int i = 0; i < plumes.Length; i++) Tune(plumes[i], f0, f1, fs0, fs1);
             else
@@ -134,8 +137,8 @@ public class RocketEngineFX : MonoBehaviour
                 Tune(flameCore, c0, c1, cs0, cs1);
             if (glows != null)
             {
-                float g0 = 1.2f + smoothThrust * 2f, g1 = 4f + smoothThrust * 5f;
-                float gs0 = 0.5f + smoothThrust * 0.25f, gs1 = 1.05f + smoothThrust * 0.45f;
+                float g0 = 1.1f + smoothThrust * 2.2f, g1 = 3.8f + smoothThrust * 5.5f;
+                float gs0 = 0.42f + smoothThrust * 0.22f, gs1 = 0.95f + smoothThrust * 0.40f;
                 for (int i = 0; i < glows.Length; i++) Tune(glows[i], g0, g1, gs0, gs1);
             }
         }
@@ -153,25 +156,40 @@ public class RocketEngineFX : MonoBehaviour
         }
     }
 
+    static float EngineFlicker(float seed)
+    {
+        float t = Time.time;
+        float a = Mathf.PerlinNoise(t * 23f, seed);
+        float b = Mathf.PerlinNoise(t * 51f, seed + 2.7f);
+        float c = Mathf.PerlinNoise(t * 9f, seed + 5.1f);
+        return 0.82f + 0.12f * a + 0.06f * b * c;
+    }
 
     void DriveJets(bool on)
     {
-        float flick = on
-            ? 0.86f + 0.14f * Mathf.PerlinNoise(Time.time * 19f, 0.3f)
-              * (0.55f + 0.45f * Mathf.PerlinNoise(Time.time * 47f, 1.8f))
-            : 0f;
-        float lenK = on ? Mathf.Lerp(0.18f, 1f, Mathf.Pow(smoothThrust, 0.48f)) : 0.04f;
-        float radK = on ? Mathf.Lerp(0.58f, 1f, smoothThrust) : 0.2f;
+        float flick = on ? EngineFlicker(0.3f) : 0f;
+        // Length grows faster than width with throttle (real plume behavior).
+        float lenK = on ? Mathf.Lerp(0.16f, 1.08f, Mathf.Pow(smoothThrust, 0.42f)) * flick : 0.04f;
+        float radK = on ? Mathf.Lerp(0.52f, 1.02f, Mathf.Pow(smoothThrust, 0.65f)) : 0.2f;
         float scroll = Time.time;
+        float noiseAmt = on ? Mathf.Lerp(0.28f, 0.52f, smoothThrust) : 0.2f;
+        float tipSmoke = on ? Mathf.Lerp(0.72f, 0.42f, smoothThrust) : 0.6f;
+        float softness = on ? Mathf.Lerp(1.55f, 1.2f, smoothThrust) : 1.4f;
 
         if (jetRoots != null)
         {
             for (int i = 0; i < jetRoots.Length; i++)
             {
                 if (jetRoots[i] == null) continue;
-                float wLen = 1f + 0.08f * Mathf.Sin(scroll * 19f + i * 1.7f);
-                float wRad = 1f + 0.10f * Mathf.Sin(scroll * 27f + i * 2.3f);
+                float wLen = 1f + 0.10f * Mathf.Sin(scroll * 19f + i * 1.7f)
+                    + 0.05f * Mathf.Sin(scroll * 43f + i * 0.9f);
+                float wRad = 1f + 0.12f * Mathf.Sin(scroll * 27f + i * 2.3f)
+                    + 0.04f * Mathf.PerlinNoise(scroll * 7f, i * 0.37f);
                 jetRoots[i].localScale = new Vector3(radK * wRad, lenK * wLen, radK * (2f - wRad));
+                // Tiny lateral shimmer (heat haze proxy without post FX).
+                float shimX = on ? 0.6f * Mathf.Sin(scroll * 31f + i * 1.1f) * smoothThrust : 0f;
+                float shimZ = on ? 0.6f * Mathf.Sin(scroll * 37f + i * 1.9f) * smoothThrust : 0f;
+                jetRoots[i].localRotation = Quaternion.Euler(180f + shimX, shimZ * 8f, shimX * 6f);
                 jetRoots[i].gameObject.SetActive(on);
             }
         }
@@ -183,15 +201,18 @@ public class RocketEngineFX : MonoBehaviour
             {
                 var r = jetRenderers[i];
                 if (r == null) continue;
-                float baseI = (i & 1) == 0 ? 2.7f : 5.1f;
+                bool isCore = (i & 1) == 1;
+                float baseI = isCore ? 6.0f : 3.2f;
+                float localFlick = flick * (0.94f + 0.06f * Mathf.PerlinNoise(scroll * 29f, i * 0.17f));
                 r.GetPropertyBlock(mpb);
-                mpb.SetFloat("_Intensity", on ? baseI * smoothThrust * flick : 0f);
-                mpb.SetFloat("_Flicker", flick);
+                mpb.SetFloat("_Intensity", on ? baseI * smoothThrust * localFlick : 0f);
+                mpb.SetFloat("_Flicker", localFlick);
                 mpb.SetFloat("_Scroll", scroll * (1.15f + 0.12f * (i & 1)));
-                mpb.SetFloat("_NoiseAmt", 0.42f);
+                mpb.SetFloat("_NoiseAmt", noiseAmt * (isCore ? 0.85f : 1.05f));
+                mpb.SetFloat("_Softness", softness);
+                mpb.SetFloat("_EdgePower", 1.75f);
+                mpb.SetFloat("_TipSmoke", tipSmoke * (isCore ? 0.55f : 1f));
                 r.SetPropertyBlock(mpb);
-                if (r.sharedMaterial != null && r.sharedMaterial.HasProperty("_Scroll"))
-                    r.sharedMaterial.SetFloat("_Scroll", scroll * (1.1f + 0.15f * (i & 1)));
                 r.enabled = on;
             }
         }
@@ -204,7 +225,7 @@ public class RocketEngineFX : MonoBehaviour
                 for (int i = 0; i < glowBalls.Length; i++)
                     glowBaseScale[i] = glowBalls[i] != null ? glowBalls[i].localScale : Vector3.one;
             }
-            float gk = on ? (0.42f + 0.70f * smoothThrust) * (0.9f + 0.1f * flick) : 0.01f;
+            float gk = on ? (0.40f + 0.75f * smoothThrust) * (0.88f + 0.12f * flick) : 0.01f;
             for (int i = 0; i < glowBalls.Length; i++)
             {
                 if (glowBalls[i] == null) continue;

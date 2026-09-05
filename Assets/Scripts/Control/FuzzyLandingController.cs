@@ -104,7 +104,9 @@ public class FuzzyLandingController : MonoBehaviour, ILandingController
         float thrust = CalculateThrust(ctx.Height, ctx.VerticalVelocity, ctx.Mass);
         Vector3 gimbal = CalculateGimbal(
             ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg);
-        return new ControlCommand(thrust, gimbal, lateralScale: 1.22f, gimbalBlend: 0.4f);
+        float lat = IdealLandingPresets.Active ? 0.75f : 1.22f;
+        float gb = IdealLandingPresets.Active ? 0.18f : 0.4f;
+        return new ControlCommand(thrust, gimbal, lateralScale: lat, gimbalBlend: gb);
     }
 
     float FuzzyAxis(float errorDeg, float rateDeg)

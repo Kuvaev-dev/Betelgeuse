@@ -260,6 +260,7 @@ public class MissionControlUI : MonoBehaviour
         RefreshSpeedLabel();
         UpdateTrajButtonLabel();
         if (rocket != null) UpdateFlightStep(rocket.state);
+        sim?.RepublishComparisonStatistics();
     }
 
     void DetachConditionSection()
@@ -363,6 +364,21 @@ public class MissionControlUI : MonoBehaviour
                     {
                         var hc = C_Panel; hc.a = 1f; img.color = hc;
                     }
+                    break;
+                case "HelpFooter":
+                case "HelpObjectBg":
+                case "HelpKeyChip":
+                    img.color = C_PanelSoft;
+                    break;
+                case "HelpF1Pill":
+                    img.color = new Color(C_Accent.r, C_Accent.g, C_Accent.b, 0.18f);
+                    break;
+                case "HelpAccent":
+                    img.color = new Color(C_Accent.r, C_Accent.g, C_Accent.b, 0.92f);
+                    break;
+                case "HelpHdrLine":
+                case "HelpSecLine":
+                    img.color = HeaderLineColor;
                     break;
                 case "SliderBlock":
                 case "ToggleRow":
@@ -1380,8 +1396,8 @@ public class MissionControlUI : MonoBehaviour
         MenuBtn(row2.transform, (UILocale.T("top_ideal") + "  I").ToUpperInvariant(), OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
         trajToggleBtn = MenuBtn(row2.transform, PathButtonLabel(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
         trajToggleImg = trajToggleBtn != null ? trajToggleBtn.targetGraphic as Image : null;
-        trajVisible = true;
-        EnsureTrajectoryVisualizer()?.SetVisible(true);
+        trajVisible = UserSettings.TrajectoryVisible;
+        EnsureTrajectoryVisualizer()?.SetVisible(trajVisible);
         UpdateTrajButtonVisual();
         viewToggleBtn = MenuBtn(row2.transform, ViewButtonLabel(), OnFullTrajectoryView, MenuBtnKind.Normal, chipW, out txtViewBtn);
         viewToggleImg = viewToggleBtn != null ? viewToggleBtn.targetGraphic as Image : null;
@@ -1755,7 +1771,8 @@ public class MissionControlUI : MonoBehaviour
         ResetFlightPeaks();
         overviewCam = false;
         ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
-        // Зміна режиму: робочі GNC + номінальні (складніші) IC, не «залиплий» ідеал
+        // Зміна режиму: робочі GNC + номінальні IC, не «залиплий» ідеал
+        IdealLandingPresets.ClearActive();
         IdealLandingPresets.ApplyDefaultControllerTuning(
             rocket, rocket.fuzzyController, rocket.neuralController, rocket.hybridController);
         RestoreNominalInitialConditions();
@@ -2202,10 +2219,15 @@ public class MissionControlUI : MonoBehaviour
         UpdateViewButtonVisual();
         ApplySettings();
         ApplyExperimentInitialConditions();
+        // Ideal [I]: перед стартом знову ideal GNC (ApplySettings міг перезаписати residual/gains)
+        if (IdealLandingPresets.Active)
+            IdealLandingPresets.ReapplyModeIdeal(rocket);
         // Детерміновані збурення одиночного запуску з поточного seed
-        SimRng.Reseed(sim != null ? sim.experimentSeed : UserSettings.ExperimentSeed);
+        int seed = sim != null ? sim.experimentSeed : UserSettings.ExperimentSeed;
+        SimRng.Reseed(seed);
         rocket.batchDrivenTicks = false; // гарантувати FixedUpdate + trajectory
-        // Звичайний старт: пакет → sep → Stage1 (Ideal лишає skipStackPhase=true)
+        rocket.skipStackPhase = true; // Stage-1 landing only (Ideal / демо / single)
+        rocket.NavSeed = (uint)Mathf.Max(1, seed);
         rocket.ResetSimulation();
         UpdatePauseButtonVisual();
         var tv = EnsureTrajectoryVisualizer();
@@ -2217,6 +2239,16 @@ public class MissionControlUI : MonoBehaviour
         bool noise = noiseToggle != null && noiseToggle.isOn;
         float massVar = massNoiseSlider != null ? massNoiseSlider.value : UserSettings.MassNoise;
         float angVar = angleNoiseSlider != null ? angleNoiseSlider.value : UserSettings.AngleNoise;
+        // Ideal clean: jitter/маса/кут = 0
+        if (IdealLandingPresets.Active)
+        {
+            wind = 0f;
+            noise = false;
+            massVar = 0f;
+            angVar = 0f;
+        }
+        // Single-flight NAV noise: раніше виставлявся ЛИШЕ в MC → після MC лишався 0.2 і Ideal «їхав» вбік
+        rocket.NavNoiseScale = noise ? 0.2f : 0f;
         if (sim != null)
         {
             sim.windStrength = wind;
@@ -2224,7 +2256,8 @@ public class MissionControlUI : MonoBehaviour
             sim.massVariationPercent = massVar;
             sim.angleVariationDegrees = angVar;
         }
-        rocket.ApplyFlightDisturbances(wind, noise, massVar, angVar);
+        // positionJitter=0 — інакше default 18 м зсуває IC і ламає Ideal soft-landing
+        rocket.ApplyFlightDisturbances(wind, noise, massVar, angVar, positionJitterMeters: 0f);
 
         float h0 = rocket.state.position.y;
         string dist = UILocale.IsUK
@@ -2249,22 +2282,31 @@ public class MissionControlUI : MonoBehaviour
         IdealLandingPresets.Apply(rocket, sim, out string uk, out string en);
         string msg = UILocale.IsUK ? uk : en;
 
-        // Синхронізувати UI-слайдери з пресетом Ideal
+        // Синхронізувати UI-слайдери з пресетом Ideal (повний clean IC)
         loadingSettings = true;
         if (heightSlider) heightSlider.value = IdealLandingPresets.StartHeight;
         if (descentSlider) descentSlider.value = IdealLandingPresets.StartDescentSpeed;
-        if (tilt0Slider) tilt0Slider.value = Mathf.Round(IdealLandingPresets.StartTiltDeg);
+        if (tilt0Slider) tilt0Slider.value = IdealLandingPresets.StartTiltDeg;
         if (windSlider) windSlider.value = 0f;
         if (noiseToggle) noiseToggle.isOn = false;
         if (trainToggle) trainToggle.isOn = false;
+        if (massNoiseSlider) massNoiseSlider.value = 0f;
+        if (angleNoiseSlider) angleNoiseSlider.value = 0f;
+        if (residualToggle) residualToggle.isOn = true; // Hybrid Ideal потребує residual
         loadingSettings = false;
         UserSettings.StartHeight = IdealLandingPresets.StartHeight;
         UserSettings.StartDescentSpeed = IdealLandingPresets.StartDescentSpeed;
-        UserSettings.StartTilt = Mathf.Round(IdealLandingPresets.StartTiltDeg);
+        UserSettings.StartTilt = IdealLandingPresets.StartTiltDeg;
         UserSettings.Wind = 0f;
         UserSettings.Noise = false;
+        UserSettings.MassNoise = 0f;
+        UserSettings.AngleNoise = 0f;
+        UserSettings.HybridResidual = true;
+        UserSettings.Train = false;
         UserSettings.Save();
         ApplySettings();
+        // ApplySettings міг скинути residual/GNC з toggle — повернути ideal GNC
+        IdealLandingPresets.ReapplyModeIdeal(rocket);
 
         HideLandingResult();
         ClearGraphs();
@@ -2338,11 +2380,14 @@ public class MissionControlUI : MonoBehaviour
             return;
         }
         if (rocket == null) return;
+        overviewCam = false; // STOP must not keep pad Overview framing
         rocket.StopSimulation(keepPosition: true);
         HideLandingResult();
         NotifyInfo(UILocale.T("msg_stopped"));
         SetStatusVisual("st_stop", C_Amber);
         UpdatePauseButtonVisual();
+        RefreshCamLabel();
+        UpdateViewButtonVisual();
     }
 
     string PauseButtonLabel()
@@ -2496,6 +2541,7 @@ public class MissionControlUI : MonoBehaviour
             {
                 lastExportPath = sim.SaveComparisonReports();
                 NotifyInfo(string.Format(UILocale.T("msg_export_cmp"), lastExportPath));
+                ResearchExporter.RevealPath(lastExportPath);
                 return;
             }
 
@@ -2520,6 +2566,7 @@ public class MissionControlUI : MonoBehaviour
 
             lastExportPath = ExportCurrentLandingPackage();
             NotifyInfo(string.Format(UILocale.T("msg_export_ok"), lastExportPath));
+            ResearchExporter.RevealPath(lastExportPath);
         }
         catch (System.Exception ex)
         {
@@ -2600,6 +2647,7 @@ public class MissionControlUI : MonoBehaviour
         ResetFlightPeaks();
         // Зафіксувати справедливий paired Monte-Carlo протокол (однакові ПУ + збурення для A–D)
         DefenseBaseline.ApplyTo(sim);
+        IdealLandingPresets.ClearActive(); // Ideal soft-GNC must not leak into MC
         if (rocket?.hybridController != null)
             rocket.hybridController.useNeuralResidual = DefenseBaseline.HybridResidualOn;
         SyncUiFromDefenseBaseline();
@@ -2658,33 +2706,11 @@ public class MissionControlUI : MonoBehaviour
         SetHelpVisible(false);
         HideLandingResult();
 
-        // Hybrid Ideal: посадка лише 1-го ступеня (Earth LZ)
+        // Hybrid + повний Ideal (GNC + clean IC). SelectMode скидає Ideal — Apply після нього.
         SelectMode(RocketPhysics.ControlMode.Hybrid);
         yield return null;
-
-        if (heightSlider != null) heightSlider.value = IdealLandingPresets.StartHeight;
-        if (descentSlider != null) descentSlider.value = IdealLandingPresets.StartDescentSpeed;
-        if (tilt0Slider != null) tilt0Slider.value = IdealLandingPresets.StartTiltDeg;
-        if (windSlider != null) windSlider.value = 0f;
-        if (noiseToggle != null) noiseToggle.isOn = false;
-        if (sim != null)
-        {
-            sim.enableNoise = false;
-            sim.windStrength = 0f;
-            sim.startHeight = IdealLandingPresets.StartHeight;
-            sim.startDescentSpeed = IdealLandingPresets.StartDescentSpeed;
-            sim.startTiltDeg = IdealLandingPresets.StartTiltDeg;
-        }
-
-        IdealLandingPresets.ApplyDefaultControllerTuning(
-            rocket, rocket.fuzzyController, rocket.neuralController, rocket.hybridController);
-        if (rocket.neuralController != null)
-        {
-            rocket.neuralController.enableTraining = false;
-            rocket.neuralController.InstallIdealWeights();
-        }
+        OnApplyIdealPresets();
         rocket.skipStackPhase = true;
-
         yield return null;
         ApplyLiveTimeScale(Mathf.Max(1f, Time.timeScale));
         OnStartLanding();
@@ -2700,14 +2726,8 @@ public class MissionControlUI : MonoBehaviour
         yield return new WaitForSecondsRealtime(1.2f);
         if (rocket != null && rocket.state.simulationFinished)
         {
-            // Не зривати ручний огляд (Manual / user orbit) — лише з Follow без lock
-            var cam = ResolveCamera();
-            bool userInspecting = cam != null && (
-                cam.mode == CameraFollow.ViewMode.Manual
-                || cam.userOrbitLock
-                || cam.mode == CameraFollow.ViewMode.Overview);
-            if (!userInspecting)
-                OnFullTrajectoryView();
+            // Демо: після посадки завжди режим огляду (повна траєкторія + лінія)
+            EnterPostLandingInspect();
             NotifyInfo(UILocale.T("msg_demo_done"));
         }
         defenseDemoCo = null;
@@ -2737,7 +2757,7 @@ public class MissionControlUI : MonoBehaviour
 
     void BuildHelpOverlay(Transform parent)
     {
-        // Легкий scrim — HUD/сцена лишаються видимими (не «сіра стіна»)
+        // Легкий scrim — HUD/сцена лишаються видимими (не як Result overlay)
         helpRoot = CreatePanel("HelpOverlay", parent, HelpScrimColor());
         var rt = helpRoot.GetComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
@@ -2749,17 +2769,12 @@ public class MissionControlUI : MonoBehaviour
         dimBtn.transition = Selectable.Transition.None;
         dimBtn.onClick.AddListener(() => SetHelpVisible(false));
 
-        // Компактна картка: title + body + кнопка
-        const float cardW = 540f;
-        const float cardH = 430f;
-        const float titleH = 28f;
-        const float titleTop = 14f;
-        const float bodyTop = titleTop + titleH + 8f;
-        const float btnH = 34f;
-        const float btnBottom = 14f;
-        const float bodyBottom = btnBottom + btnH + 10f;
+        const float cardW = 560f;
+        const float cardH = 468f;
+        const float headerH = 52f;
+        const float footerH = 52f;
+        const float padX = 18f;
 
-        // Непрозора картка поверх легкого scrim
         Color cardBg = C_Panel;
         cardBg.a = 1f;
         var card = CreatePanel("HelpCard", helpRoot.transform, cardBg);
@@ -2768,38 +2783,199 @@ public class MissionControlUI : MonoBehaviour
         crt.pivot = new Vector2(0.5f, 0.5f);
         crt.sizeDelta = new Vector2(cardW, cardH);
         Outline(card, 1.5f);
-        // Клік по картці не закриває help
-        var block = card.AddComponent<Button>();
-        block.targetGraphic = card.GetComponent<Image>();
-        block.transition = Selectable.Transition.None;
+        // Image.raycastTarget блокує клік до scrim; без Button — щоб ScrollRect отримував drag/wheel
 
-        var title = CreateText(card.transform, UILocale.T("help_title"), 17, C_Accent, FontStyles.Bold);
+        // Акцентна смуга зверху — як ResultCard
+        var accent = CreatePanel("HelpAccent", card.transform, new Color(C_Accent.r, C_Accent.g, C_Accent.b, 0.92f));
+        accent.GetComponent<Image>().raycastTarget = false;
+        var art = accent.GetComponent<RectTransform>();
+        art.anchorMin = new Vector2(0f, 1f);
+        art.anchorMax = new Vector2(1f, 1f);
+        art.pivot = new Vector2(0.5f, 1f);
+        art.anchoredPosition = Vector2.zero;
+        art.sizeDelta = new Vector2(0f, 3f);
+
+        // Заголовок + F1 pill
+        var title = CreateText(card.transform, UILocale.T("help_title"), 16, C_Accent, FontStyles.Bold);
         var tr = title.rectTransform;
-        tr.anchorMin = new Vector2(0, 1);
-        tr.anchorMax = new Vector2(1, 1);
-        tr.pivot = new Vector2(0.5f, 1);
-        tr.anchoredPosition = new Vector2(0, -titleTop);
-        tr.sizeDelta = new Vector2(-28, titleH);
-        title.alignment = TextAlignmentOptions.Center;
+        tr.anchorMin = new Vector2(0f, 1f);
+        tr.anchorMax = new Vector2(1f, 1f);
+        tr.pivot = new Vector2(0f, 1f);
+        tr.anchoredPosition = new Vector2(padX, -14f);
+        tr.sizeDelta = new Vector2(-(padX + 72f), 24f);
+        title.alignment = TextAlignmentOptions.MidlineLeft;
+        title.characterSpacing = 0.8f;
+        title.overflowMode = TextOverflowModes.Ellipsis;
         title.raycastTarget = false;
 
-        var body = CreateText(card.transform, UILocale.T("help_body"), 12, C_Text);
-        var br = body.rectTransform;
-        br.anchorMin = new Vector2(0, 0);
-        br.anchorMax = new Vector2(1, 1);
-        br.offsetMin = new Vector2(20, bodyBottom);
-        br.offsetMax = new Vector2(-20, -bodyTop);
-        body.alignment = TextAlignmentOptions.TopLeft;
-        body.textWrappingMode = TextWrappingModes.Normal;
-        body.overflowMode = TextOverflowModes.Ellipsis;
-        body.raycastTarget = false;
-        body.lineSpacing = 2f;
+        var f1Pill = CreatePanel("HelpF1Pill", card.transform, new Color(C_Accent.r, C_Accent.g, C_Accent.b, 0.18f));
+        f1Pill.GetComponent<Image>().raycastTarget = false;
+        var fprt = f1Pill.GetComponent<RectTransform>();
+        fprt.anchorMin = fprt.anchorMax = new Vector2(1f, 1f);
+        fprt.pivot = new Vector2(1f, 1f);
+        fprt.anchoredPosition = new Vector2(-padX, -12f);
+        fprt.sizeDelta = new Vector2(48f, 28f);
+        var f1Txt = CreateText(f1Pill.transform, "F1", 13, C_Accent, FontStyles.Bold);
+        StretchFull(f1Txt.rectTransform, 2, 2, 2, 2);
+        f1Txt.alignment = TextAlignmentOptions.Center;
+        f1Txt.raycastTarget = false;
 
-        float btnY = -(cardH - btnBottom - btnH);
-        float btnX = (cardW - 200f) * 0.5f;
-        // Як кнопка Help у top menu: C_Btn + ButtonLabelOn (не фіолетовий Action)
-        ActionButtonAt(card.transform, btnX, btnY, 200f, btnH, UILocale.T("btn_ok"),
+        // Hairline під заголовком
+        var hdrLine = CreatePanel("HelpHdrLine", card.transform, HeaderLineColor);
+        hdrLine.GetComponent<Image>().raycastTarget = false;
+        PinTL(hdrLine.GetComponent<RectTransform>(), padX, -headerH, cardW - padX * 2f, 1.5f);
+
+        // Footer
+        var footer = CreatePanel("HelpFooter", card.transform, C_PanelSoft);
+        footer.GetComponent<Image>().raycastTarget = false;
+        var frt = footer.GetComponent<RectTransform>();
+        frt.anchorMin = new Vector2(0f, 0f);
+        frt.anchorMax = new Vector2(1f, 0f);
+        frt.pivot = new Vector2(0.5f, 0f);
+        frt.anchoredPosition = Vector2.zero;
+        frt.sizeDelta = new Vector2(0f, footerH);
+
+        var hint = CreateText(footer.transform, UILocale.T("help_hint"), 11, C_Secondary);
+        var hrt = hint.rectTransform;
+        hrt.anchorMin = new Vector2(0f, 0f);
+        hrt.anchorMax = new Vector2(1f, 1f);
+        hrt.offsetMin = new Vector2(padX, 8f);
+        hrt.offsetMax = new Vector2(-(padX + 168f), 8f);
+        hint.alignment = TextAlignmentOptions.MidlineLeft;
+        hint.overflowMode = TextOverflowModes.Ellipsis;
+        hint.textWrappingMode = TextWrappingModes.NoWrap;
+        hint.raycastTarget = false;
+
+        // OK — як chrome-кнопки top menu
+        float btnW = 148f;
+        float btnH = 32f;
+        float btnX = cardW - padX - btnW;
+        float btnY = -(cardH - (footerH - btnH) * 0.5f - btnH);
+        ActionButtonAt(card.transform, btnX, btnY, btnW, btnH, UILocale.T("btn_ok"),
             "HelpOkBtn", C_Btn, () => SetHelpVisible(false));
+
+        // Scroll body між header і footer
+        var scrollHost = CreatePanel("HelpScroll", card.transform, new Color(0, 0, 0, 0));
+        // Потрібен raycast, інакше колесо миші не крутить ScrollRect
+        scrollHost.GetComponent<Image>().raycastTarget = true;
+        var shrt = scrollHost.GetComponent<RectTransform>();
+        StretchFull(shrt, 0f, footerH, 0f, headerH + 4f);
+
+        var viewport = CreatePanel("HelpViewport", scrollHost.transform, new Color(0, 0, 0, 0));
+        viewport.GetComponent<Image>().raycastTarget = true;
+        var vrt = viewport.GetComponent<RectTransform>();
+        StretchFull(vrt, padX - 4f, 4f, padX - 4f, 2f);
+        viewport.AddComponent<RectMask2D>();
+
+        var content = CreatePanel("HelpContent", viewport.transform, new Color(0, 0, 0, 0));
+        content.GetComponent<Image>().raycastTarget = false;
+        var contRt = content.GetComponent<RectTransform>();
+        contRt.anchorMin = new Vector2(0f, 1f);
+        contRt.anchorMax = new Vector2(1f, 1f);
+        contRt.pivot = new Vector2(0.5f, 1f);
+        contRt.anchoredPosition = Vector2.zero;
+        contRt.sizeDelta = new Vector2(0f, 10f);
+
+        var scroll = scrollHost.AddComponent<ScrollRect>();
+        scroll.viewport = vrt;
+        scroll.content = contRt;
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 36f;
+        scroll.inertia = true;
+        scroll.decelerationRate = 0.12f;
+
+        float inner = cardW - padX * 2f;
+        float y = -8f;
+        float rowPad = 4f;
+
+        // Об'єкт місії — soft banner
+        var objBg = CreatePanel("HelpObjectBg", content.transform, C_PanelSoft);
+        objBg.GetComponent<Image>().raycastTarget = false;
+        PinTL(objBg.GetComponent<RectTransform>(), rowPad, y, inner - rowPad * 2f, 40f);
+        var objTxt = CreateText(objBg.transform, UILocale.T("help_object"), 12, C_Text);
+        objTxt.textWrappingMode = TextWrappingModes.Normal;
+        objTxt.alignment = TextAlignmentOptions.MidlineLeft;
+        objTxt.overflowMode = TextOverflowModes.Ellipsis;
+        objTxt.raycastTarget = false;
+        StretchFull(objTxt.rectTransform, 12, 6, 12, 6);
+        y -= 48f;
+
+        void SecHeader(string key)
+        {
+            y -= 2f;
+            var t = CreateText(content.transform, UILocale.T(key), 10, C_Header, FontStyles.Bold);
+            t.characterSpacing = 2.8f;
+            t.raycastTarget = false;
+            PinTL(t.rectTransform, rowPad, y, inner - rowPad * 2f, 15f);
+            y -= 16f;
+            var line = CreatePanel("HelpSecLine", content.transform, HeaderLineColor);
+            line.GetComponent<Image>().raycastTarget = false;
+            PinTL(line.GetComponent<RectTransform>(), rowPad, y, inner - rowPad * 2f, 1.5f);
+            y -= 8f;
+        }
+
+        void KeyRow(string keys, string descKey)
+        {
+            const float rowH = 28f;
+            const float keyW = 128f;
+            var row = CreatePanel("HelpRow", content.transform, new Color(0, 0, 0, 0));
+            row.GetComponent<Image>().raycastTarget = false;
+            PinTL(row.GetComponent<RectTransform>(), rowPad, y, inner - rowPad * 2f, rowH);
+
+            var chip = CreatePanel("HelpKeyChip", row.transform, C_PanelSoft);
+            chip.GetComponent<Image>().raycastTarget = false;
+            PinTL(chip.GetComponent<RectTransform>(), 0f, 0f, keyW, rowH - 2f);
+            var kTxt = CreateText(chip.transform, keys, 11, C_Accent, FontStyles.Bold);
+            StretchFull(kTxt.rectTransform, 6, 2, 6, 2);
+            kTxt.alignment = TextAlignmentOptions.MidlineLeft;
+            kTxt.overflowMode = TextOverflowModes.Ellipsis;
+            kTxt.textWrappingMode = TextWrappingModes.NoWrap;
+            kTxt.raycastTarget = false;
+
+            var dTxt = CreateText(row.transform, UILocale.T(descKey), 12, C_Text);
+            var drt = dTxt.rectTransform;
+            drt.anchorMin = new Vector2(0f, 0f);
+            drt.anchorMax = new Vector2(1f, 1f);
+            drt.offsetMin = new Vector2(keyW + 10f, 0f);
+            drt.offsetMax = new Vector2(0f, 0f);
+            dTxt.alignment = TextAlignmentOptions.MidlineLeft;
+            dTxt.overflowMode = TextOverflowModes.Ellipsis;
+            dTxt.textWrappingMode = TextWrappingModes.NoWrap;
+            dTxt.raycastTarget = false;
+
+            y -= rowH + 2f;
+        }
+
+        void NoteLine(string key, float h = 36f)
+        {
+            var n = CreateText(content.transform, UILocale.T(key), 12, C_Secondary);
+            n.textWrappingMode = TextWrappingModes.Normal;
+            n.alignment = TextAlignmentOptions.TopLeft;
+            n.overflowMode = TextOverflowModes.Overflow;
+            n.raycastTarget = false;
+            PinTL(n.rectTransform, rowPad + 2f, y, inner - rowPad * 2f - 4f, h);
+            y -= h + 4f;
+        }
+
+        // Рядки = існуюча довідка (без вигаданих хоткеїв)
+        SecHeader("help_sec_controls");
+        KeyRow("1–4", "help_k_modes");
+        KeyRow("Space · Esc", "help_k_run");
+        KeyRow("I · U", "help_k_ideal");
+        KeyRow("D · P · X", "help_k_demo");
+        KeyRow("F / T / C / R", "help_k_cam");
+        KeyRow("L · E · O", "help_k_io");
+        KeyRow("H · G · Y · F1", "help_k_ui");
+
+        SecHeader("help_sec_landing");
+        NoteLine("help_landing", 28f);
+
+        SecHeader("help_sec_research");
+        NoteLine("help_research", 56f);
+
+        contRt.sizeDelta = new Vector2(0f, Mathf.Max(10f, -y + 12f));
 
         helpRoot.SetActive(false);
         helpVisible = false;
@@ -2861,6 +3037,32 @@ public class MissionControlUI : MonoBehaviour
         if (cam == null) return;
         overviewCam = true;
         cam.SnapToFullTrajectoryView();
+        RefreshCamLabel();
+        UpdateViewButtonVisual();
+    }
+
+    /// <summary>
+    /// Після Демо: режим огляду — камера на повну траєкторію + лінія видима.
+    /// Не залежить від userOrbitLock (на відміну від звичайного Start).
+    /// </summary>
+    void EnterPostLandingInspect()
+    {
+        var tv = EnsureTrajectoryVisualizer();
+        if (tv != null)
+        {
+            trajVisible = true;
+            tv.SetVisible(true);
+            UserSettings.TrajectoryVisible = true;
+            UserSettings.Save();
+            UpdateTrajButtonVisual();
+        }
+
+        var cam = ResolveCamera();
+        if (cam == null) return;
+        cam.userOrbitLock = false;
+        overviewCam = true;
+        // Максимально далеко — scroll наближує, запас зуму повний
+        cam.SnapToFullTrajectoryView(maxZoomOut: true);
         RefreshCamLabel();
         UpdateViewButtonVisual();
     }

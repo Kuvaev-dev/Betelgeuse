@@ -89,19 +89,43 @@ public static class EnvironmentTextures
     public static Material MakeGroundMaterial()
     {
         EnsureLoaded();
-        var mat = VisualMaterials.Lit(MeadowTint, 0f, 0.18f);
-        mat.name = "EarthGround_PH";
+        var groundShader = Shader.Find("Betelgeuse/LandingRangeGround");
+        Material mat;
+        if (groundShader != null)
+        {
+            mat = new Material(groundShader);
+            mat.name = "EarthGround_LandingRange";
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+            if (mat.HasProperty("_TileMeters")) mat.SetFloat("_TileMeters", 16f);
+            if (mat.HasProperty("_MacroStrength")) mat.SetFloat("_MacroStrength", 0.45f);
+            if (mat.HasProperty("_MacroBright")) mat.SetFloat("_MacroBright", 1.35f);
+            if (mat.HasProperty("_TerrainRadius")) mat.SetFloat("_TerrainRadius", LunarTerrainMesh.TerrainRadius);
+            if (mat.HasProperty("_RimFadeWidth")) mat.SetFloat("_RimFadeWidth", 80f);
+            if (mat.HasProperty("_RimFogColor")) mat.SetColor("_RimFogColor", FogColor);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.16f);
+        }
+        else
+        {
+            mat = VisualMaterials.Lit(MeadowTint, 0f, 0.18f);
+            mat.name = "EarthGround_PH";
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.22f);
+        }
+
         if (GrassDiff != null && mat.HasProperty("_BaseMap"))
         {
+            // Shader samples world-XZ with an explicit Repeat sampler; keep CPU wrap consistent.
+            GrassDiff.wrapMode = TextureWrapMode.Repeat;
+            GrassDiff.filterMode = FilterMode.Bilinear;
             mat.SetTexture("_BaseMap", GrassDiff);
             mat.EnableKeyword("_BASEMAP");
-            // World-scale tiling via mesh UV (0–1 over disk) — mild repeat via ST
             if (mat.HasProperty("_BaseMap_ST"))
-                mat.SetVector("_BaseMap_ST", new Vector4(48f, 48f, 0f, 0f));
-            mat.mainTextureScale = new Vector2(48f, 48f);
+                mat.SetVector("_BaseMap_ST", new Vector4(1f, 1f, 0f, 0f));
+            mat.mainTextureScale = new Vector2(1f, 1f);
         }
         if (GrassNor != null && mat.HasProperty("_BumpMap"))
         {
+            GrassNor.wrapMode = TextureWrapMode.Repeat;
+            GrassNor.filterMode = FilterMode.Bilinear;
             mat.SetTexture("_BumpMap", GrassNor);
             mat.EnableKeyword("_NORMALMAP");
             if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.55f);
@@ -110,7 +134,6 @@ public static class EnvironmentTextures
         {
             mat.SetTexture("_MetallicGlossMap", GrassRough);
         }
-        if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.22f);
         return mat;
     }
 

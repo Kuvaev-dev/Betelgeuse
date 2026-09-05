@@ -6,12 +6,18 @@ using UnityEngine;
 /// </summary>
 public static class IdealLandingPresets
 {
+    /// <summary>true після [I] Ideal, доки не змінено режим/IC вручну.</summary>
+    public static bool Active { get; private set; }
+
+    public static void ClearActive() => Active = false;
+
     // Номінал ділянки посадки Stage-1 (Earth)
     public const float StartHeight = 1400f;
     public const float StartVy = -48f;
     /// <summary>Додатний модуль StartVy (для слайдерів UI).</summary>
     public const float StartDescentSpeed = 48f;
-    public const float StartTiltDeg = 0.4f;
+    /// <summary>0° — без початкового lean (інакше lateral розганяє вбік на півдорозі).</summary>
+    public const float StartTiltDeg = 0f;
     public const float DryMass = 25600f;
     public const float FuelMass = 14000f;
     public const float MaxThrust = 845000f;
@@ -55,11 +61,12 @@ public static class IdealLandingPresets
 
         if (sim != null)
         {
+            // Чистий номінал: без вітру/шуму/jitter (MC має свої baseline-значення окремо)
             sim.enableNoise = false;
             sim.windStrength = 0f;
-            sim.massVariationPercent = 6f;
-            sim.angleVariationDegrees = 7f;
-            sim.continuousWind = true;
+            sim.massVariationPercent = 0f;
+            sim.angleVariationDegrees = 0f;
+            sim.continuousWind = false;
             sim.startHeight = StartHeight;
             sim.startDescentSpeed = StartDescentSpeed;
             sim.startTiltDeg = StartTiltDeg;
@@ -74,6 +81,13 @@ public static class IdealLandingPresets
 
         rocket.PrepareMode(rocket.controlMode);
         rocket.skipStackPhase = true;
+        // PrepareMode обнуляв velocity — повернути landing IC для прев’ю
+        if (rocket.parameters != null)
+        {
+            rocket.state.velocity = rocket.parameters.startVelocity;
+            rocket.SyncTransformWithState();
+        }
+        Active = true;
 
         string mode = rocket.GetModeDisplayName();
         summaryUk =
@@ -93,7 +107,7 @@ public static class IdealLandingPresets
         NeuralController neural,
         HybridController hybrid)
     {
-        rocket?.SetPidGains(2.8f, 0.25f, 1.4f, 0.55f, 0.04f, 0.48f);
+        rocket?.SetPidGains(2.8f, 0.25f, 1.4f, 0.55f, 0f, 0.55f); // att Ki=0: no I-windup rock
 
         if (fuzzy != null)
         {
@@ -129,6 +143,17 @@ public static class IdealLandingPresets
         }
     }
 
+    /// <summary>Повторно накласти ideal GNC для поточного режиму (перед START).</summary>
+    public static void ReapplyModeIdeal(RocketPhysics rocket)
+    {
+        if (rocket == null) return;
+        var fuzzy = rocket.fuzzyController ?? rocket.GetComponent<FuzzyLandingController>();
+        var neural = rocket.neuralController ?? rocket.GetComponent<NeuralController>();
+        var hybrid = rocket.hybridController ?? rocket.GetComponent<HybridController>();
+        ApplyDefaultControllerTuning(rocket, fuzzy, neural, hybrid);
+        ApplyModeIdeal(rocket.controlMode, rocket, fuzzy, neural, hybrid);
+    }
+
     static void ApplyModeIdeal(
         RocketPhysics.ControlMode mode,
         RocketPhysics rocket,
@@ -140,7 +165,7 @@ public static class IdealLandingPresets
         {
             case RocketPhysics.ControlMode.PID:
                 // Добре відтюнований класичний PID + сильніший термінал через gains
-                rocket.SetPidGains(3.4f, 0.12f, 1.9f, 0.62f, 0.02f, 0.62f);
+                rocket.SetPidGains(3.2f, 0.10f, 1.85f, 0.58f, 0f, 0.75f); // Ideal PID: Ki=0, more rate damp
                 break;
 
             case RocketPhysics.ControlMode.Fuzzy:
@@ -151,7 +176,7 @@ public static class IdealLandingPresets
                     fuzzy.fuzzyThrustWeight = 0.32f; // ближче до профілю
                     fuzzy.maxDevFrac = 0.3f;
                     fuzzy.gimbalBlend = 0.35f;
-                    fuzzy.maxGimbalDeg = 14f;
+                    fuzzy.maxGimbalDeg = 10f;
                 }
                 break;
 
@@ -170,26 +195,27 @@ public static class IdealLandingPresets
             case RocketPhysics.ControlMode.Hybrid:
                 if (fuzzy != null)
                 {
-                    fuzzy.fuzzyThrustWeight = 0.35f;
-                    fuzzy.maxDevFrac = 0.32f;
-                    fuzzy.gimbalBlend = 0.4f;
-                    fuzzy.maxGimbalDeg = 14f;
+                    fuzzy.fuzzyThrustWeight = 0.32f;
+                    fuzzy.maxDevFrac = 0.28f;
+                    fuzzy.gimbalBlend = 0.3f;
+                    fuzzy.maxGimbalDeg = 9f;
                 }
                 if (neural != null)
                 {
                     neural.enableTraining = false;
-                    neural.residualWeight = 0.2f;
-                    neural.maxDevFrac = 0.25f;
+                    neural.residualWeight = 0.15f;
+                    neural.maxDevFrac = 0.22f;
+                    neural.gimbalBiasScale = 0.05f;
                     neural.InstallIdealWeights();
                 }
                 if (hybrid != null)
                 {
                     hybrid.useNeuralResidual = true;
-                    hybrid.neuralThrustBlend = 0.12f;
-                    hybrid.neuralGimbalBlend = 0.1f;
-                    hybrid.maxResidualMult = 0.18f;
-                    hybrid.smartWeight = 0.4f;
-                    hybrid.maxDevFrac = 0.28f;
+                    hybrid.neuralThrustBlend = 0.08f;
+                    hybrid.neuralGimbalBlend = 0.05f; // майже без NN-gimbal (анти-drift)
+                    hybrid.maxResidualMult = 0.15f;
+                    hybrid.smartWeight = 0.35f;
+                    hybrid.maxDevFrac = 0.25f;
                 }
                 break;
         }
