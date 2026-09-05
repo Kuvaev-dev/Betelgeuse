@@ -1,9 +1,21 @@
 # Betelgeuse — як запустити (захист / демо)
 
+## Клонування
+
+```bash
+git clone https://github.com/Kuvaev-dev/Betelgeuse.git
+```
+
+Шрифти, текстури Earth LZ і Kenney Nature FBX лежать у репозиторії **як звичайні файли** (~31 MB).  
+**Не потрібно** `git lfs pull`, окремо качати ассети чи ставити Git LFS, щоб відкрити проєкт.
+
+Перевірка: `Assets/Resources/Fonts/LiberationSans.ttf` має бути ~350 KB (не текстовий LFS-pointer на ~130 B).  
+У Editor: меню **Betelgeuse → Validate Runtime Assets**.
+
 ## Unity Editor
 
 1. Встановити **Unity 6000.x** з **URP**.
-2. Відкрити теку проєкту `Betelgeuse`.
+2. Відкрити теку проєкту `Betelgeuse` (дочекатися імпорту).
 3. Сцена: `Assets/Scenes/SampleScene.unity` → **Play**.
 4. Splash: **Earth LZ** + **1-й ступінь** (booster; `skipStackPhase=true`).
 

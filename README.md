@@ -27,7 +27,13 @@
 
 ## Швидкий старт
 
-1. Unity **6000.x** (URP) → `Assets/Scenes/SampleScene.unity` → **Play**
+```bash
+git clone https://github.com/Kuvaev-dev/Betelgeuse.git
+```
+
+Ассети runtime (шрифти, текстури, Nature FBX) **в репо**, без окремого `git lfs pull`.
+
+1. Unity **6000.x** (URP) → відкрити проєкт → `Assets/Scenes/SampleScene.unity` → **Play**
 2. На екрані: **Earth LZ** + **1-й ступінь** (ноги, grid fins, 9 сопел)
 3. **`4`** Hybrid → **`I`** Ideal → **`Space`** — посадка
 4. **`D`** — демо захисту · **`P`** — Monte-Carlo A–D · **`E`** — експорт
