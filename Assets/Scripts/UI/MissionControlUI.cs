@@ -43,7 +43,7 @@ public class MissionControlUI : MonoBehaviour
     Slider heightSlider, descentSlider, tilt0Slider, massNoiseSlider, angleNoiseSlider;
     Toggle noiseToggle, trainToggle, residualToggle;
     Image thrBarFill, fuelBarFill, tiltBarFill, statusDot, progressFill, resultPanelBg;
-    GameObject resultRoot, progressRoot, canvasRoot, stepBarGo, helpRoot;
+    GameObject resultRoot, progressRoot, canvasRoot, stepBarGo, helpRoot, graphDetailRoot;
     GameObject leftPanelGo, rightPanelGo, topBarGo, topMenuGo;
     GameObject captionRoot; // окремий canvas — без мерехтіння при rebuild теми
     /// <summary>Переживає RebuildUi — слайдери/інпути умов ніколи не знищуються → без миготіння NumField.</summary>
@@ -55,6 +55,11 @@ public class MissionControlUI : MonoBehaviour
     readonly List<(Toggle toggle, TMP_Text label, string key)> conditionToggleBindings = new();
     bool panelsHidden;
     bool helpVisible;
+    bool graphDetailVisible;
+    TelemetryGraph graphDetailPlot;
+    TelemetryGraph graphDetailSource;
+    TMP_Text txtGraphDetailTitle;
+    TMP_Text txtGraphDetailHint;
     Coroutine defenseDemoCo;
     TMP_Text txtSeedVal;
     TMP_Text txtHideBtn;
@@ -227,6 +232,14 @@ public class MissionControlUI : MonoBehaviour
 
         bool hide = panelsHidden;
         bool helpWas = helpVisible;
+        bool graphDetailWas = graphDetailVisible;
+        string graphDetailKind = null;
+        if (graphDetailWas && graphDetailSource != null)
+        {
+            if (graphDetailSource == graphAlt) graphDetailKind = "alt";
+            else if (graphDetailSource == graphVel) graphDetailKind = "vel";
+            else if (graphDetailSource == graphThr) graphDetailKind = "thr";
+        }
         bool hadResult = resultShown;
         string infoSnap = txtInfo != null ? txtInfo.text : null;
 
@@ -247,6 +260,16 @@ public class MissionControlUI : MonoBehaviour
         if (snapAlt != null && snapAlt.Length > 0) graphAlt?.RestoreSamples(snapAlt);
         if (snapVel != null && snapVel.Length > 0) graphVel?.RestoreSamples(snapVel);
         if (snapThr != null && snapThr.Length > 0) graphThr?.RestoreSamples(snapThr);
+        if (graphDetailWas)
+        {
+            TelemetryGraph src = null;
+            if (graphDetailKind == "alt") src = graphAlt;
+            else if (graphDetailKind == "vel") src = graphVel;
+            else if (graphDetailKind == "thr") src = graphThr;
+            if (src != null) OpenGraphDetail(src);
+            else SetGraphDetailVisible(false);
+        }
+        else SetGraphDetailVisible(false);
         if (infoSnap != null && txtInfo != null) txtInfo.text = infoSnap;
         panelsHidden = hide;
         ApplyPanelsVisibility();
@@ -707,6 +730,12 @@ public class MissionControlUI : MonoBehaviour
         graphAlt?.ApplyThemeColors();
         graphVel?.ApplyThemeColors();
         graphThr?.ApplyThemeColors();
+        graphDetailPlot?.ApplyThemeColors();
+        if (graphDetailRoot != null)
+        {
+            var scrim = graphDetailRoot.GetComponent<Image>();
+            if (scrim != null) scrim.color = HelpScrimColor();
+        }
 
         PaintModeButtons();
 
@@ -1163,6 +1192,7 @@ public class MissionControlUI : MonoBehaviour
         BuildProgressBar(canvasGo.transform);
         BuildStepBar(canvasGo.transform);
         BuildHelpOverlay(canvasGo.transform);
+        BuildGraphDetailOverlay(canvasGo.transform);
         ApplyPanelsVisibility();
     }
 
@@ -1728,6 +1758,7 @@ public class MissionControlUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.U)) OnPause();
         if (Input.GetKeyDown(KeyCode.Escape))
         {
+            if (graphDetailVisible) { SetGraphDetailVisible(false); return; }
             if (helpVisible) { SetHelpVisible(false); return; }
             if (resultShown) HideLandingResult();
             else OnStop();
@@ -1985,7 +2016,7 @@ public class MissionControlUI : MonoBehaviour
         PinTL(txtGraphHint.rectTransform, pad + 2, y, inner - 4, 14);
         y -= 16f;
         graphAlt = MakeGraph(root, UILocale.T("m_alt"), UILocale.T("u_m"), C_GraphA, ref y, null, "F0");
-        graphVel = MakeGraph(root, "|Vy|", UILocale.T("u_ms"), C_GraphB, ref y, -3.5f, "F1");
+        graphVel = MakeGraph(root, "|Vy|", UILocale.T("u_ms"), C_GraphB, ref y, 3.5f, "F1");
         graphThr = MakeGraph(root, UILocale.T("m_thr"), UILocale.T("u_kn"), C_GraphC, ref y, null, "F0");
 
         crt.sizeDelta = new Vector2(0, Mathf.Max(200f, -y + 24f));
@@ -2840,7 +2871,7 @@ public class MissionControlUI : MonoBehaviour
         hrt.anchorMin = new Vector2(0f, 0f);
         hrt.anchorMax = new Vector2(1f, 1f);
         hrt.offsetMin = new Vector2(padX, 8f);
-        hrt.offsetMax = new Vector2(-(padX + 168f), 8f);
+        hrt.offsetMax = new Vector2(-(padX + 292f), 8f);
         hint.alignment = TextAlignmentOptions.MidlineLeft;
         hint.overflowMode = TextOverflowModes.Ellipsis;
         hint.textWrappingMode = TextWrappingModes.NoWrap;
@@ -2981,6 +3012,193 @@ public class MissionControlUI : MonoBehaviour
         helpVisible = false;
     }
 
+    void BuildGraphDetailOverlay(Transform parent)
+    {
+        graphDetailRoot = CreatePanel("GraphDetailOverlay", parent, HelpScrimColor());
+        var rt = graphDetailRoot.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var dimBtn = graphDetailRoot.AddComponent<Button>();
+        dimBtn.targetGraphic = graphDetailRoot.GetComponent<Image>();
+        dimBtn.transition = Selectable.Transition.None;
+        dimBtn.onClick.AddListener(() => SetGraphDetailVisible(false));
+
+        const float cardW = 720f;
+        const float cardH = 420f;
+        const float headerH = 52f;
+        const float footerH = 60f;
+        const float padX = 18f;
+
+        Color cardBg = C_Panel;
+        cardBg.a = 1f;
+        var card = CreatePanel("GraphDetailCard", graphDetailRoot.transform, cardBg);
+        var crt = card.GetComponent<RectTransform>();
+        crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
+        crt.pivot = new Vector2(0.5f, 0.5f);
+        crt.sizeDelta = new Vector2(cardW, cardH);
+        Outline(card, 1.5f);
+        // Swallow clicks so scrim does not close when interacting with the card
+        var blockBtn = card.AddComponent<Button>();
+        blockBtn.targetGraphic = card.GetComponent<Image>();
+        blockBtn.transition = Selectable.Transition.None;
+        blockBtn.onClick.AddListener(() => { });
+
+        var accent = CreatePanel("GraphDetailAccent", card.transform, new Color(C_Accent.r, C_Accent.g, C_Accent.b, 0.92f));
+        accent.GetComponent<Image>().raycastTarget = false;
+        var art = accent.GetComponent<RectTransform>();
+        art.anchorMin = new Vector2(0f, 1f);
+        art.anchorMax = new Vector2(1f, 1f);
+        art.pivot = new Vector2(0.5f, 1f);
+        art.anchoredPosition = Vector2.zero;
+        art.sizeDelta = new Vector2(0f, 3f);
+
+        txtGraphDetailTitle = CreateText(card.transform, UILocale.T("h_graphs"), 16, C_Accent, FontStyles.Bold);
+        var tr = txtGraphDetailTitle.rectTransform;
+        tr.anchorMin = new Vector2(0f, 1f);
+        tr.anchorMax = new Vector2(1f, 1f);
+        tr.pivot = new Vector2(0f, 1f);
+        tr.anchoredPosition = new Vector2(padX, -14f);
+        tr.sizeDelta = new Vector2(-(padX + 24f), 24f);
+        txtGraphDetailTitle.alignment = TextAlignmentOptions.MidlineLeft;
+        txtGraphDetailTitle.overflowMode = TextOverflowModes.Ellipsis;
+        txtGraphDetailTitle.raycastTarget = false;
+
+        var hdrLine = CreatePanel("GraphDetailHdrLine", card.transform, HeaderLineColor);
+        hdrLine.GetComponent<Image>().raycastTarget = false;
+        PinTL(hdrLine.GetComponent<RectTransform>(), padX, -headerH, cardW - padX * 2f, 1.5f);
+
+        var footer = CreatePanel("GraphDetailFooter", card.transform, C_PanelSoft);
+        footer.GetComponent<Image>().raycastTarget = false;
+        var frt = footer.GetComponent<RectTransform>();
+        frt.anchorMin = new Vector2(0f, 0f);
+        frt.anchorMax = new Vector2(1f, 0f);
+        frt.pivot = new Vector2(0.5f, 0f);
+        frt.anchoredPosition = Vector2.zero;
+        frt.sizeDelta = new Vector2(0f, footerH);
+
+        // Button metrics first so hint width reserves the full -/+/1:1/Close row.
+        float btnW = 148f;
+        float btnH = 32f;
+        float zoomW = 36f;
+        float zoomGap = 6f;
+        float resetW = 44f;
+        float hintBtnGap = 12f;
+        float buttonsReserve = padX + btnW + zoomGap * 3f + zoomW * 2f + resetW + hintBtnGap;
+
+        txtGraphDetailHint = CreateText(footer.transform, UILocale.T("graph_detail_hint"), 11, C_Secondary);
+        var hrt = txtGraphDetailHint.rectTransform;
+        hrt.anchorMin = new Vector2(0f, 0f);
+        hrt.anchorMax = new Vector2(1f, 1f);
+        hrt.offsetMin = new Vector2(padX, 4f);
+        hrt.offsetMax = new Vector2(-buttonsReserve, 4f);
+        txtGraphDetailHint.alignment = TextAlignmentOptions.MidlineLeft;
+        txtGraphDetailHint.overflowMode = TextOverflowModes.Ellipsis;
+        txtGraphDetailHint.textWrappingMode = TextWrappingModes.Normal;
+        txtGraphDetailHint.maxVisibleLines = 2;
+        txtGraphDetailHint.raycastTarget = false;
+
+        float btnY = -(cardH - (footerH - btnH) * 0.5f - btnH);
+        float zoomX0 = cardW - padX - btnW - zoomGap - zoomW * 2f - resetW - zoomGap * 2f;
+        ActionButtonAt(card.transform, zoomX0, btnY, zoomW, btnH, "-",
+            "GraphDetailZoomOutBtn", C_Btn, () => graphDetailPlot?.ZoomOut());
+        ActionButtonAt(card.transform, zoomX0 + zoomW + zoomGap, btnY, zoomW, btnH, "+",
+            "GraphDetailZoomInBtn", C_Btn, () => graphDetailPlot?.ZoomIn());
+        ActionButtonAt(card.transform, zoomX0 + (zoomW + zoomGap) * 2f, btnY, resetW, btnH, "1:1",
+            "GraphDetailResetViewBtn", C_Btn, () => graphDetailPlot?.ResetView());
+        float btnX = cardW - padX - btnW;
+        ActionButtonAt(card.transform, btnX, btnY, btnW, btnH, UILocale.T("btn_close"),
+            "GraphDetailCloseBtn", C_Btn, () => SetGraphDetailVisible(false));
+
+        var plotHost = CreatePanel("GraphDetailPlotHost", card.transform, new Color(0, 0, 0, 0));
+        plotHost.GetComponent<Image>().raycastTarget = false;
+        var phRt = plotHost.GetComponent<RectTransform>();
+        StretchFull(phRt, padX, footerH + 8f, padX, headerH + 8f);
+
+        Color frameFill = Color.Lerp(C_PanelSoft, C_Panel, 0.35f);
+        frameFill.a = 1f;
+        var frame = CreatePanel("GraphDetailFrame", plotHost.transform, frameFill);
+        frame.GetComponent<Image>().raycastTarget = false;
+        StretchFull(frame.GetComponent<RectTransform>(), 0, 0, 0, 0);
+        Outline(frame, 1f);
+
+        var plotGo = new GameObject("DetailPlot", typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
+        plotGo.transform.SetParent(plotHost.transform, false);
+        var plotRt = plotGo.GetComponent<RectTransform>();
+        StretchFull(plotRt, 2, 2, 2, 2);
+        var raw = plotGo.GetComponent<RawImage>();
+        raw.color = Color.white;
+        raw.raycastTarget = true;
+
+        graphDetailPlot = plotGo.AddComponent<TelemetryGraph>();
+        graphDetailPlot.autoScale = true;
+        graphDetailPlot.showFill = true;
+        graphDetailPlot.showZeroLine = true;
+        graphDetailPlot.valueFormat = "F1";
+        graphDetailPlot.BindLabelRoot(plotHost.GetComponent<RectTransform>());
+        graphDetailPlot.Configure(UILocale.T("h_graphs"), "", C_GraphA, null);
+        graphDetailPlot.SetInteractiveView(true);
+
+        graphDetailRoot.SetActive(false);
+        graphDetailVisible = false;
+        graphDetailSource = null;
+    }
+
+    void OpenGraphDetail(TelemetryGraph source)
+    {
+        if (source == null || graphDetailRoot == null || graphDetailPlot == null) return;
+
+        graphDetailSource = source;
+        graphDetailPlot.maxSamples = Mathf.Max(64, source.maxSamples);
+        graphDetailPlot.valueFormat = string.IsNullOrEmpty(source.valueFormat) ? "F1" : source.valueFormat;
+        graphDetailPlot.Configure(source.title, source.unit, source.lineColor, source.thresholdY);
+        graphDetailPlot.ResetView();
+        graphDetailPlot.SetInteractiveView(true);
+        graphDetailPlot.Clear();
+        float[] samples = source.GetSamples();
+        if (samples != null && samples.Length > 0)
+            graphDetailPlot.RestoreSamples(samples);
+
+        if (txtGraphDetailTitle != null)
+        {
+            string t = source.title ?? UILocale.T("h_graphs");
+            if (!string.IsNullOrEmpty(source.unit))
+                t = t + "  (" + source.unit + ")";
+            txtGraphDetailTitle.text = t;
+        }
+        if (txtGraphDetailHint != null)
+            txtGraphDetailHint.text = UILocale.T("graph_detail_hint");
+
+        SetGraphDetailVisible(true);
+        graphDetailRoot.transform.SetAsLastSibling();
+    }
+
+    void SyncGraphDetailLive()
+    {
+        if (!graphDetailVisible || graphDetailPlot == null || graphDetailSource == null) return;
+        float[] samples = graphDetailSource.GetSamples();
+        if (samples == null) return;
+        graphDetailPlot.RestoreSamples(samples);
+    }
+
+    void SetGraphDetailVisible(bool on)
+    {
+        graphDetailVisible = on;
+        if (graphDetailRoot != null)
+        {
+            graphDetailRoot.SetActive(on);
+            var img = graphDetailRoot.GetComponent<Image>();
+            if (img != null) img.color = HelpScrimColor();
+        }
+        if (!on)
+        {
+            graphDetailSource = null;
+            graphDetailPlot?.ResetView();
+        }
+    }
+
+
     void OnCancelCompare()
     {
         if (sim == null) return;
@@ -3025,7 +3243,11 @@ public class MissionControlUI : MonoBehaviour
             // Широкий overview під час batch A–D (pad + коридор зниження)
             EnterOverviewForCompare();
         }
-        // on=false: лишити charts, щоб завершене порівняння лишалось видимим
+        else
+        {
+            // After compare (done/cancel): leave Overview -> Follow like OnStop
+            ExitOverviewAfterCompare();
+        }
         if (progressRoot != null) progressRoot.SetActive(on);
         RefreshSpeedLabel();
     }
@@ -3037,6 +3259,19 @@ public class MissionControlUI : MonoBehaviour
         if (cam == null) return;
         overviewCam = true;
         cam.SnapToFullTrajectoryView();
+        RefreshCamLabel();
+        UpdateViewButtonVisual();
+    }
+    /// <summary>Exit overview after Monte-Carlo finishes or is cancelled (mirror OnStop / T-toggle off).</summary>
+    void ExitOverviewAfterCompare()
+    {
+        overviewCam = false;
+        var cam = ResolveCamera();
+        if (cam != null && cam.mode == CameraFollow.ViewMode.Overview)
+        {
+            cam.userOrbitLock = false;
+            cam.SetMode(CameraFollow.ViewMode.Follow);
+        }
         RefreshCamLabel();
         UpdateViewButtonVisual();
     }
@@ -3586,8 +3821,9 @@ public class MissionControlUI : MonoBehaviour
         {
             sampleTimer = 0f;
             graphAlt?.Push(s.position.y);
-            graphVel?.Push(s.velocity.y);
+            graphVel?.Push(Mathf.Abs(s.velocity.y));
             graphThr?.Push(s.currentThrust / 1000f);
+            SyncGraphDetailLive();
         }
 
         // Підписи значень слайдера оновлюються через onValueChanged (з одиницями)
@@ -3756,6 +3992,7 @@ public class MissionControlUI : MonoBehaviour
         graphAlt?.Clear();
         graphVel?.Clear();
         graphThr?.Clear();
+        graphDetailPlot?.Clear();
     }
 
     // ═══════════════ builders ═══════════════
@@ -4135,9 +4372,10 @@ public class MissionControlUI : MonoBehaviour
         const float fW = 318f;
         const float gH = 100f;
 
-        // Root тримає frame + plot + labels (labels останні = зверху)
+        // Root holds frame + plot + labels; also click hit-target for detail popup
         var root = CreatePanel("GraphRoot_" + title, parent, new Color(0, 0, 0, 0));
-        root.GetComponent<Image>().raycastTarget = false;
+        var hitImg = root.GetComponent<Image>();
+        hitImg.raycastTarget = true;
         var rootRt = root.GetComponent<RectTransform>();
         PinTL(rootRt, fX, y, fW, gH + 4f);
 
@@ -4167,8 +4405,14 @@ public class MissionControlUI : MonoBehaviour
         g.showFill = true;
         g.showZeroLine = true;
         g.valueFormat = fmt ?? "F1";
-        g.BindLabelRoot(rootRt); // підписи як siblings plot, зверху
+        g.BindLabelRoot(rootRt);
         g.Configure(title, unit, line, threshold);
+
+        var btn = root.AddComponent<Button>();
+        btn.targetGraphic = hitImg;
+        btn.transition = Selectable.Transition.None;
+        var captured = g;
+        btn.onClick.AddListener(() => OpenGraphDetail(captured));
 
         y -= gH + 10f;
         return g;

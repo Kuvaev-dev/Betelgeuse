@@ -2,12 +2,12 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// ÐŸÑ€Ð¾Ñ†ÐµÐ´ÑƒÑ€Ð½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð»Ð¸ÑˆÐµ 1-Ð³Ð¾ ÑÑ‚ÑƒÐ¿ÐµÐ½Ñ ~28 Ð¼: ÐºÐ¾Ñ€Ð¿ÑƒÑ, fins, Ð½Ð¾Ð³Ð¸, ÑÐ¾Ð¿Ð»Ð°, FX.
+/// Visual model of stage-1 ~28 m: body, fins, legs, nozzles, FX.
 /// </summary>
 public static class RocketVisualBuilder
 {
-    public const float Height = 28f;   // compact visual proxy of F9 first stage ~42.6 m; ÐºÐ¾Ð¼Ð¿Ð°ÐºÑ‚Ð½Ð¸Ð¹ 1-Ð¹ ÑÑ‚ÑƒÐ¿Ñ–Ð½ÑŒ (Ð½Ðµ Ð²ÐµÑÑŒ Ð½Ð¾ÑÑ–Ð¹)
-    public const float Radius = 1.83f; // Ã˜3.66 Ð¼
+    public const float Height = 28f; // compact visual proxy of F9 first stage ~42.6 m; short stage-1 stand-in
+    public const float Radius = 1.83f;
     public const string UpperStackName = "UpperStack";
 
     public static void Build(RocketPhysics rocket)
@@ -15,7 +15,7 @@ public static class RocketVisualBuilder
         LunarTerrainMesh.Drain(BuildRoutine(rocket));
     }
 
-    /// <summary>No-op: Ð²ÐµÑ€Ñ…Ð½Ñ– ÑÑ‚ÑƒÐ¿ÐµÐ½Ñ– Ð½Ðµ Ð¼Ð¾Ð´ÐµÐ»ÑŽÑŽÑ‚ÑŒÑÑ (Ð»Ð¸ÑˆÐµ 1-Ð¹).</summary>
+    /// <summary>SetUpperStackVisible</summary>
     public static void SetUpperStackVisible(Transform rocketRoot, bool visible, bool animateAway = false)
     {
         if (rocketRoot == null) return;
@@ -25,7 +25,7 @@ public static class RocketVisualBuilder
         if (orphan != null) Object.Destroy(orphan);
     }
 
-    /// <summary>ÐŸÐ¾ÐºÑ€Ð¾ÐºÐ¾Ð²Ð° Ð·Ð±Ñ–Ñ€ÐºÐ° â€” yield Ð¼Ñ–Ð¶ Ð²Ð°Ð¶ÐºÐ¸Ð¼Ð¸ skins, Ñ‰Ð¾Ð± splash-ÑÐ¿Ñ–Ð½ÐµÑ€ ÐºÑ€ÑƒÑ‚Ð¸Ð²ÑÑ.</summary>
+    /// <summary>BuildRoutine</summary>
     public static IEnumerator BuildRoutine(RocketPhysics rocket)
     {
         if (rocket == null) yield break;
@@ -55,7 +55,6 @@ public static class RocketVisualBuilder
         var visual = new GameObject("Visual");
         visual.transform.SetParent(root, false);
 
-        // â”€â”€ ÐŸÐ°Ð»Ñ–Ñ‚Ñ€Ð° recoverable 1st-stage analogue (no logos) â”€â”€
         var white = MakeTankSkin("TankWhite", sootAmount: 0.10f, panelContrast: 0.62f, seed: 11);
         yield return null;
         var whiteLower = MakeTankSkin("TankLower", sootAmount: 0.78f, panelContrast: 0.45f, seed: 29);
@@ -128,7 +127,6 @@ public static class RocketVisualBuilder
     }
 
     /// <summary>
-    /// Ð†Ð´ÐµÐ°Ð»ÑŒÐ½Ð° Ð·Ð¾Ð½Ð° ÑÑ‚Ð¸ÐºÐ¾Ð²ÐºÐ¸: Ð¿Ñ€Ð¾Ð¿Ð¾Ñ€Ñ†Ñ–Ð¹Ð½Ð¸Ð¹ interstage + Ñ‡Ð¸ÑÑ‚Ð¸Ð¹ sep flange.
     /// </summary>
     static void BuildDockingInterface(Transform visual, float bodyTop, float dBody,
         Material interstageMat, Material metal, Material titanium, Material carbon,
@@ -158,7 +156,6 @@ public static class RocketVisualBuilder
     }
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // ÐŸÑ€Ð¾Ñ†ÐµÐ´ÑƒÑ€Ð½Ñ– Ñ†Ð¸Ð»Ñ–Ð½Ð´Ñ€Ð¸Ñ‡Ð½Ñ– skins â€” Ð³Ð»Ð°Ð´ÐºÐ¸Ð¹ Ð±Ñ–Ð»Ð¸Ð¹ (Ð±ÐµÐ· Ð¿Ð°Ð½ÐµÐ»ÐµÐ¹)
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     static Material MakeTankSkin(string name, float sootAmount, float panelContrast, int seed)
@@ -253,7 +250,6 @@ public static class RocketVisualBuilder
         }
         if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
         mat.mainTexture = tex;
-        // Ð‘ÐµÐ· normal map Ð¿Ð°Ð½ÐµÐ»ÐµÐ¹ â€” Ñ–Ð´ÐµÐ°Ð»ÑŒÐ½Ð¾ Ð³Ð»Ð°Ð´ÐºÐ¸Ð¹ ÐºÐ¾Ñ€Ð¿ÑƒÑ
         if (mat.HasProperty("_BumpMap"))
         {
             mat.SetTexture("_BumpMap", null);
@@ -298,7 +294,6 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Ð“Ð»Ð¸Ð±Ð¾ÐºÐµ Ð¿Ð»ÐµÑ‚Ð¸Ð²Ð¾ CFRP Ð· Ð»ÐµÐ³ÐºÐ¸Ð¼Ð¸ ÑÐ¼ÑƒÐ³Ð°Ð¼Ð¸ Ð±Ð»Ð¸ÑÐºÑƒ
                 float g = 0.055f;
                 float weaveU = Mathf.Abs((u * 40f) - Mathf.Round(u * 40f));
                 float weaveV = Mathf.Abs((v * 22f) - Mathf.Round(v * 22f));
@@ -307,7 +302,6 @@ public static class RocketVisualBuilder
                 g += HashNoise(u * 48f + ox, v * 48f) * 0.012f;
                 float band = Mathf.Abs((v * 5f) - Mathf.Round(v * 5f));
                 g += (1f - Mathf.SmoothStep(0f, 0.07f, band)) * 0.045f;
-                // Ð›ÐµÐ³ÐºÐ¸Ð¹ Ð²ÐµÑ€Ñ‚Ð¸ÐºÐ°Ð»ÑŒÐ½Ð¸Ð¹ Ð³Ñ€Ð°Ð´Ñ–Ñ”Ð½Ñ‚ Ð±Ð»Ð¸ÑÐºÑƒ
                 g += (0.5f - Mathf.Abs(v - 0.5f)) * 0.02f;
                 g = Mathf.Clamp01(g);
                 cols[y * tw + x] = new Color(g * 0.92f, g * 0.95f, g * 1.08f, 1f);
@@ -358,17 +352,14 @@ public static class RocketVisualBuilder
             for (int x = 0; x < tw; x++)
             {
                 float u = x / (float)tw;
-                // Ð§Ð¸ÑÑ‚Ð¸Ð¹ Ð¾Ð±Ñ‚Ñ–Ñ‡Ð½Ð¸Ðº: Ð»ÐµÐ³ÐºÐ¸Ð¹ micro-noise + Ð»Ð¸ÑˆÐµ 2 Ð¿Ð¾Ð·Ð´Ð¾Ð²Ð¶Ð½Ñ– half-seams
                 float g = 0.94f;
                 g += HashNoise(u * 28f + ox, v * 36f) * 0.008f;
-                float petal = u * 2f; // Ð´Ð²Ñ– Ð¿Ð¾Ð»Ð¾Ð²Ð¸Ð½Ð¸ Ð¾Ð±Ñ‚Ñ–Ñ‡Ð½Ð¸ÐºÐ°
+                float petal = u * 2f;
                 float seam = Mathf.Abs(petal - Mathf.Round(petal));
                 float seamW = 1f - Mathf.SmoothStep(0f, 0.012f, seam);
                 g -= seamW * 0.06f;
-                // Ð»Ð¸ÑˆÐµ Ð¾Ð´Ð½Ðµ access-ÐºÑ–Ð»ÑŒÑ†Ðµ Ð±Ñ–Ð»Ñ Ð¾ÑÐ½Ð¾Ð²Ð¸
                 float h = Mathf.Abs(v - 0.12f);
                 g -= (1f - Mathf.SmoothStep(0f, 0.025f, h)) * 0.03f;
-                // tip Ñ‚Ñ€Ð¾Ñ…Ð¸ ÑÐ²Ñ–Ñ‚Ð»Ñ–ÑˆÐ¸Ð¹ (Ð³Ð»Ð°Ð´ÐºÐ° Ñ„Ð°Ñ€Ð±Ð°)
                 g *= Mathf.Lerp(0.97f, 1.0f, v);
                 g = Mathf.Clamp01(g);
                 cols[y * tw + x] = new Color(g * 0.995f, g, g * 1.01f, 1f);
@@ -504,7 +495,6 @@ public static class RocketVisualBuilder
     }
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // ÐŸÑ–Ð´Ð²ÑƒÐ·Ð»Ð¸
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     static void BuildWings(Transform visual, Material skin, Material fair, Material edge, float mountY)
@@ -709,7 +699,6 @@ public static class RocketVisualBuilder
 
     static void BuildEngineFX(Transform visual)
     {
-        // ÐšÑ€Ð¾Ð¼ÐºÐ° exit ÑÐ¾Ð¿Ð»Ð° Ð±Ñ–Ð»Ñ yâ‰ˆ0. Ð”ÐµÐ²'ÑÑ‚ÑŒ ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ–Ð² Merlin (RP-1): glow + core + sheath.
         const float exitY = -0.08f;
         var down = Quaternion.Euler(90f, 0f, 0f);
 
@@ -840,7 +829,7 @@ public static class RocketVisualBuilder
         fx.lightRange = 185f;
     }
 
-    /// <summary>Unity Ð²Ð¸Ð¼Ð°Ð³Ð°Ñ”, Ñ‰Ð¾Ð± Ð£Ð¡Ð† Ð¾ÑÑ– velocityOverLifetime Ð±ÑƒÐ»Ð¸ Ð² Ð¾Ð´Ð½Ð¾Ð¼Ñƒ Ñ€ÐµÐ¶Ð¸Ð¼Ñ– MinMaxCurve.</summary>
+    /// <summary>DisableVelocityOverLifetime</summary>
     static void DisableVelocityOverLifetime(ParticleSystem ps)
     {
         var vel = ps.velocityOverLifetime;
@@ -1159,7 +1148,6 @@ static void ConfigureSmoke(ParticleSystem ps)
         rot.enabled = true;
         rot.separateAxes = false;
         rot.z = new ParticleSystem.MinMaxCurve(-0.6f, 0.6f);
-        // Ð¢Ñ€Ð¸Ð¼Ð°Ñ‚Ð¸ x/y Ñƒ Ñ‚Ð¾Ð¼Ñƒ Ð¶ mode, Ñ‰Ð¾ z, ÐºÐ¾Ð»Ð¸ separateAxes=false â€” Unity Ð²Ð¸ÐºÐ¾Ñ€Ð¸ÑÑ‚Ð¾Ð²ÑƒÑ” Ð»Ð¸ÑˆÐµ z
 
         var rend = ps.GetComponent<ParticleSystemRenderer>();
         rend.renderMode = ParticleSystemRenderMode.Billboard;

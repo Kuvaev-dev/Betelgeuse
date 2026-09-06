@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Ð’Ð¸ÑÐ¾ÐºÐ¾Ð¿Ð¾Ð»Ñ–Ð³Ð¾Ð½Ð°Ð»ÑŒÐ½Ñ– ÐºÑ€ÑƒÐ³Ð»Ñ– Ð¼ÐµÑˆÑ– (Unity Cylinder/Sphere â‰ˆ 20 Ð³Ñ€Ð°Ð½ÐµÐ¹ â€” ÐºÑƒÑ‚Ð°ÑÑ‚Ñ–).
+/// High-poly mesh helpers (Unity Cylinder/Sphere ~20 segments look faceted).
 /// </summary>
 public static class SmoothMesh
 {
@@ -15,7 +15,7 @@ public static class SmoothMesh
     static Mesh cachedSphere;
     static Mesh cachedCapsule;
 
-    /// <summary>ÐŸÐ»Ð¾ÑÐºÐ¸Ð¹ Ð´Ð¸ÑÐº Ñƒ Ð¿Ð»Ð¾Ñ‰Ð¸Ð½Ñ– XZ, Ð½Ð¾Ñ€Ð¼Ð°Ð»ÑŒ +Y, Ñ€Ð°Ð´Ñ–ÑƒÑ 0.5 (scale.x/z = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€).</summary>
+    /// <summary>Disc</summary>
     public static Mesh Disc(int segments = DefaultSeg)
     {
         segments = Mathf.Clamp(segments, 32, 256);
@@ -56,8 +56,6 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// ÐšÑ–Ð»ÑŒÑ†Ðµ (annulus) Ñƒ XZ: outerR=0.5, inner = 0.5 * innerRatio.
-    /// scale.x/z = Ð·Ð¾Ð²Ð½Ñ–ÑˆÐ½Ñ–Ð¹ Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€.
     /// </summary>
     public static Mesh Ring(float innerRatio = 0.92f, int segments = DefaultSeg)
     {
@@ -100,7 +98,7 @@ public static class SmoothMesh
         return mesh;
     }
 
-    /// <summary>Ð¦Ð¸Ð»Ñ–Ð½Ð´Ñ€ Ñ€Ð°Ð´Ñ–ÑƒÑÐ¾Ð¼ 0.5, Ð²Ð¸ÑÐ¾Ñ‚Ð¾ÑŽ 2 (ÑÐº Unity default).</summary>
+    /// <summary>Cylinder</summary>
     public static Mesh Cylinder(int segments = DefaultSeg)
     {
         segments = Mathf.Clamp(segments, 32, 256);
@@ -179,7 +177,7 @@ public static class SmoothMesh
         return mesh;
     }
 
-    /// <summary>Ð¡Ñ„ÐµÑ€Ð° Ñ€Ð°Ð´Ñ–ÑƒÑÐ¾Ð¼ 0.5 (scale = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€).</summary>
+    /// <summary>Sphere</summary>
     public static Mesh Sphere(int lat = SphereLat, int lon = SphereLon)
     {
         lat = Mathf.Clamp(lat, 12, 96);
@@ -235,7 +233,7 @@ public static class SmoothMesh
         return mesh;
     }
 
-    /// <summary>ÐšÐ°Ð¿ÑÑƒÐ»Ð°: Ñ†Ð¸Ð»Ñ–Ð½Ð´Ñ€ + Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð¸, total height â‰ˆ 2, radius 0.5 (ÑÐº Unity Capsule).</summary>
+    /// <summary>Capsule</summary>
     public static Mesh Capsule(int segments = 48, int hemiRings = 12)
     {
         segments = Mathf.Clamp(segments, 24, 96);
@@ -243,7 +241,6 @@ public static class SmoothMesh
         if (cachedCapsule != null && cachedCapsule.name == $"SmoothCap_{segments}_{hemiRings}")
             return cachedCapsule;
 
-        // Ð²Ð¸ÑÐ¾Ñ‚Ð° 2, Ñ€Ð°Ð´Ñ–ÑƒÑ 0.5 â†’ Ð²Ð¸ÑÐ¾Ñ‚Ð° ÐºÐ¾Ñ€Ð¿ÑƒÑÑƒ 1 (âˆ’0.5..+0.5), Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð¸ Ñ€Ð°Ð´Ñ–ÑƒÑ 0.5
         float R = 0.5f;
         float halfBody = 0.5f;
 
@@ -269,7 +266,6 @@ public static class SmoothMesh
             }
         }
 
-        // ÐÐ¸Ð¶Ð½Ñ Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð°: Ð¿Ñ–Ð²Ð´ÐµÐ½Ð½Ð¸Ð¹ Ð¿Ð¾Ð»ÑŽÑ â†’ ÐµÐºÐ²Ð°Ñ‚Ð¾Ñ€ Ð½Ð° y = -halfBody
         for (int ring = 0; ring <= hemiRings; ring++)
         {
             float t = ring / (float)hemiRings;
@@ -280,7 +276,6 @@ public static class SmoothMesh
             AddRing(y, rr, Vector3.up * sy, t * 0.3f);
         }
 
-        // Ð¦Ð¸Ð»Ñ–Ð½Ð´Ñ€Ð¸Ñ‡Ð½Ð¸Ð¹ ÐºÐ¾Ñ€Ð¿ÑƒÑ (Ð±ÐµÐ· Ð´ÑƒÐ±Ð»ÑŒÐ¾Ð²Ð°Ð½Ð¾Ð³Ð¾ Ð½Ð¸Ð¶Ð½ÑŒÐ¾Ð³Ð¾ ÐµÐºÐ²Ð°Ñ‚Ð¾Ñ€Ð°)
         const int bodySteps = 2;
         for (int b = 1; b <= bodySteps; b++)
         {
@@ -289,7 +284,6 @@ public static class SmoothMesh
             AddRing(y, R, Vector3.zero, 0.3f + t * 0.4f);
         }
 
-        // Ð’ÐµÑ€Ñ…Ð½Ñ Ð¿Ñ–Ð²ÑÑ„ÐµÑ€Ð° (ÐµÐºÐ²Ð°Ñ‚Ð¾Ñ€ ÑƒÐ¶Ðµ Ð´Ð¾Ð´Ð°Ð½Ð¾ ÑÐº ÐºÑ–Ð½ÐµÑ†ÑŒ ÐºÐ¾Ñ€Ð¿ÑƒÑÑƒ â€” Ð¿Ñ€Ð¾Ð¿ÑƒÑÑ‚Ð¸Ñ‚Ð¸)
         for (int ring = 1; ring <= hemiRings; ring++)
         {
             float t = ring / (float)hemiRings;
@@ -403,8 +397,6 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Ð”Ð·Ð²Ñ–Ð½ ÑÐ¾Ð¿Ð»Ð° Ð· ÐºÑ€Ð¸Ð²Ð¾Ð»Ñ–Ð½Ñ–Ð¹Ð½Ð¸Ð¼ Ð¿Ñ€Ð¾Ñ„Ñ–Ð»ÐµÐ¼ (ÐºÑ–Ð»ÑŒÐºÐ° ÐºÑ–Ð»ÐµÑ†ÑŒ) â€” Ð±ÐµÐ· Â«Ð¿Ñ€ÑÐ¼Ð¾Ð³Ð¾ ÐºÐ¾Ð½ÑƒÑÐ°Â».
-    /// Ð²Ð¸ÑÐ¾Ñ‚Ð° 2 (âˆ’1..1), exit r=0.5, throat râ‰ˆ0.20.
     /// </summary>
     public static Mesh Bell(int segments = 64, int rings = 14)
     {
@@ -418,28 +410,23 @@ public static class SmoothMesh
         var norms = new Vector3[vCount];
         var uvs = new Vector2[vCount];
 
-        // Ð“Ð»Ð°Ð´ÐºÐ¸Ð¹ Ñ€Ð°Ð´Ñ–ÑƒÑ bell: t=0 exit (Ð½Ð¸Ð·) â†’ t=1 throat (Ð²ÐµÑ€Ñ…)
         float RadiusAt(float t)
         {
             t = Mathf.Clamp01(t);
             float exitR = 0.50f;
             float throatR = 0.195f;
-            // Ð¨Ð¸Ñ€ÑˆÐ¸Ð¹ flare Ð±Ñ–Ð»Ñ exit; Ð¼â€™ÑÐºÐµ Ð·Ð²ÑƒÐ¶ÐµÐ½Ð½Ñ Ð´Ð¾ throat
             float flare = Mathf.Pow(1f - t, 1.55f);
             return Mathf.Lerp(throatR, exitR, flare);
         }
 
         for (int r = 0; r <= rings; r++)
         {
-            float t = r / (float)rings;          // 0 Ð½Ð¸Ð· .. 1 Ð²ÐµÑ€Ñ…
+            float t = r / (float)rings;
             float y = Mathf.Lerp(-1f, 1f, t);
             float rad = RadiusAt(t);
-            // d(radius)/d(t): Ð²Ñ–Ð´â€™Ñ”Ð¼Ð½Ðµ (Ð·Ð²ÑƒÐ¶ÑƒÑ”Ñ‚ÑŒÑÑ Ð²Ð³Ð¾Ñ€Ñƒ)
             float t0 = Mathf.Max(0f, t - 0.02f);
             float t1 = Mathf.Min(1f, t + 0.02f);
             float drDt = (RadiusAt(t1) - RadiusAt(t0)) / Mathf.Max(1e-4f, t1 - t0);
-            // Ð”Ð¾Ñ‚Ð¸Ñ‡Ð½Ð° Ð¿Ñ€Ð¾Ñ„Ñ–Ð»ÑŽ Ð² (radial, y): (drDt, 2), Ð±Ð¾ y Ð¾Ñ…Ð¾Ð¿Ð»ÑŽÑ” 2 Ð¿Ñ€Ð¸ tâˆˆ[0,1]
-            // Ð—Ð¾Ð²Ð½Ñ–ÑˆÐ½Ñ Ð½Ð¾Ñ€Ð¼Ð°Ð»ÑŒ âŠ¥ Ð´Ð¾Ñ‚Ð¸Ñ‡Ð½Ð¾Ñ—: (2, -drDt) Ñƒ (radial, y)
             float nRad = 2f;
             float nY = -drDt;
 
@@ -497,7 +484,6 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Ð£ÑÑ–Ñ‡ÐµÐ½Ð¸Ð¹ ÐºÐ¾Ð½ÑƒÑ (frustum): height 2 (âˆ’1..1), bottom r=0.5, top r = 0.5 * topRatio.
     /// </summary>
     public static Mesh Frustum(float topRatio = 0.7f, int segments = 96, int rings = 10)
     {
@@ -513,9 +499,9 @@ public static class SmoothMesh
 
         float rBot = 0.5f;
         float rTop = 0.5f * topRatio;
-        float dr = rTop - rBot; // Ð¿Ð¾ t 0â†’1
+        float dr = rTop - rBot;
         float nRad = 2f;
-        float nY = -dr; // ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ð° Ð·Ð¾Ð²Ð½Ñ–ÑˆÐ½ÑŒÐ¾Ñ— Ð½Ð¾Ñ€Ð¼Ð°Ð»Ñ–
+        float nY = -dr;
 
         for (int r = 0; r <= rings; r++)
         {
@@ -559,8 +545,6 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// ÐÐ¾Ñ tangent ogive: base r=0.5 Ð¿Ñ€Ð¸ y=-1, Ð³Ð»Ð°Ð´ÐºÐ¸Ð¹ ÑÑ„ÐµÑ€Ð¸Ñ‡Ð½Ð¸Ð¹ tip Ð¿Ñ€Ð¸ y=+1.
-    /// Ð„Ð´Ð¸Ð½Ð¸Ð¹ Ð½ÐµÐ¿ÐµÑ€ÐµÑ€Ð²Ð½Ð¸Ð¹ Ð¿Ñ€Ð¾Ñ„Ñ–Ð»ÑŒ (Ð±ÐµÐ· Ð½Ð°ÐºÐ»Ð°Ð´ÐµÐ½Ð¸Ñ… ÑÑ„ÐµÑ€). tipBlunt = tip radius / base R.
     /// </summary>
     public static Mesh Ogive(float tipBlunt = 0.06f, int segments = 96, int rings = 36)
     {
@@ -569,21 +553,15 @@ public static class SmoothMesh
         tipBlunt = Mathf.Clamp(tipBlunt, 0.02f, 0.14f);
         var mesh = new Mesh { name = $"SmoothOgive_{segments}x{rings}" };
 
-        // ÐžÐ´Ð¸Ð½Ð¸Ñ†Ñ: Ð²Ð¸ÑÐ¾Ñ‚Ð° H=2 (âˆ’1..+1), base R=0.5
         const float H = 2f;
         const float R = 0.5f;
         float tipR = R * tipBlunt;
-        // ÐšÐ»Ð°ÑÐ¸Ñ‡Ð½Ð¸Ð¹ Ñ€Ð°Ð´Ñ–ÑƒÑ tangent-ogive Ð½Ð° Ð¿Ð¾Ð²Ð½Ñƒ Ð²Ð¸ÑÐ¾Ñ‚Ñƒ, Ð´Ð°Ð»Ñ– Ñ€Ð°Ð½Ð½Ñ” Ð¾Ð±Ñ€Ñ–Ð·Ð°Ð½Ð½Ñ Ð¿Ñ–Ð´ tip-ÑÑ„ÐµÑ€Ñƒ
         float rho = (R * R + H * H) / (2f * R);
 
-        // Ð¡Ñ‚Ð¸Ðº ogive â†’ ÑÑ„ÐµÑ€Ð¸Ñ‡Ð½Ð¸Ð¹ tip, Ð´Ðµ Ð·Ð±Ñ–Ð³Ð°ÑŽÑ‚ÑŒÑÑ Ð½Ð°Ñ…Ð¸Ð»Ð¸ (Ð¿Ñ€Ð¸Ð±Ð»Ð¸Ð·Ð½Ð¾ Ð½Ð° Ñ€Ð°Ð´Ñ–ÑƒÑÑ– tipR)
-        // x Ð²Ñ–Ð´ Ð¾ÑÐ½Ð¾Ð²Ð¸: r(x) = sqrt(rho^2 - (H-x)^2) + R - rho
-        // Ð¦ÐµÐ½Ñ‚Ñ€ tip-ÑÑ„ÐµÑ€Ð¸ Ð½Ð° Ð¾ÑÑ–, Ñ‰Ð¾Ð± Ð±ÑƒÑ‚Ð¸ Ð´Ð¾Ñ‚Ð¸Ñ‡Ð½Ð¾ÑŽ Ð´Ð¾ ogive Ð½Ð° ÑÑ‚Ð¸ÐºÑƒ.
-        float joinR = tipR * 1.15f; // Ñ‚Ñ€Ð¾Ñ…Ð¸ Ð²Ð¸Ñ‰Ðµ tip radius Ð½Ð° ogive
+        float joinR = tipR * 1.15f; // tip radius ogive
         float joinX = 0f;
         for (int iter = 0; iter < 24; iter++)
         {
-            // Ð¿Ñ€Ð¸Ð±Ð»Ð¸Ð·Ð½Ð¾ Ð±Ñ–Ð½Ð°Ñ€Ð½Ð¸Ð¹ Ð¿Ð¾ÑˆÑƒÐº x, Ð´Ðµ ogive r â‰ˆ joinR
             float lo = 0f, hi = H * 0.98f;
             for (int k = 0; k < 20; k++)
             {
@@ -597,10 +575,8 @@ public static class SmoothMesh
         joinX = Mathf.Clamp(joinX, H * 0.55f, H * 0.92f);
         float underJ = rho * rho - (H - joinX) * (H - joinX);
         float rJoin = underJ > 0f ? Mathf.Sqrt(underJ) + R - rho : joinR;
-        // Ð¦ÐµÐ½Ñ‚Ñ€ ÑÑ„ÐµÑ€Ð¸Ñ‡Ð½Ð¾Ð³Ð¾ tip: Ð½Ð° Ð¾ÑÑ–, Ñ€Ð°Ð´Ñ–ÑƒÑ tipR, Ð¿Ñ€Ð¸Ð±Ð»Ð¸Ð·Ð½Ð¾ Ñ‡ÐµÑ€ÐµÐ· (rJoin, joinX)
         // (rJoin)^2 + (joinX - cY_from_base)^2 = tipR^2  â†’ place center so apex is at H
-        float tipCenterFromBase = H - tipR; // Ð²ÐµÑ€Ñ…Ñ–Ð²ÐºÐ° Ð½Ð° H
-        // ÐŸÑ–Ð´Ñ‚ÑÐ³Ð½ÑƒÑ‚Ð¸ ÑÑ‚Ð¸Ðº Ð½Ð° Ñ‚Ñƒ ÑÑ„ÐµÑ€Ñƒ Ð·Ð° Ð¿Ð¾Ñ‚Ñ€ÐµÐ±Ð¸
+        float tipCenterFromBase = H - tipR;
         float maxROnSphere = Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - (joinX - tipCenterFromBase) * (joinX - tipCenterFromBase)));
         if (maxROnSphere > 1e-4f && rJoin > maxROnSphere)
             rJoin = maxROnSphere;
@@ -608,12 +584,11 @@ public static class SmoothMesh
         float RadiusAt(float t)
         {
             t = Mathf.Clamp01(t);
-            float x = t * H; // Ð²Ñ–Ð´ Ð¾ÑÐ½Ð¾Ð²Ð¸
+            float x = t * H;
             if (x <= joinX)
             {
                 float under = rho * rho - (H - x) * (H - x);
                 float r = under > 0f ? Mathf.Sqrt(under) + R - rho : 0f;
-                // Ð¿Ð»Ð°Ð²Ð½Ð¸Ð¹ blend Ñƒ ÑÑ„ÐµÑ€Ñƒ Ð±Ñ–Ð»Ñ ÑÑ‚Ð¸ÐºÑƒ
                 float blendStart = joinX * 0.88f;
                 if (x > blendStart)
                 {
@@ -625,7 +600,6 @@ public static class SmoothMesh
                 }
                 return Mathf.Max(0.001f, r);
             }
-            // Ð¡Ñ„ÐµÑ€Ð¸Ñ‡Ð½Ð¸Ð¹ tip
             float d = x - tipCenterFromBase;
             if (d >= tipR) return 0.001f;
             return Mathf.Max(0.001f, Mathf.Sqrt(Mathf.Max(0f, tipR * tipR - d * d)));
@@ -663,7 +637,6 @@ public static class SmoothMesh
             }
         }
 
-        // Ð¡Ð¿Ñ€Ð°Ð²Ð¶Ð½Ñ–Ð¹ Ð¿Ð¾Ð»ÑŽÑ (tip Ð±ÐµÐ· Ð³Ð¾ÑÑ‚Ñ€ÑÐºÐ°)
         verts[pole] = new Vector3(0f, 1f, 0f);
         norms[pole] = Vector3.up;
         uvs[pole] = new Vector2(0.5f, 1f);
@@ -679,7 +652,6 @@ public static class SmoothMesh
             tris.Add(i0); tris.Add(i2); tris.Add(i1);
             tris.Add(i1); tris.Add(i2); tris.Add(i3);
         }
-        // Ð—Ð°Ð¼ÐºÐ½ÑƒÑ‚Ð¸ Ð¾ÑÑ‚Ð°Ð½Ð½Ñ” ÐºÑ–Ð»ÑŒÑ†Ðµ â†’ Ð¿Ð¾Ð»ÑŽÑ (Ð¾ÑÑ‚Ð°Ð½Ð½Ñ” ÐºÑ–Ð»ÑŒÑ†Ðµ Ð²Ð¶Ðµ Ð½Ð° ÐºÑ–Ð½Ñ†Ñ–; fan Ð¿Ð¾ÐºÑ€Ð°Ñ‰ÑƒÑ” tip)
         int last = rings * stride;
         for (int i = 0; i < segments; i++)
         {
@@ -698,7 +670,6 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Frustum GO: diameter = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€ Ð¾ÑÐ½Ð¾Ð²Ð¸, topRatio = top/base, halfHeight = Ð¿Ñ–Ð²Ð²Ð¸ÑÐ¾Ñ‚Ð°.
     /// </summary>
     public static GameObject MakeFrustum(string name, Transform parent, Vector3 pos,
         float baseDiameter, float halfHeight, float topRatio, Material mat)
@@ -717,7 +688,6 @@ public static class SmoothMesh
     }
 
     /// <summary>
-    /// Ogive GO: diameter = Ð´Ñ–Ð°Ð¼ÐµÑ‚Ñ€ Ð¾ÑÐ½Ð¾Ð²Ð¸, halfHeight = Ð¿Ñ–Ð²Ð²Ð¸ÑÐ¾Ñ‚Ð° ogive.
     /// </summary>
     public static GameObject MakeOgive(string name, Transform parent, Vector3 pos,
         float baseDiameter, float halfHeight, Material mat, float tipBlunt = 0.06f)

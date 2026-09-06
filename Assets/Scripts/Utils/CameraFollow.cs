@@ -2,9 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 
 /// <summary>
-/// ÃÂ¡Ã‘â€šÃÂ°ÃÂ±Ã‘â€“ÃÂ»Ã‘Å’ÃÂ½ÃÂ° orbit-ÃÂºÃÂ°ÃÂ¼ÃÂµÃ‘â‚¬ÃÂ° ÃÂ½ÃÂ°ÃÂ²ÃÂºÃÂ¾ÃÂ»ÃÂ¾ Ã‘â‚¬ÃÂ°ÃÂºÃÂµÃ‘â€šÃÂ¸.
-/// Ãâ€žÃÂ´ÃÂ¸ÃÂ½ÃÂ° ÃÂ¼ÃÂ¾ÃÂ´ÃÂµÃÂ»Ã‘Å’: focus + (yaw, pitch, distance).
-/// ÃÅ¸Ã‘â€“ÃÂ´ Ã‘â€¡ÃÂ°Ã‘Â drag/ÃÂºÃÂ»ÃÂ°ÃÂ²Ã‘â€“Ã‘Ë† Ã¢â‚¬â€ ÃÂ±ÃÂµÃÂ· Lerp (ÃÂ¼ÃÂ¸Ã‘â€šÃ‘â€šÃ‘â€ÃÂ²ÃÂ¾), Ã‘â€“ÃÂ½ÃÂ°ÃÂºÃ‘Ë†ÃÂµ Ã¢â‚¬â€ ÃÂ¼'Ã‘ÂÃÂºÃÂµ ÃÂ·ÃÂ³ÃÂ»ÃÂ°ÃÂ´ÃÂ¶Ã‘Æ’ÃÂ²ÃÂ°ÃÂ½ÃÂ½Ã‘Â.
+/// Stable orbit camera around the rocket. Model: focus + (yaw, pitch, distance). Snappy while dragging; soft blend otherwise.
 /// </summary>
 public class CameraFollow : MonoBehaviour
 {
@@ -25,7 +23,7 @@ public class CameraFollow : MonoBehaviour
     public float defaultDistance = 100f;
     public float minDist = 12f;
     public float maxDist = 600f;
-    /// <summary>Ãâ€™Ã‘â€“ÃÂ´'Ã‘â€ÃÂ¼ÃÂ½ÃÂ¸ÃÂ¹ pitch = ÃÂ¿ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´ ÃÂ·ÃÂ½ÃÂ¸ÃÂ·Ã‘Æ’ / ÃÂ¿Ã‘â€“ÃÂ´ ÃÂ½ÃÂ¾Ã‘ÂÃ‘â€“ÃÂ¹.</summary>
+    /// <summary>Lower pitch clamp (mild assist; skirt/apron/haze handle the rest).</summary>
     public float minPitch = -22f; // mild assist; skirt/apron/haze handle the rest
     public float maxPitch = 82f;
     public float minCameraHeight = 2f;
@@ -39,13 +37,13 @@ public class CameraFollow : MonoBehaviour
     public float overviewPadding = 1.25f;
     public float overviewMaxDistance = 2400f;
     public float overviewMinHeight = 35f;
-    /// <summary>ÃÅ“ÃÂ½ÃÂ¾ÃÂ¶ÃÂ½ÃÂ¸ÃÂº ÃÂ²Ã‘â€“ÃÂ´Ã‘ÂÃ‘â€šÃÂ°ÃÂ½Ã‘â€“ overview: min = ÃÂ±ÃÂ»ÃÂ¸ÃÂ·Ã‘Å’ÃÂºÃÂ¾, max = ÃÂ¼ÃÂ°ÃÂºÃ‘ÂÃÂ¸ÃÂ¼ÃÂ°ÃÂ»Ã‘Å’ÃÂ½ÃÂ¾ ÃÂ´ÃÂ°ÃÂ»ÃÂµÃÂºÃÂ¾ (Ã‘â€ ÃÂºÃ‘Æ’ÃÂ´ÃÂ¸ ÃÂ·Ã‘Æ’ÃÂ¼ÃÂ¸Ã‘â€šÃÂ¸).</summary>
+    /// <summary>Overview distance multiplier range: min = closer, max = farther pull-back.</summary>
     public const float OverviewDistMulMin = 0.55f;
     public const float OverviewDistMulMax = 2.4f;
 
     [Header("Input")]
     public float orbitSensitivity = 0.22f;
-    /// <summary>ÃÅ“'Ã‘ÂÃÂºÃÂ¸ÃÂ¹ ÃÂ·Ã‘Æ’ÃÂ¼: Ã‘â€¡ÃÂ°Ã‘ÂÃ‘â€šÃÂºÃÂ° ÃÂ²Ã‘â€“ÃÂ´Ã‘ÂÃ‘â€šÃÂ°ÃÂ½Ã‘â€“ ÃÂ·ÃÂ° ÃÂ¾ÃÂ´ÃÂ¸ÃÂ½ ÃÂºÃ‘â‚¬ÃÂ¾ÃÂº ÃÂºÃÂ¾ÃÂ»ÃÂµÃ‘ÂÃÂ° (~4Ã¢â‚¬â€œ6%).</summary>
+    /// <summary>Wheel zoom: relative distance change per notch (~4-6%).</summary>
     public float zoomSensitivity = 0.045f;
     public float keyOrbitSpeed = 55f;
     public bool invertY;
@@ -60,7 +58,6 @@ public class CameraFollow : MonoBehaviour
     public float fov = 46f;
     public float overviewFov = 50f;
 
-    // Orbit state (Ã‘â€ÃÂ´ÃÂ¸ÃÂ½ÃÂµ ÃÂ´ÃÂ¶ÃÂµÃ‘â‚¬ÃÂµÃÂ»ÃÂ¾ ÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂ´ÃÂ¸)
     float yaw;
     float pitch;
     float distance;
@@ -70,14 +67,13 @@ public class CameraFollow : MonoBehaviour
     bool focusInited;
     bool orbitDragging;
     Vector3 lastMouse;
-    /// <summary>ÃÅ¸Ã‘â€“Ã‘ÂÃÂ»Ã‘Â Ã‘â‚¬Ã‘Æ’Ã‘â€¡ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ orbit ÃÂ½ÃÂµ ÃÂ¿ÃÂ¾ÃÂ²ÃÂµÃ‘â‚¬Ã‘â€šÃÂ°Ã‘â€šÃÂ¸ ÃÂºÃ‘Æ’Ã‘â€š ÃÂ°ÃÂ²Ã‘â€šÃÂ¾ÃÂ¼ÃÂ°Ã‘â€šÃÂ¸Ã‘â€¡ÃÂ½ÃÂ¾, ÃÂ´ÃÂ¾ÃÂºÃÂ¸ ÃÂ½ÃÂµ Ã‘ÂÃÂºÃÂ¸ÃÂ½Ã‘Æ’Ã‘â€šÃÂ¾ (F/R).</summary>
+    /// <summary>True while user drives orbit; auto follow resumes after unlock (F/R).</summary>
     public bool userOrbitLock;
-    /// <summary>ÃÂ£ Manual focus ÃÂ·ÃÂ°ÃÂ¼ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ¶ÃÂµÃÂ½ÃÂ¾ Ã¢â‚¬â€ ÃÂºÃÂ°ÃÂ¼ÃÂµÃ‘â‚¬ÃÂ° ÃÂ½ÃÂµ Ã‚Â«ÃÂ¿Ã‘â‚¬ÃÂ¸ÃÂ»ÃÂ¸ÃÂ¿ÃÂ°Ã‘â€Ã‚Â» ÃÂ´ÃÂ¾ Ã‘â‚¬ÃÂ°ÃÂºÃÂµÃ‘â€šÃÂ¸ ÃÂ¿Ã‘â€“Ã‘ÂÃÂ»Ã‘Â ÃÂ¿ÃÂ¾Ã‘ÂÃÂ°ÃÂ´ÃÂºÃÂ¸.</summary>
+    /// <summary>In Manual mode focus is frozen — pan does not re-anchor onto the rocket.</summary>
     bool focusFrozen;
     Vector3 frozenFocus;
     Camera cam;
 
-    // ÃÅ¸ÃÂ¾ÃÂ»Ã‘Â Ã‘ÂÃ‘Æ’ÃÂ¼Ã‘â€“Ã‘ÂÃÂ½ÃÂ¾Ã‘ÂÃ‘â€šÃ‘â€“, Ã‘â€°ÃÂ¾ ÃÂ²ÃÂ¸ÃÂºÃÂ¾Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘â€šÃÂ¾ÃÂ²Ã‘Æ’Ã‘Å½Ã‘â€šÃ‘Å’Ã‘ÂÃ‘Â ÃÂ´ÃÂµÃ‘â€“ÃÂ½ÃÂ´ÃÂµ / ÃÂ² inspector
     public float manualYaw { get => yaw; set => yaw = value; }
     public float manualPitch { get => pitch; set => pitch = value; }
     public float manualDistance { get => distance; set => distance = value; }
@@ -123,10 +119,8 @@ public class CameraFollow : MonoBehaviour
         Resolve();
         Vector3 targetFocus = ComputeFocus();
 
-        // Manual: focus ÃÂ·ÃÂ°Ã‘â€žÃ‘â€“ÃÂºÃ‘ÂÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¾ (ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´) Ã¢â‚¬â€ ÃÂ½ÃÂµ ÃÂ¿ÃÂµÃ‘â‚¬ÃÂµÃÂ¼ÃÂ¸ÃÂºÃÂ°Ã‘â€šÃÂ¸Ã‘ÂÃ‘Å’ ÃÂ½ÃÂ° Ã‚Â«Ã‘ÂÃÂ»Ã‘â€“ÃÂ´ÃÂºÃ‘Æ’ÃÂ²ÃÂ°ÃÂ½ÃÂ½Ã‘ÂÃ‚Â» ÃÂ·ÃÂ° Ã‘â‚¬ÃÂ°ÃÂºÃÂµÃ‘â€šÃÂ¾Ã‘Å½
         if (mode == ViewMode.Manual && focusFrozen)
             targetFocus = frozenFocus;
-        // ÃÅ¸Ã‘â€“Ã‘ÂÃÂ»Ã‘Â ÃÂ¿ÃÂ¾Ã‘ÂÃÂ°ÃÂ´ÃÂºÃÂ¸ ÃÂ² Follow ÃÂ· userOrbitLock Ã¢â‚¬â€ Ã‘â€šÃÂµÃÂ¶ Ã‘â€šÃ‘â‚¬ÃÂ¸ÃÂ¼ÃÂ°Ã‘â€šÃÂ¸ focus (ÃÂºÃÂ¾Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘â€šÃ‘Æ’ÃÂ²ÃÂ°Ã‘â€¡ ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´ÃÂ°Ã‘â€)
         else if (mode == ViewMode.Follow && userOrbitLock && RocketIsSettled())
         {
             if (!focusFrozen)
@@ -165,7 +159,6 @@ public class CameraFollow : MonoBehaviour
             cam.fieldOfView = hard ? wantFov : Mathf.Lerp(cam.fieldOfView, wantFov, 1f - Mathf.Exp(-6f * Time.deltaTime));
         }
 
-        // ÃÂ¢Ã‘â‚¬ÃÂ¸ÃÂ¼ÃÂ°Ã‘â€šÃÂ¸ shadow cascades Ã‘â€°Ã‘â€“ÃÂ»Ã‘Å’ÃÂ½ÃÂ¸ÃÂ¼ÃÂ¸ ÃÂ½ÃÂ° focus, Ã‘â€°ÃÂ¾ÃÂ± wheel-zoom ÃÂ½ÃÂµ ÃÂ¼ÃÂ¸ÃÂ»ÃÂ¸ÃÂ² Ã‘ÂÃÂ¸ÃÂ»Ã‘Æ’ÃÂµÃ‘â€šÃÂ¸
         UpdateShadowFit();
     }
 
@@ -176,7 +169,6 @@ public class CameraFollow : MonoBehaviour
         float depth = Vector3.Distance(transform.position, smoothFocus);
         if (mode == ViewMode.Overview)
             depth = Mathf.Max(depth, distance > 1f ? distance : 400f);
-        // ÃÅ¸Ã‘â‚¬ÃÂ¾ÃÂ¿Ã‘Æ’Ã‘ÂÃÂºÃÂ°Ã‘â€šÃÂ¸ ÃÂ´Ã‘â‚¬Ã‘â€“ÃÂ±ÃÂ½Ã‘â€“ ÃÂ·ÃÂ¼Ã‘â€“ÃÂ½ÃÂ¸ Ã¢â‚¬â€ ÃÂ·ÃÂ°ÃÂ¿ÃÂ¸Ã‘ÂÃÂ¸ Quality/URP Ã‘â€°ÃÂ¾ÃÂºÃÂ°ÃÂ´Ã‘â‚¬Ã‘Æ’ ÃÂ·ÃÂ°ÃÂ¹ÃÂ²Ã‘â€“
         if (Mathf.Abs(depth - _lastShadowFitDepth) < 2.5f && _lastShadowFitDepth > 0f)
             return;
         _lastShadowFitDepth = depth;
@@ -198,10 +190,7 @@ public class CameraFollow : MonoBehaviour
     {
         bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
-        // ÃÅ¡ÃÂ»ÃÂ°ÃÂ²Ã‘â€“Ã‘Ë†Ã‘â€“ Ã‘â‚¬ÃÂµÃÂ¶ÃÂ¸ÃÂ¼Ã‘â€“ÃÂ² (F/T/C/R) ÃÂ½ÃÂ°ÃÂ»ÃÂµÃÂ¶ÃÂ°Ã‘â€šÃ‘Å’ MissionControlUI, Ã‘â€°ÃÂ¾ÃÂ± Ã‘Æ’ÃÂ½ÃÂ¸ÃÂºÃÂ½Ã‘Æ’Ã‘â€šÃÂ¸ double-handling
-        // Ã‘â€°ÃÂ¾ ÃÂ¼ÃÂ¾ÃÂ³ÃÂ»ÃÂ¾ ÃÂ± ÃÂ·ÃÂ°ÃÂ¼ÃÂºÃÂ½Ã‘Æ’Ã‘â€šÃÂ¸ ÃÂºÃÂ°ÃÂ¼ÃÂµÃ‘â‚¬Ã‘Æ’ ÃÂ² Overview.
 
-        // Zoom: ÃÂ¿Ã‘â‚¬ÃÂ°Ã‘â€ Ã‘Å½Ã‘â€ ÃÂ·ÃÂ°ÃÂ²ÃÂ¶ÃÂ´ÃÂ¸ ÃÂ² Ã‘â€ ÃÂµÃÂ½Ã‘â€šÃ‘â‚¬Ã‘â€“ ÃÂµÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ°; ÃÂ±Ã‘â€“ÃÂ»Ã‘Â minDist Ã¢â‚¬â€ ÃÂ²Ã‘â€“ÃÂ´'Ã‘â€”ÃÂ·ÃÂ´ ÃÂ¿Ã‘â‚¬ÃÂ°Ã‘â€ Ã‘Å½Ã‘â€
         float scroll = Input.mouseScrollDelta.y;
         if (Mathf.Abs(scroll) > 0.01f && (!overUI || Input.GetKey(KeyCode.LeftControl)))
             ApplyZoom(scroll);
@@ -213,7 +202,6 @@ public class CameraFollow : MonoBehaviour
             return;
         }
 
-        // Ãâ€ºÃÅ¡ÃÅ“ / ÃÅ¸ÃÅ¡ÃÅ“ orbit
         if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
         {
             orbitDragging = true;
@@ -252,8 +240,6 @@ public class CameraFollow : MonoBehaviour
                 ApplyZoom(-zD * Time.deltaTime * 12f);
         }
 
-        // Follow auto-distance ÃÂ»ÃÂ¸Ã‘Ë†ÃÂµ ÃÂ² ÃÂ°ÃÂºÃ‘â€šÃÂ¸ÃÂ²ÃÂ½ÃÂ¾ÃÂ¼Ã‘Æ’ ÃÂ¿ÃÂ¾ÃÂ»Ã‘Å’ÃÂ¾Ã‘â€šÃ‘â€“ ÃÂ±ÃÂµÃÂ· user lock
-        // (ÃÂ¿Ã‘â€“Ã‘ÂÃÂ»Ã‘Â ÃÂ¿ÃÂ¾Ã‘ÂÃÂ°ÃÂ´ÃÂºÃÂ¸ / ÃÂ² Manual Ã¢â‚¬â€ ÃÂ½ÃÂµ Ã‘â€šÃ‘ÂÃÂ³ÃÂ½Ã‘Æ’Ã‘â€šÃÂ¸ ÃÂºÃÂ°ÃÂ¼ÃÂµÃ‘â‚¬Ã‘Æ’ ÃÂ½ÃÂ°ÃÂ·ÃÂ°ÃÂ´ Ã‘Æ’ Ã‚Â«Ã‘ÂÃÂ»Ã‘â€“ÃÂ´ÃÂºÃ‘Æ’ÃÂ²ÃÂ°ÃÂ½ÃÂ½Ã‘ÂÃ‚Â»)
         if (mode == ViewMode.Follow && !userOrbitLock && !orbitDragging && !RocketIsSettled())
         {
             float h = 0f;
@@ -265,7 +251,7 @@ public class CameraFollow : MonoBehaviour
         }
     }
 
-    /// <summary>ÃÂ ÃÂ°ÃÂºÃÂµÃ‘â€šÃÂ° ÃÂ½ÃÂ° ÃÂ·ÃÂµÃÂ¼ÃÂ»Ã‘â€“ / Ã‘ÂÃÂ¸ÃÂ¼Ã‘Æ’ÃÂ»Ã‘ÂÃ‘â€ Ã‘â€“Ã‘Â ÃÂ·ÃÂ°ÃÂ²ÃÂµÃ‘â‚¬Ã‘Ë†ÃÂµÃÂ½ÃÂ° Ã¢â‚¬â€ Ã‘â‚¬ÃÂµÃÂ¶ÃÂ¸ÃÂ¼ ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´Ã‘Æ’ ÃÂ½ÃÂµ Ã‘ÂÃÂºÃÂ¸ÃÂ´ÃÂ°Ã‘â€šÃÂ¸.</summary>
+    /// <summary>True when the rocket has landed or the sim finished.</summary>
     public bool RocketIsSettled()
     {
         if (rocket == null) return false;
@@ -275,7 +261,6 @@ public class CameraFollow : MonoBehaviour
     void ApplyZoom(float scroll)
     {
         float steps = Mathf.Clamp(scroll, -4f, 4f);
-        // Additive step Ã¢Ë†Â current distance Ã¢â‚¬â€ ÃÂ±Ã‘â€“ÃÂ»Ã‘Â minDist ÃÂºÃ‘â‚¬ÃÂ¾ÃÂº ÃÂ½ÃÂµ ÃÂ½Ã‘Æ’ÃÂ»Ã‘Å’ÃÂ¾ÃÂ²ÃÂ¸ÃÂ¹
         if (mode == ViewMode.Overview)
         {
             float step = Mathf.Max(0.03f, ovDistMul * zoomSensitivity);
@@ -307,7 +292,6 @@ public class CameraFollow : MonoBehaviour
     {
         Quaternion rot = Quaternion.Euler(p, y, 0f);
         Vector3 desired = focus + rot * (Vector3.back * dist);
-        // Ãâ€ÃÂ¾ÃÂ·ÃÂ²ÃÂ¾ÃÂ»Ã‘ÂÃ‘â€ÃÂ¼ÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´ ÃÂ·ÃÂ½ÃÂ¸ÃÂ·Ã‘Æ’: ÃÂºÃÂ°ÃÂ¼ÃÂµÃ‘â‚¬ÃÂ° ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµ ÃÂ±Ã‘Æ’Ã‘â€šÃÂ¸ ÃÂ½ÃÂ¸ÃÂ¶Ã‘â€¡ÃÂµ focus, ÃÂ°ÃÂ»ÃÂµ ÃÂ½ÃÂµ ÃÂ¿Ã‘â€“ÃÂ´ ÃÂ·ÃÂµÃÂ¼ÃÂ»Ã‘Å½
         float floor = Mathf.Max(minCameraHeight, 1.5f);
         if (desired.y < floor) desired.y = floor;
         desired = ClampPoint(desired);
@@ -370,12 +354,11 @@ public class CameraFollow : MonoBehaviour
 
     public void SnapToFullTrajectoryView() => SnapToFullTrajectoryView(maxZoomOut: false);
 
-    /// <param name="maxZoomOut">true = ÃÂ²Ã‘â€“ÃÂ´ÃÂ´ÃÂ°ÃÂ»ÃÂ¸Ã‘â€šÃÂ¸ (ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´ ÃÂ¿Ã‘â€“Ã‘ÂÃÂ»Ã‘Â Ãâ€ÃÂµÃÂ¼ÃÂ¾), ÃÂ»ÃÂ¸Ã‘Ë†ÃÂ°Ã‘â€Ã‘â€šÃ‘Å’Ã‘ÂÃ‘Â ÃÂ·ÃÂ°ÃÂ¿ÃÂ°Ã‘Â ÃÂ·Ã‘Æ’ÃÂ¼Ã‘Æ’.</param>
+    /// <param name="maxZoomOut">true = zoom out (raise distance); false = zoom in.</param>
     public void SnapToFullTrajectoryView(bool maxZoomOut)
     {
         mode = ViewMode.Overview;
         userOrbitLock = false;
-        // ÃÂÃÂµ max 2.4 Ã¢â‚¬â€ Ã‘â€“ÃÂ½ÃÂ°ÃÂºÃ‘Ë†ÃÂµ ÃÂºÃÂ°ÃÂ¼ÃÂµÃ‘â‚¬ÃÂ° Ã‚Â«Ã‘â€šÃ‘â€“ÃÂºÃÂ°Ã‘â€Ã‚Â» ÃÂ²ÃÂ±Ã‘â€“ÃÂº ÃÂ·ÃÂ° ClampPoint / far bounds
         ovDistMul = maxZoomOut ? 1.65f : 1f;
         ovYaw = 35f;
         ovPitch = 32f;
@@ -392,7 +375,6 @@ public class CameraFollow : MonoBehaviour
             if (!any) { min = max = p; any = true; }
             else { min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
         }
-        // Ãâ€”ÃÂ°ÃÂ²ÃÂ¶ÃÂ´ÃÂ¸ ÃÂ²ÃÂºÃÂ»Ã‘Å½Ã‘â€¡ÃÂ°Ã‘â€šÃÂ¸ pad (0) Ã¢â‚¬â€ ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´ ÃÂ½ÃÂµ Ã‚Â«Ã‘â€”ÃÂ´ÃÂµÃ‚Â» ÃÂ²ÃÂ±Ã‘â€“ÃÂº ÃÂ²Ã‘â€“ÃÂ´ LZ
         Enc(Vector3.zero);
         Enc(new Vector3(0f, 50f, 0f));
         if (rocket != null)
@@ -401,7 +383,6 @@ public class CameraFollow : MonoBehaviour
             if (rocket.parameters != null)
             {
                 Enc(rocket.parameters.startPosition);
-                // Ã‘ÂÃÂºÃ‘â€“Ã‘â‚¬ ÃÂ½ÃÂ° Ã‘ÂÃ‘â€šÃÂ°Ã‘â‚¬Ã‘â€š ÃÂ¿ÃÂ¾ ÃÂ²ÃÂµÃ‘â‚¬Ã‘â€šÃÂ¸ÃÂºÃÂ°ÃÂ»Ã‘â€“ ÃÂ½ÃÂ°ÃÂ´ pad
                 Enc(new Vector3(0f, Mathf.Max(100f, rocket.parameters.startPosition.y), 0f));
             }
         }
@@ -421,7 +402,6 @@ public class CameraFollow : MonoBehaviour
             lookAt = center;
             return;
         }
-        // ÃÂ¦ÃÂµÃÂ½Ã‘â€šÃ‘â‚¬ ÃÂ±ÃÂ»ÃÂ¸ÃÂ¶Ã‘â€¡ÃÂµ ÃÂ´ÃÂ¾ pad (XZÃ¢â€°Ë†0), Ã‘â€°ÃÂ¾ÃÂ± ÃÂºÃÂ°ÃÂ¼ÃÂµÃ‘â‚¬ÃÂ° ÃÂ½ÃÂµ ÃÂ´ÃÂ¸ÃÂ²ÃÂ¸ÃÂ»ÃÂ°Ã‘ÂÃ‘Å’ Ã‚Â«ÃÂ²ÃÂ±Ã‘â€“ÃÂºÃ‚Â»
         Vector3 raw = (min + max) * 0.5f;
         center = new Vector3(raw.x * 0.35f, raw.y, raw.z * 0.35f);
         lookAt = new Vector3(0f, Mathf.Clamp(center.y * 0.35f, 20f, 200f), 0f);
@@ -456,8 +436,6 @@ public class CameraFollow : MonoBehaviour
         if (m == ViewMode.Follow)
         {
             mode = ViewMode.Follow;
-            // ÃÂÃÂµ Ã‘ÂÃÂºÃÂ¸ÃÂ´ÃÂ°Ã‘â€šÃÂ¸ userOrbitLock, Ã‘ÂÃÂºÃ‘â€°ÃÂ¾ ÃÂºÃÂ¾Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘â€šÃ‘Æ’ÃÂ²ÃÂ°Ã‘â€¡ Ã‘Æ’ÃÂ¶ÃÂµ ÃÂºÃ‘â‚¬Ã‘Æ’Ã‘â€šÃÂ¸ÃÂ² ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´
-            // (Ã‘ÂÃÂºÃÂ¸ÃÂ´ÃÂ°ÃÂ½ÃÂ½Ã‘Â ÃÂ»ÃÂ¸Ã‘Ë†ÃÂµ Ã‘ÂÃÂ²ÃÂ½ÃÂ¸ÃÂ¼ F ÃÂ· OnCamFollow / R)
             if (!userOrbitLock)
             {
                 focusFrozen = false;
@@ -471,7 +449,6 @@ public class CameraFollow : MonoBehaviour
         }
         else
         {
-            // Manual Ã¢â‚¬â€ ÃÂ²Ã‘â€“ÃÂ»Ã‘Å’ÃÂ½ÃÂ¸ÃÂ¹ ÃÂ¾ÃÂ³ÃÂ»Ã‘ÂÃÂ´: focus freeze, ÃÂºÃ‘Æ’Ã‘â€šÃÂ¸ ÃÂ·ÃÂ±ÃÂµÃ‘â‚¬ÃÂµÃÂ³Ã‘â€šÃÂ¸
             mode = ViewMode.Manual;
             userOrbitLock = true;
             frozenFocus = focusInited ? smoothFocus : ComputeFocus();

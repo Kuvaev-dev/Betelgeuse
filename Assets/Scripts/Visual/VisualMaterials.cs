@@ -2,8 +2,7 @@
 using UnityEngine.Rendering;
 
 /// <summary>
-/// ÐœÐ°Ñ‚ÐµÑ€Ñ–Ð°Ð»Ð¸ Ð´Ð»Ñ Ð¿Ñ€Ð¾Ñ†ÐµÐ´ÑƒÑ€Ð½Ð¾Ñ— Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ñ–Ñ—. Pad-Ð¼Ð°Ñ€ÐºÑƒÐ²Ð°Ð½Ð½Ñ â€” Ñ‡ÐµÑ€ÐµÐ· Unlit opaque
-/// Ð· ÑÑÐºÑ€Ð°Ð²Ð¸Ð¼ BaseColor (emission Ñƒ URP Unlit Ñ‡Ð°ÑÑ‚Ð¾ Â«Ð½Ðµ ÑÐ²Ñ–Ñ‚Ð¸Ñ‚ÑŒÂ» Ð±ÐµÐ· bloom).
+/// Materials for procedural geometry. Pad markings use Unlit opaque with bright BaseColor.
 /// </summary>
 public static class VisualMaterials
 {
@@ -40,12 +39,10 @@ public static class VisualMaterials
     public static Material Unlit(Color color, Color? emission = null)
     {
         var mat = new Material(UnlitShader);
-        // Opaque solid â€” Ð³Ð°Ñ€Ð°Ð½Ñ‚Ð¾Ð²Ð°Ð½Ð¾ Ð²Ð¸Ð´Ð½Ð¾
         if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 0f);
         if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f);
         if (mat.HasProperty("_AlphaClip")) mat.SetFloat("_AlphaClip", 0f);
         SetColor(mat, color);
-        // Ð”ÑƒÐ±Ð»ÑŽÑ”Ð¼Ð¾ Ð² emission ÑÐºÑ‰Ð¾ Ñ” (Ð´Ð»Ñ bloom), Ð°Ð»Ðµ base color ÑƒÐ¶Ðµ ÑÑÐºÑ€Ð°Ð²Ð¸Ð¹
         if (emission.HasValue && mat.HasProperty("_EmissionColor"))
         {
             mat.EnableKeyword("_EMISSION");
@@ -58,7 +55,6 @@ public static class VisualMaterials
     {
         var mat = new Material(ParticleShader);
         SetColor(mat, tint);
-        // ÐŸÑ€Ð¾Ð·Ð¾Ñ€Ð¸Ð¹ alpha Ð´Ð»Ñ Ð´Ð¸Ð¼Ñƒ/Ð¿Ð¸Ð»Ñƒ
         if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
         if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f); // alpha
         if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -69,13 +65,13 @@ public static class VisualMaterials
         return mat;
     }
 
-    /// <summary>ÐÐ´Ð¸Ñ‚Ð¸Ð²Ð½Ñ– Ñ‡Ð°ÑÑ‚Ð¸Ð½ÐºÐ¸ Ð´Ð»Ñ ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ Ð´Ð²Ð¸Ð³ÑƒÐ½Ð° (ÑÑÐºÑ€Ð°Ð²Ðµ ÑÐ´Ñ€Ð¾ + Ð¾Ð±Ð¾Ð»Ð¾Ð½ÐºÐ°).</summary>
+    /// <summary>ParticleAdditive</summary>
     public static Material ParticleAdditive(Color tint)
     {
         var mat = new Material(ParticleShader);
         SetColor(mat, tint);
         if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
-        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 1f); // Ð°Ð´Ð¸Ñ‚Ð¸Ð²Ð½Ð¸Ð¹
+        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 1f);
         if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
         if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
         if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 0f);
@@ -161,15 +157,13 @@ public static class VisualMaterials
     public static void Apply(GameObject go, Color color, float metallic = 0.3f, float smooth = 0.5f, Color? emission = null)
         => Apply(go, Lit(color, metallic, smooth, emission));
 
-    /// <summary>Ð¯ÑÐºÑ€Ð°Ð²Ðµ Ð¼Ð°Ñ€ÐºÑƒÐ²Ð°Ð½Ð½Ñ pad â€” solid unlit, Ð²Ð¸Ð´Ð½Ð¾ Ð· 2 ÐºÐ¼.</summary>
+    /// <summary>ApplyUnlit</summary>
     public static void ApplyUnlit(GameObject go, Color color, Color? emission = null)
     {
-        // Base color = max(color, emission) Ñ‰Ð¾Ð± Ð½Ðµ Ð±ÑƒÐ»Ð¾ Â«Ñ‡Ð¾Ñ€Ð½Ð¾Ð³Ð¾ unlitÂ»
         Color c = color;
         if (emission.HasValue)
             c = Color.Lerp(color, emission.Value, 0.55f);
         c.a = 1f;
-        // ÐŸÑ–Ð´ÑÐ¸Ð»ÐµÐ½Ð½Ñ ÑÑÐºÑ€Ð°Ð²Ð¾ÑÑ‚Ñ–
         c = new Color(
             Mathf.Clamp01(c.r * 1.15f + 0.08f),
             Mathf.Clamp01(c.g * 1.15f + 0.08f),
@@ -177,7 +171,7 @@ public static class VisualMaterials
         Apply(go, Unlit(c, emission ?? c));
     }
 
-    /// <summary>Ð¯ÑÐºÑ€Ð°Ð²Ð¸Ð¹ Lit Ð±ÐµÑ‚Ð¾Ð½ (Ñ€ÐµÐ°Ð³ÑƒÑ” Ð½Ð° ÑÐ¾Ð½Ñ†Ðµ + ambient).</summary>
+    /// <summary>ApplyBright</summary>
     public static void ApplyBright(GameObject go, Color color)
     {
         Color c = new Color(

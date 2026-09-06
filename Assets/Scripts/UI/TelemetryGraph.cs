@@ -1,14 +1,19 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 using System.Collections.Generic;
 
 /// <summary>
-/// Стрічковий графік real-time. Підписи — siblings на <see cref="labelRoot"/> (не діти RawImage),
-/// щоб завжди малювались зверху й лишались читабельними.
+/// Pixel-buffer realtime telemetry graph. Labels are siblings under <see cref="labelRoot"/>
+/// (not under the RawImage) so TMP stays readable and clickable when interactive.
+/// Optional view window: zoom/pan over live data without fighting RestoreSamples.
+/// Detail/interactive mode: denser Y ticks, hover point highlight + value tooltip.
 /// </summary>
 [RequireComponent(typeof(RawImage))]
-public class TelemetryGraph : MonoBehaviour
+public class TelemetryGraph : MonoBehaviour,
+    IScrollHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler,
+    IPointerEnterHandler, IPointerExitHandler, IPointerMoveHandler
 {
     public string title = "GRAPH";
     public string unit = "";
@@ -27,7 +32,10 @@ public class TelemetryGraph : MonoBehaviour
     public float? thresholdY;
     public string valueFormat = "F1";
 
-    /// <summary>Parent для TMP-підписів (зазвичай корінь frame графіка). Якщо null — this.transform.</summary>
+    /// <summary>When true, wheel/drag/double-click adjust the view window; hover shows tooltip.</summary>
+    public bool interactiveView;
+
+    /// <summary>Parent for TMP labels (usually frame above RawImage). Null = this.transform.</summary>
     public RectTransform labelRoot;
 
     RawImage image;
@@ -36,17 +44,55 @@ public class TelemetryGraph : MonoBehaviour
     int w = 300, h = 90;
     bool dirty = true;
 
-    TMP_Text lblTitle, lblCur, lblMax, lblMid, lblMin;
+    // View window in normalized full-plot space: X in [0,1] across maxSamples slots,
+    // Y relative to the locked auto-fit base range when custom.
+    float viewZoom = 1f;
+    float viewPanX = 0f;
+    float viewPanY = 0f;
+    bool customView;
+    float baseYMin, baseYMax;
+    bool baseYValid;
+    bool dragging;
+    float lastClickTime = -10f;
+
+    const float MinZoom = 1f;
+    const float MaxZoom = 20f;
+    const float WheelZoomStep = 1.12f;
+    const float ButtonZoomStep = 1.25f;
+    const int YTickCapacity = 7;
+
+    TMP_Text lblTitle, lblCur;
+    TMP_Text[] lblYTicks;
+
+    // Hover readouts (interactive detail modal only)
+    bool pointerInside;
+    bool hoverValid;
+    int hoverSampleIndex = -1;
+    float hoverSampleValue;
+    Vector2 hoverLocalInImage;
+    RectTransform hoverMarker;
+    Image hoverMarkerHaloImg, hoverMarkerCoreImg;
+    RectTransform tooltipRoot;
+    Image tooltipBg;
+    TMP_Text lblTooltip;
+    static Sprite s_hoverDotSprite;
+
+    // Cached plot rect in texture pixels (updated in Draw)
+    int plotL, plotR, plotB, plotT, plotW, plotH;
 
     public float LastValue => samples.Count > 0 ? samples[samples.Count - 1] : 0f;
     public float DisplayMin { get; private set; }
     public float DisplayMax { get; private set; }
+    public bool HasCustomView => customView;
+    public float ViewZoom => viewZoom;
 
     void Awake()
     {
         image = GetComponent<RawImage>();
         if (labelRoot == null)
             labelRoot = transform as RectTransform;
+        // Mini charts stay non-raycast so parent click-to-detail buttons keep working.
+        if (image != null) image.raycastTarget = interactiveView;
         ApplyThemeColors();
         EnsureLabels();
         RebuildTexture();
@@ -55,9 +101,21 @@ public class TelemetryGraph : MonoBehaviour
     public void BindLabelRoot(RectTransform root)
     {
         labelRoot = root != null ? root : transform as RectTransform;
-        // Перестворити підписи під правильним parent
         DestroyLabels();
         EnsureLabels();
+        dirty = true;
+    }
+
+    public void SetInteractiveView(bool on)
+    {
+        interactiveView = on;
+        if (image == null) image = GetComponent<RawImage>();
+        if (image != null) image.raycastTarget = on;
+        if (!on) ClearHover();
+        EnsureLabels();
+        if (on)
+            EnsureHoverUi(labelRoot != null ? labelRoot : transform);
+        LayoutYTicks();
         dirty = true;
     }
 
@@ -67,8 +125,18 @@ public class TelemetryGraph : MonoBehaviour
         {
             if (t != null) Destroy(t.gameObject);
         }
-        Kill(lblTitle); Kill(lblCur); Kill(lblMax); Kill(lblMid); Kill(lblMin);
-        lblTitle = lblCur = lblMax = lblMid = lblMin = null;
+        Kill(lblTitle); Kill(lblCur); Kill(lblTooltip);
+        if (lblYTicks != null)
+        {
+            for (int i = 0; i < lblYTicks.Length; i++) Kill(lblYTicks[i]);
+        }
+        lblTitle = lblCur = lblTooltip = null;
+        lblYTicks = null;
+        if (hoverMarker != null) Destroy(hoverMarker.gameObject);
+        if (tooltipRoot != null) Destroy(tooltipRoot.gameObject);
+        hoverMarker = tooltipRoot = null;
+        hoverMarkerHaloImg = hoverMarkerCoreImg = null;
+        tooltipBg = null;
     }
 
     public void ApplyThemeColors()
@@ -96,47 +164,233 @@ public class TelemetryGraph : MonoBehaviour
         fillColor = new Color(lineColor.r, lineColor.g, lineColor.b, light ? 0.18f : 0.15f);
         dirty = true;
         ApplyLabelStyle();
+        ApplyHoverTheme();
     }
 
     void EnsureLabels()
     {
-        if (lblTitle != null) return;
+        if (lblTitle != null && lblYTicks != null && lblYTicks.Length == YTickCapacity) return;
         Transform p = labelRoot != null ? labelRoot : transform;
 
-        lblTitle = MakeLabel(p, "GTitle", 11f, labelColor, TextAlignmentOptions.MidlineLeft);
-        Stretch(lblTitle.rectTransform, 8f, -2f, 140f, 18f, 0f, 1f, 0f, 1f);
+        if (lblTitle == null)
+        {
+            lblTitle = MakeLabel(p, "GTitle", 11f, labelColor, TextAlignmentOptions.MidlineLeft);
+            Stretch(lblTitle.rectTransform, 8f, -2f, 140f, 18f, 0f, 1f, 0f, 1f);
+        }
 
-        lblCur = MakeLabel(p, "GCur", 12f, lineColor, TextAlignmentOptions.MidlineRight);
-        lblCur.fontStyle = FontStyles.Bold;
-        Stretch(lblCur.rectTransform, -8f, -2f, 130f, 18f, 1f, 1f, 1f, 1f);
+        if (lblCur == null)
+        {
+            lblCur = MakeLabel(p, "GCur", 12f, lineColor, TextAlignmentOptions.MidlineRight);
+            lblCur.fontStyle = FontStyles.Bold;
+            Stretch(lblCur.rectTransform, -8f, -2f, 130f, 18f, 1f, 1f, 1f, 1f);
+        }
 
-        // Шкала Y: max зверху, mid у центрі, min знизу — лівий бік
-        lblMax = MakeLabel(p, "GMax", 10f, labelColor, TextAlignmentOptions.MidlineLeft);
-        Stretch(lblMax.rectTransform, 6f, -20f, 70f, 14f, 0f, 1f, 0f, 1f);
+        if (lblYTicks == null || lblYTicks.Length != YTickCapacity)
+        {
+            if (lblYTicks != null)
+            {
+                for (int i = 0; i < lblYTicks.Length; i++)
+                    if (lblYTicks[i] != null) Destroy(lblYTicks[i].gameObject);
+            }
+            lblYTicks = new TMP_Text[YTickCapacity];
+            for (int i = 0; i < YTickCapacity; i++)
+            {
+                lblYTicks[i] = MakeLabel(p, "GY" + i, 10f, labelColor, TextAlignmentOptions.MidlineLeft);
+                lblYTicks[i].text = "-";
+            }
+        }
 
-        lblMid = MakeLabel(p, "GMid", 10f, labelColor, TextAlignmentOptions.MidlineLeft);
-        Stretch(lblMid.rectTransform, 6f, 0f, 70f, 14f, 0f, 0.5f, 0f, 0.5f);
+        if (interactiveView)
+            EnsureHoverUi(p);
+        LayoutYTicks();
 
-        lblMin = MakeLabel(p, "GMin", 10f, labelColor, TextAlignmentOptions.MidlineLeft);
-        Stretch(lblMin.rectTransform, 6f, 4f, 70f, 14f, 0f, 0f, 0f, 0f);
-
-        // Завжди малювати над текстурою графіка
         if (labelRoot != null)
         {
-            if (lblTitle) lblTitle.transform.SetAsLastSibling();
-            if (lblCur) lblCur.transform.SetAsLastSibling();
-            if (lblMax) lblMax.transform.SetAsLastSibling();
-            if (lblMid) lblMid.transform.SetAsLastSibling();
-            if (lblMin) lblMin.transform.SetAsLastSibling();
+            BringLabelsForward();
         }
 
         ApplyLabelStyle();
-        // Миттєвий placeholder, щоб користувач завжди щось бачив
         if (lblTitle) lblTitle.text = title;
-        if (lblCur) lblCur.text = "—";
-        if (lblMax) lblMax.text = "—";
-        if (lblMid) lblMid.text = "—";
-        if (lblMin) lblMin.text = "—";
+        if (lblCur) lblCur.text = "-";
+        for (int i = 0; i < lblYTicks.Length; i++)
+            if (lblYTicks[i]) lblYTicks[i].text = "-";
+    }
+
+    static Sprite HoverDotSprite()
+    {
+        if (s_hoverDotSprite != null) return s_hoverDotSprite;
+        const int n = 32;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        float r = (n - 1) * 0.5f;
+        var px = new Color32[n * n];
+        for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++)
+        {
+            float d = Mathf.Sqrt((x - r) * (x - r) + (y - r) * (y - r));
+            float a = Mathf.Clamp01(r - d + 0.65f);
+            px[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+        }
+        tex.SetPixels32(px);
+        tex.Apply(false, true);
+        s_hoverDotSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+        return s_hoverDotSprite;
+    }
+
+    void EnsureHoverUi(Transform p)
+    {
+        if (hoverMarker == null)
+        {
+            var go = new GameObject("GHoverMarker", typeof(RectTransform));
+            go.transform.SetParent(p, false);
+            hoverMarker = go.GetComponent<RectTransform>();
+            hoverMarker.anchorMin = hoverMarker.anchorMax = new Vector2(0.5f, 0.5f); // match parent-pivot local space
+            hoverMarker.pivot = new Vector2(0.5f, 0.5f);
+            hoverMarker.sizeDelta = new Vector2(16f, 16f);
+
+            var haloGo = new GameObject("Halo", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            haloGo.transform.SetParent(go.transform, false);
+            var haloRt = haloGo.GetComponent<RectTransform>();
+            haloRt.anchorMin = Vector2.zero;
+            haloRt.anchorMax = Vector2.one;
+            haloRt.offsetMin = Vector2.zero;
+            haloRt.offsetMax = Vector2.zero;
+            hoverMarkerHaloImg = haloGo.GetComponent<Image>();
+            hoverMarkerHaloImg.sprite = HoverDotSprite();
+            hoverMarkerHaloImg.type = Image.Type.Simple;
+            hoverMarkerHaloImg.preserveAspect = true;
+            hoverMarkerHaloImg.raycastTarget = false;
+
+            var coreGo = new GameObject("Core", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            coreGo.transform.SetParent(go.transform, false);
+            var coreRt = coreGo.GetComponent<RectTransform>();
+            coreRt.anchorMin = coreRt.anchorMax = new Vector2(0.5f, 0.5f);
+            coreRt.pivot = new Vector2(0.5f, 0.5f);
+            coreRt.sizeDelta = new Vector2(7f, 7f);
+            hoverMarkerCoreImg = coreGo.GetComponent<Image>();
+            hoverMarkerCoreImg.sprite = HoverDotSprite();
+            hoverMarkerCoreImg.type = Image.Type.Simple;
+            hoverMarkerCoreImg.preserveAspect = true;
+            hoverMarkerCoreImg.raycastTarget = false;
+
+            go.SetActive(false);
+        }
+        if (tooltipRoot == null)
+        {
+            var go = new GameObject("GHoverTip", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(p, false);
+            tooltipRoot = go.GetComponent<RectTransform>();
+            tooltipBg = go.GetComponent<Image>();
+            tooltipBg.raycastTarget = false;
+            tooltipRoot.anchorMin = tooltipRoot.anchorMax = new Vector2(0.5f, 0.5f); // match parent-pivot local space
+            tooltipRoot.pivot = new Vector2(0f, 1f);
+            tooltipRoot.sizeDelta = new Vector2(72f, 24f);
+
+            lblTooltip = MakeLabel(go.transform, "GHoverTipText", 12f, Color.white, TextAlignmentOptions.MidlineLeft);
+            var tr = lblTooltip.rectTransform;
+            tr.anchorMin = Vector2.zero;
+            tr.anchorMax = Vector2.one;
+            tr.offsetMin = new Vector2(8f, 3f);
+            tr.offsetMax = new Vector2(-8f, -3f);
+            lblTooltip.textWrappingMode = TextWrappingModes.NoWrap;
+            lblTooltip.overflowMode = TextOverflowModes.Overflow;
+            go.SetActive(false);
+        }
+        // Re-assert center anchors (fixes leftover bottom-left anchors from older builds).
+        if (hoverMarker != null)
+        {
+            hoverMarker.anchorMin = hoverMarker.anchorMax = new Vector2(0.5f, 0.5f);
+            hoverMarker.pivot = new Vector2(0.5f, 0.5f);
+        }
+        if (tooltipRoot != null)
+        {
+            tooltipRoot.anchorMin = tooltipRoot.anchorMax = new Vector2(0.5f, 0.5f);
+            tooltipRoot.pivot = new Vector2(0f, 1f);
+        }
+        ApplyHoverTheme();
+    }
+
+    void ApplyHoverTheme()
+    {
+        bool light = UiTheme.IsLightBackground;
+        Color halo = lineColor;
+        halo.a = light ? 0.35f : 0.45f;
+        Color core = lineColor;
+        core.a = 1f;
+        if (light)
+        {
+            // Slightly darker core on light plots for contrast.
+            core = new Color(lineColor.r * 0.75f, lineColor.g * 0.75f, lineColor.b * 0.85f, 1f);
+        }
+        if (hoverMarkerHaloImg) hoverMarkerHaloImg.color = halo;
+        if (hoverMarkerCoreImg) hoverMarkerCoreImg.color = core;
+        if (tooltipBg)
+        {
+            tooltipBg.color = light
+                ? new Color(0.96f, 0.97f, 0.99f, 0.94f)
+                : new Color(0.08f, 0.1f, 0.14f, 0.92f);
+        }
+        if (lblTooltip)
+        {
+            lblTooltip.color = light
+                ? new Color(0.12f, 0.16f, 0.22f, 1f)
+                : new Color(0.92f, 0.95f, 1f, 1f);
+        }
+    }
+
+    void BringLabelsForward()
+    {
+        if (lblYTicks != null)
+            for (int i = 0; i < lblYTicks.Length; i++)
+                if (lblYTicks[i]) lblYTicks[i].transform.SetAsLastSibling();
+        if (lblTitle) lblTitle.transform.SetAsLastSibling();
+        if (lblCur) lblCur.transform.SetAsLastSibling();
+        if (hoverMarker) hoverMarker.SetAsLastSibling();
+        if (tooltipRoot) tooltipRoot.SetAsLastSibling();
+    }
+
+    void LayoutYTicks()
+    {
+        if (lblYTicks == null) return;
+        for (int i = 0; i < YTickCapacity; i++)
+        {
+            var t = lblYTicks[i];
+            if (t == null) continue;
+            bool on = interactiveView ? true : (i == 0 || i == YTickCapacity / 2 || i == YTickCapacity - 1);
+            t.gameObject.SetActive(on);
+            if (!on) continue;
+
+            float frac;
+            if (interactiveView)
+                frac = i / (float)(YTickCapacity - 1); // 0=min(bottom) .. 1=max(top)
+            else if (i == 0) frac = 0f;
+            else if (i == YTickCapacity - 1) frac = 1f;
+            else frac = 0.5f;
+
+            float font = interactiveView ? 9f : 10f;
+            t.fontSize = font;
+            float h = interactiveView ? 13f : 14f;
+            // Top padding for title row (~20px when interactive denser stack)
+            float topPad = interactiveView ? -18f : -20f;
+            float botPad = 4f;
+            // Place along left edge; y from bottom of parent
+            Stretch(t.rectTransform, 4f, 0f, interactiveView ? 78f : 70f, h, 0f, frac, 0f, 0.5f);
+            // Nudge ends so they don't sit under title / clip bottom
+            var rt = t.rectTransform;
+            if (frac >= 0.99f) rt.anchoredPosition = new Vector2(4f, topPad);
+            else if (frac <= 0.01f) rt.anchoredPosition = new Vector2(4f, botPad);
+            else
+            {
+                // Mid ticks: anchoredPosition y unused when ay is frac â€” Stretch already set ay=frac
+                // Re-apply with slight inset from edges for readability
+                rt.anchorMin = new Vector2(0f, frac);
+                rt.anchorMax = new Vector2(0f, frac);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.anchoredPosition = new Vector2(4f, 0f);
+                rt.sizeDelta = new Vector2(interactiveView ? 78f : 70f, h);
+            }
+        }
     }
 
     static void Stretch(RectTransform rt, float x, float y, float w, float h,
@@ -153,9 +407,12 @@ public class TelemetryGraph : MonoBehaviour
     {
         Color muted = new Color(labelColor.r, labelColor.g, labelColor.b, 0.9f);
         if (lblTitle) { lblTitle.color = labelColor; lblTitle.fontSize = 11f; }
-        if (lblMax) { lblMax.color = muted; lblMax.fontSize = 10f; }
-        if (lblMid) { lblMid.color = muted; lblMid.fontSize = 10f; }
-        if (lblMin) { lblMin.color = muted; lblMin.fontSize = 10f; }
+        if (lblYTicks != null)
+        {
+            float fs = interactiveView ? 9f : 10f;
+            for (int i = 0; i < lblYTicks.Length; i++)
+                if (lblYTicks[i]) { lblYTicks[i].color = muted; lblYTicks[i].fontSize = fs; }
+        }
         if (lblCur) { lblCur.color = lineColor; lblCur.fontSize = 12f; }
     }
 
@@ -201,11 +458,12 @@ public class TelemetryGraph : MonoBehaviour
     {
         samples.Clear();
         dirty = true;
+        ClearHover();
         EnsureLabels();
-        if (lblCur) lblCur.text = "—";
-        if (lblMax) lblMax.text = "—";
-        if (lblMid) lblMid.text = "—";
-        if (lblMin) lblMin.text = "—";
+        if (lblCur) lblCur.text = "-";
+        if (lblYTicks != null)
+            for (int i = 0; i < lblYTicks.Length; i++)
+                if (lblYTicks[i]) lblYTicks[i].text = "-";
     }
 
     public float[] GetSamples()
@@ -245,28 +503,422 @@ public class TelemetryGraph : MonoBehaviour
         dirty = true;
     }
 
+    public void ResetView()
+    {
+        viewZoom = 1f;
+        viewPanX = 0f;
+        viewPanY = 0f;
+        customView = false;
+        baseYValid = false;
+        dirty = true;
+    }
+
+    public void ZoomIn() => ZoomBy(ButtonZoomStep, 0.5f, 0.5f);
+    public void ZoomOut() => ZoomBy(1f / ButtonZoomStep, 0.5f, 0.5f);
+
+    public void ZoomBy(float factor, float pivotNX = 0.5f, float pivotNY = 0.5f)
+    {
+        if (factor <= 0f || Mathf.Approximately(factor, 1f)) return;
+        EnsureCustomView();
+
+        float oldZoom = viewZoom;
+        float newZoom = Mathf.Clamp(viewZoom * factor, MinZoom, MaxZoom);
+        if (Mathf.Approximately(oldZoom, newZoom)) return;
+
+        // Keep the data point under pivotNX/NY stable while zoom changes.
+        float halfOld = 0.5f / oldZoom;
+        float x0 = 0.5f + viewPanX - halfOld;
+        float y0 = 0.5f + viewPanY - halfOld;
+        float dataX = x0 + pivotNX / oldZoom;
+        float dataY = y0 + pivotNY / oldZoom;
+
+        viewZoom = newZoom;
+        float half = 0.5f / viewZoom;
+        viewPanX = dataX - pivotNX / viewZoom - 0.5f + half;
+        viewPanY = dataY - pivotNY / viewZoom - 0.5f + half;
+        ClampPan();
+
+        if (viewZoom <= MinZoom + 1e-4f && Mathf.Abs(viewPanX) < 1e-4f && Mathf.Abs(viewPanY) < 1e-4f)
+            ResetView();
+        else
+            dirty = true;
+    }
+
+    public void PanByNormalized(float dxVisible, float dyVisible)
+    {
+        EnsureCustomView();
+        float span = 1f / viewZoom;
+        viewPanX -= dxVisible * span;
+        viewPanY -= dyVisible * span;
+        ClampPan();
+        dirty = true;
+    }
+
+    void EnsureCustomView()
+    {
+        if (customView && baseYValid) return;
+        // Lock current auto Y as the zoom/pan base so live RestoreSamples won't fight the view.
+        ComputeAutoY(out float lo, out float hi);
+        baseYMin = lo;
+        baseYMax = hi;
+        baseYValid = true;
+        customView = true;
+    }
+
+    void ClampPan()
+    {
+        // Keep at least a sliver of the [0,1] data range visible; allow pan at zoom==1.
+        float half = 0.5f / viewZoom;
+        float maxPan = half + 0.45f;
+        viewPanX = Mathf.Clamp(viewPanX, -maxPan, maxPan);
+        viewPanY = Mathf.Clamp(viewPanY, -maxPan, maxPan);
+    }
+
+    void ComputeAutoY(out float lo, out float hi)
+    {
+        lo = 0f;
+        hi = 1f;
+        if (samples.Count == 0) return;
+
+        lo = float.MaxValue;
+        hi = float.MinValue;
+        for (int i = 0; i < samples.Count; i++)
+        {
+            float s = samples[i];
+            if (s < lo) lo = s;
+            if (s > hi) hi = s;
+        }
+        if (thresholdY.HasValue)
+        {
+            lo = Mathf.Min(lo, thresholdY.Value);
+            hi = Mathf.Max(hi, thresholdY.Value);
+        }
+        if (showZeroLine)
+        {
+            lo = Mathf.Min(lo, 0f);
+            hi = Mathf.Max(hi, 0f);
+        }
+        if (Mathf.Approximately(lo, hi)) { lo -= 1f; hi += 1f; }
+        float pad = Mathf.Max(0.15f, (hi - lo) * 0.1f);
+        lo -= pad;
+        hi += pad;
+        NiceBounds(ref lo, ref hi, out _);
+    }
+
+    void GetVisibleY(out float lo, out float hi)
+    {
+        if (!customView || !baseYValid)
+        {
+            ComputeAutoY(out lo, out hi);
+            return;
+        }
+
+        float half = 0.5f / viewZoom;
+        float n0 = 0.5f + viewPanY - half;
+        float n1 = 0.5f + viewPanY + half;
+        float span = baseYMax - baseYMin;
+        lo = baseYMin + n0 * span;
+        hi = baseYMin + n1 * span;
+        if (hi - lo < 1e-6f)
+        {
+            lo -= 1f;
+            hi += 1f;
+        }
+    }
+
+    void GetVisibleX(out float x0, out float x1)
+    {
+        float half = 0.5f / Mathf.Max(MinZoom, viewZoom);
+        x0 = 0.5f + viewPanX - half;
+        x1 = 0.5f + viewPanX + half;
+        if (!customView)
+        {
+            x0 = 0f;
+            x1 = 1f;
+        }
+    }
+
+    public void OnScroll(PointerEventData eventData)
+    {
+        if (!interactiveView) return;
+        float scroll = eventData.scrollDelta.y;
+        if (Mathf.Abs(scroll) < 0.01f) return;
+
+        RectTransform rt = image != null ? image.rectTransform : transform as RectTransform;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, eventData.position, eventData.pressEventCamera, out Vector2 local))
+            return;
+
+        Rect r = rt.rect;
+        float pivotNX = Mathf.InverseLerp(r.xMin, r.xMax, local.x);
+        float pivotNY = Mathf.InverseLerp(r.yMin, r.yMax, local.y);
+        // Account for left gutter (~48px of texture) roughly via plot fraction if sizes known.
+        if (w > 0 && plotW > 0)
+        {
+            float gutter = plotL / (float)w;
+            float plotFrac = plotW / (float)w;
+            pivotNX = Mathf.Clamp01((pivotNX - gutter) / Mathf.Max(1e-4f, plotFrac));
+        }
+
+        float factor = scroll > 0f ? WheelZoomStep : 1f / WheelZoomStep;
+        ZoomBy(factor, pivotNX, pivotNY);
+        RefreshHoverFromScreen(eventData.position, eventData.pressEventCamera);
+    }
+
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        if (!interactiveView) return;
+        if (eventData.button != PointerEventData.InputButton.Left) return;
+        dragging = true;
+        EnsureCustomView();
+        SetHoverUiVisible(false);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+        if (!interactiveView || !dragging) return;
+        RectTransform rt = image != null ? image.rectTransform : transform as RectTransform;
+        float pw = Mathf.Max(1f, rt.rect.width);
+        float ph = Mathf.Max(1f, rt.rect.height);
+        // Grab-the-paper: drag right moves content right => show earlier samples (decrease pan? )
+        // Visible window moves opposite to drag delta.
+        float dx = eventData.delta.x / pw;
+        float dy = eventData.delta.y / ph;
+        PanByNormalized(dx, dy);
+    }
+
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        dragging = false;
+        if (pointerInside)
+            RefreshHoverFromScreen(eventData.position, eventData.pressEventCamera);
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (!interactiveView) return;
+        if (eventData.button != PointerEventData.InputButton.Left) return;
+        if (eventData.dragging) return;
+        float t = Time.unscaledTime;
+        if (t - lastClickTime < 0.35f)
+        {
+            ResetView();
+            lastClickTime = -10f;
+        }
+        else lastClickTime = t;
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        pointerInside = true;
+        if (interactiveView && !dragging)
+            RefreshHoverFromScreen(eventData.position, eventData.enterEventCamera);
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        pointerInside = false;
+        ClearHover();
+    }
+
+    public void OnPointerMove(PointerEventData eventData)
+    {
+        if (!interactiveView || dragging) return;
+        pointerInside = true;
+        RefreshHoverFromScreen(eventData.position, eventData.enterEventCamera != null ? eventData.enterEventCamera : eventData.pressEventCamera);
+    }
+
+    void ClearHover()
+    {
+        hoverValid = false;
+        hoverSampleIndex = -1;
+        SetHoverUiVisible(false);
+    }
+
+    void SetHoverUiVisible(bool on)
+    {
+        if (hoverMarker) hoverMarker.gameObject.SetActive(on);
+        if (tooltipRoot) tooltipRoot.gameObject.SetActive(on);
+    }
+
+    void RefreshHoverFromScreen(Vector2 screenPos, Camera cam)
+    {
+        if (!interactiveView || image == null)
+        {
+            ClearHover();
+            return;
+        }
+
+        RectTransform imgRt = image.rectTransform;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(imgRt, screenPos, cam, out Vector2 local))
+        {
+            ClearHover();
+            return;
+        }
+
+        hoverLocalInImage = local;
+        Rect r = imgRt.rect;
+        float nxImg = Mathf.InverseLerp(r.xMin, r.xMax, local.x);
+        float nyImg = Mathf.InverseLerp(r.yMin, r.yMax, local.y);
+
+        if (w <= 0 || plotW <= 0)
+        {
+            ClearHover();
+            return;
+        }
+
+        float gutter = plotL / (float)w;
+        float plotFracX = plotW / (float)w;
+        float botFrac = plotB / (float)h;
+        float plotFracY = plotH / (float)h;
+        float nx = (nxImg - gutter) / Mathf.Max(1e-4f, plotFracX);
+        float ny = (nyImg - botFrac) / Mathf.Max(1e-4f, plotFracY);
+        if (nx < 0f || nx > 1f || ny < 0f || ny > 1f || samples.Count == 0)
+        {
+            ClearHover();
+            return;
+        }
+
+        GetVisibleX(out float vx0, out float vx1);
+        float vxSpan = Mathf.Max(1e-6f, vx1 - vx0);
+        float dataX = vx0 + nx * vxSpan;
+
+        int n = samples.Count;
+        float shift = maxSamples - n;
+        float denom = (float)Mathf.Max(1, maxSamples - 1);
+        float iFloat = dataX * denom - shift;
+        int idx = Mathf.Clamp(Mathf.RoundToInt(iFloat), 0, n - 1);
+        hoverSampleIndex = idx;
+        hoverSampleValue = samples[idx];
+        hoverValid = true;
+
+        UpdateHoverUi(imgRt);
+    }
+
+    void UpdateHoverUi(RectTransform imgRt)
+    {
+        EnsureHoverUi(labelRoot != null ? labelRoot : transform);
+        SetHoverUiVisible(true);
+
+        RectTransform root = labelRoot != null ? labelRoot : transform as RectTransform;
+        if (root == null || imgRt == null) return;
+
+        // Nearest sample position in image-normalized space (marker follows curve)
+        GetVisibleX(out float vx0, out float vx1);
+        GetVisibleY(out float lo, out float hi);
+        float vxSpan = Mathf.Max(1e-6f, vx1 - vx0);
+        int n = samples.Count;
+        float shift = maxSamples - n;
+        float denom = (float)Mathf.Max(1, maxSamples - 1);
+        float sampleNxData = (hoverSampleIndex + shift) / denom;
+        float sampleNxPlot = (sampleNxData - vx0) / vxSpan;
+        float sampleNyPlot = Mathf.InverseLerp(lo, hi, hoverSampleValue);
+        float sampleNxImg = (plotL + sampleNxPlot * plotW) / (float)w;
+        float sampleNyImg = (plotB + sampleNyPlot * plotH) / (float)h;
+        sampleNxImg = Mathf.Clamp01(sampleNxImg);
+        sampleNyImg = Mathf.Clamp01(sampleNyImg);
+
+        Rect ir = imgRt.rect;
+        Vector2 sampleLocalInImage = new Vector2(
+            Mathf.Lerp(ir.xMin, ir.xMax, sampleNxImg),
+            Mathf.Lerp(ir.yMin, ir.yMax, sampleNyImg));
+        // Image and labelRoot may differ (inset plot vs host) â€” convert via world.
+        Vector2 sampleLocalInRoot = root.InverseTransformPoint(imgRt.TransformPoint(sampleLocalInImage));
+
+        if (hoverMarker != null)
+            hoverMarker.anchoredPosition = sampleLocalInRoot;
+
+        // Compact tooltip: sample value (+ unit) â€” position follows cursor, not sample.
+        string u = string.IsNullOrEmpty(unit) ? "" : " " + unit;
+        string tipText = Fmt(hoverSampleValue) + u;
+        if (lblTooltip != null)
+            lblTooltip.text = tipText;
+
+        if (tooltipRoot != null)
+        {
+            float tipW = 64f;
+            float tipH = 22f;
+            if (lblTooltip != null)
+            {
+                lblTooltip.ForceMeshUpdate();
+                var pref = lblTooltip.GetPreferredValues(tipText, 160f, 40f);
+                tipW = Mathf.Clamp(pref.x + 16f, 48f, 160f);
+                tipH = Mathf.Clamp(pref.y + 8f, 20f, 36f);
+            }
+            tooltipRoot.sizeDelta = new Vector2(tipW, tipH);
+
+            // Cursor in labelRoot local space (same space as center-anchored tip).
+            Vector2 cursorLocalInRoot = root.InverseTransformPoint(imgRt.TransformPoint(hoverLocalInImage));
+            // Slightly below/right of pointer so the tip does not cover the cursor hotspot.
+            Vector2 tipPos = cursorLocalInRoot + new Vector2(14f, -12f);
+
+            Rect rr = root.rect;
+            // Pivot is top-left (0,1): tip extends +X and -Y from tipPos.
+            tipPos.x = Mathf.Clamp(tipPos.x, rr.xMin + 4f, rr.xMax - tipW - 4f);
+            tipPos.y = Mathf.Clamp(tipPos.y, rr.yMin + tipH + 4f, rr.yMax - 4f);
+
+            tooltipRoot.anchoredPosition = tipPos;
+            if (hoverMarker != null) hoverMarker.SetAsLastSibling();
+            tooltipRoot.SetAsLastSibling();
+        }
+    }
+
     void LateUpdate()
     {
         EnsureLabels();
         if (image == null) return;
 
-        // Тримати підписи зверху щокадру (scroll rebuild може змінити порядок)
-        if (lblMin) lblMin.transform.SetAsLastSibling();
-        if (lblMid) lblMid.transform.SetAsLastSibling();
-        if (lblMax) lblMax.transform.SetAsLastSibling();
-        if (lblTitle) lblTitle.transform.SetAsLastSibling();
-        if (lblCur) lblCur.transform.SetAsLastSibling();
+        BringLabelsForward();
 
-        if (!dirty && tex != null) return;
-
-        if (tex == null
+        if (dirty || tex == null
             || (image.rectTransform.rect.width > 8f
                 && (Mathf.Abs(image.rectTransform.rect.width - w) > 6f
                     || Mathf.Abs(image.rectTransform.rect.height - h) > 6f)))
-            RebuildTexture();
+        {
+            if (tex == null
+                || (image.rectTransform.rect.width > 8f
+                    && (Mathf.Abs(image.rectTransform.rect.width - w) > 6f
+                        || Mathf.Abs(image.rectTransform.rect.height - h) > 6f)))
+                RebuildTexture();
 
-        Draw();
-        dirty = false;
+            Draw();
+            dirty = false;
+
+            // Re-sync hover after redraw (plot metrics may have changed)
+            if (hoverValid && pointerInside && interactiveView && !dragging)
+            {
+                // Keep last local; remap with updated plotL etc.
+                // Use stored image-local point
+                RectTransform imgRt = image.rectTransform;
+                Rect r = imgRt.rect;
+                float nxImg = Mathf.InverseLerp(r.xMin, r.xMax, hoverLocalInImage.x);
+                float nyImg = Mathf.InverseLerp(r.yMin, r.yMax, hoverLocalInImage.y);
+                // Recompute sample under same cursor X
+                float gutter = plotL / (float)w;
+                float plotFracX = plotW / (float)w;
+                float botFrac = plotB / (float)h;
+                float plotFracY = plotH / (float)h;
+                float nx = (nxImg - gutter) / Mathf.Max(1e-4f, plotFracX);
+                float ny = (nyImg - botFrac) / Mathf.Max(1e-4f, plotFracY);
+                if (nx >= 0f && nx <= 1f && ny >= 0f && ny <= 1f && samples.Count > 0)
+                {
+                    GetVisibleX(out float vx0, out float vx1);
+                    float dataX = vx0 + nx * Mathf.Max(1e-6f, vx1 - vx0);
+                    int n = samples.Count;
+                    float shift = maxSamples - n;
+                    float denom = (float)Mathf.Max(1, maxSamples - 1);
+                    hoverSampleIndex = Mathf.Clamp(Mathf.RoundToInt(dataX * denom - shift), 0, n - 1);
+                    hoverSampleValue = samples[hoverSampleIndex];
+                    UpdateHoverUi(imgRt);
+                }
+                else ClearHover();
+            }
+        }
+        else if (hoverValid && interactiveView && tooltipRoot != null && tooltipRoot.gameObject.activeSelf)
+        {
+            // Keep marker + tooltip above siblings even when not redrawing
+            if (hoverMarker != null) hoverMarker.SetAsLastSibling();
+            tooltipRoot.SetAsLastSibling();
+        }
     }
 
     string Fmt(float v) => v.ToString(valueFormat);
@@ -289,47 +941,20 @@ public class TelemetryGraph : MonoBehaviour
             pixels[y * w + w - 1] = borderColor;
         }
 
-        // Завжди показувати шкалу, навіть за малої кількості samples
-        float lo = 0f, hi = 1f;
-        if (samples.Count > 0)
-        {
-            lo = float.MaxValue;
-            hi = float.MinValue;
-            for (int i = 0; i < samples.Count; i++)
-            {
-                float s = samples[i];
-                if (s < lo) lo = s;
-                if (s > hi) hi = s;
-            }
-            if (thresholdY.HasValue)
-            {
-                lo = Mathf.Min(lo, thresholdY.Value);
-                hi = Mathf.Max(hi, thresholdY.Value);
-            }
-            if (showZeroLine)
-            {
-                lo = Mathf.Min(lo, 0f);
-                hi = Mathf.Max(hi, 0f);
-            }
-            if (Mathf.Approximately(lo, hi)) { lo -= 1f; hi += 1f; }
-            float pad = Mathf.Max(0.15f, (hi - lo) * 0.1f);
-            lo -= pad;
-            hi += pad;
-            NiceBounds(ref lo, ref hi, out _);
-        }
-
+        GetVisibleY(out float lo, out float hi);
         DisplayMin = lo;
         DisplayMax = hi;
 
-        // Лівий відступ для Y-підписів (графік стартує пізніше)
-        int plotL = 48;
-        int plotR = w - 3;
-        int plotB = 3;
-        int plotT = h - 3;
-        int plotH = Mathf.Max(1, plotT - plotB);
-        int plotW = Mathf.Max(1, plotR - plotL);
+        plotL = interactiveView ? 56 : 48;
+        plotR = w - 3;
+        plotB = 3;
+        plotT = h - 3;
+        plotH = Mathf.Max(1, plotT - plotB);
+        plotW = Mathf.Max(1, plotR - plotL);
 
-        // М’який лівий gutter
+        GetVisibleX(out float vx0, out float vx1);
+        float vxSpan = Mathf.Max(1e-6f, vx1 - vx0);
+
         Color gut = Color.Lerp(bgColor, borderColor, 0.12f);
         for (int y = 1; y < h - 1; y++)
         for (int x = 1; x < plotL; x++)
@@ -337,10 +962,10 @@ public class TelemetryGraph : MonoBehaviour
         for (int y = 1; y < h - 1; y++)
             pixels[y * w + plotL] = Color.Lerp(borderColor, axisColor, 0.4f);
 
-        // Сітка з 4 смуг
-        for (int i = 1; i <= 3; i++)
+        int hDiv = interactiveView ? (YTickCapacity - 1) : 4;
+        for (int i = 1; i < hDiv; i++)
         {
-            int gy = plotB + plotH * i / 4;
+            int gy = plotB + plotH * i / hDiv;
             for (int x = plotL + 1; x < plotR; x++)
                 pixels[gy * w + x] = gridColor;
         }
@@ -369,17 +994,31 @@ public class TelemetryGraph : MonoBehaviour
         if (n >= 2)
         {
             float shift = maxSamples - n;
-            float XOf(int i) => plotL + (i + shift) / (float)Mathf.Max(1, maxSamples - 1) * plotW;
+            float denom = (float)Mathf.Max(1, maxSamples - 1);
+            float XOf(int i)
+            {
+                float nx = (i + shift) / denom;
+                return plotL + (nx - vx0) / vxSpan * plotW;
+            }
             float YOf(float v) => plotB + Mathf.InverseLerp(lo, hi, v) * plotH;
 
             if (showFill)
             {
-                int zeroY = (showZeroLine && lo < 0f && hi > 0f)
-                    ? Mathf.RoundToInt(YOf(0f)) : plotB;
+                // Fill toward zero so zooming past 0 does not flip the band
+                // (e.g. all-negative window used to snap baseline to plotB).
+                int zeroY;
+                if (showZeroLine && lo < 0f && hi > 0f)
+                    zeroY = Mathf.RoundToInt(YOf(0f));
+                else if (showZeroLine && hi <= 0f)
+                    zeroY = plotT; // zero is above the view
+                else
+                    zeroY = plotB; // zero at/below view, or zero line off
                 zeroY = Mathf.Clamp(zeroY, plotB, plotT);
                 for (int i = 0; i < n; i++)
                 {
-                    int x = Mathf.Clamp(Mathf.RoundToInt(XOf(i)), plotL + 1, plotR - 1);
+                    float xf = XOf(i);
+                    if (xf < plotL - 1 || xf > plotR + 1) continue;
+                    int x = Mathf.Clamp(Mathf.RoundToInt(xf), plotL + 1, plotR - 1);
                     int y = Mathf.Clamp(Mathf.RoundToInt(YOf(samples[i])), plotB, plotT);
                     int y0 = Mathf.Min(y, zeroY);
                     int y1 = Mathf.Max(y, zeroY);
@@ -389,28 +1028,33 @@ public class TelemetryGraph : MonoBehaviour
             }
 
             for (int i = 1; i < n; i++)
+            {
+                float xA = XOf(i - 1), xB = XOf(i);
+                // Skip segments fully outside
+                if ((xA < plotL && xB < plotL) || (xA > plotR && xB > plotR)) continue;
                 DrawLine(pixels, w, h,
-                    XOf(i - 1), YOf(samples[i - 1]),
-                    XOf(i), YOf(samples[i]),
+                    xA, YOf(samples[i - 1]),
+                    xB, YOf(samples[i]),
                     lineColor, plotL, plotR, plotB, plotT);
+            }
 
-            int mx = Mathf.Clamp(Mathf.RoundToInt(XOf(n - 1)), plotL + 2, plotR - 2);
-            int my = Mathf.Clamp(Mathf.RoundToInt(YOf(samples[n - 1])), plotB + 2, plotT - 2);
-            Color mk = Color.Lerp(lineColor, Color.white, 0.35f);
-            for (int dx = -2; dx <= 2; dx++)
-            for (int dy = -2; dy <= 2; dy++)
-                if (dx * dx + dy * dy <= 4)
-                    pixels[(my + dy) * w + (mx + dx)] = mk;
+            float xLast = XOf(n - 1);
+            if (xLast >= plotL && xLast <= plotR)
+            {
+                int mx = Mathf.Clamp(Mathf.RoundToInt(xLast), plotL + 2, plotR - 2);
+                int my = Mathf.Clamp(Mathf.RoundToInt(YOf(samples[n - 1])), plotB + 2, plotT - 2);
+                Color mk = Color.Lerp(lineColor, Color.white, 0.35f);
+                for (int dx = -2; dx <= 2; dx++)
+                for (int dy = -2; dy <= 2; dy++)
+                    if (dx * dx + dy * dy <= 4)
+                        pixels[(my + dy) * w + (mx + dx)] = mk;
+            }
         }
 
         tex.SetPixels(pixels);
         tex.Apply(false);
 
-        // Підписи — завжди заповнені
-        float mid = (lo + hi) * 0.5f;
-        if (lblMax) lblMax.text = Fmt(hi);
-        if (lblMid) lblMid.text = Fmt(mid);
-        if (lblMin) lblMin.text = Fmt(lo);
+        UpdateYTickTexts(lo, hi);
 
         if (lblTitle)
             lblTitle.text = string.IsNullOrEmpty(unit) ? title : title + "  (" + unit + ")";
@@ -422,12 +1066,28 @@ public class TelemetryGraph : MonoBehaviour
                 string u = string.IsNullOrEmpty(unit) ? "" : " " + unit;
                 lblCur.text = Fmt(samples[n - 1]) + u;
             }
-            else lblCur.text = "—";
+            else lblCur.text = "-";
             lblCur.color = lineColor;
         }
 
         ApplyLabelStyle();
         if (lblCur) lblCur.color = lineColor;
+        LayoutYTicks();
+    }
+
+    void UpdateYTickTexts(float lo, float hi)
+    {
+        if (lblYTicks == null) return;
+        for (int i = 0; i < YTickCapacity; i++)
+        {
+            var t = lblYTicks[i];
+            if (t == null) continue;
+            bool on = interactiveView || i == 0 || i == YTickCapacity / 2 || i == YTickCapacity - 1;
+            if (!on) continue;
+            float frac = i / (float)(YTickCapacity - 1);
+            float v = Mathf.Lerp(lo, hi, frac);
+            t.text = Fmt(v);
+        }
     }
 
     static void NiceBounds(ref float lo, ref float hi, out float step)
