@@ -177,17 +177,16 @@ public class CameraFollow : MonoBehaviour
 
     bool IsOrbitKeyHeld()
     {
-        // WASD/QE/zoom always orbit. Arrow keys yield to Mission Control UI focus only.
-        bool wasd = Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.D)
+        // Arrows/WASD drive UI focus when Mission Control has a selected Selectable.
+        if (MissionControlUI.HasKeyboardFocus())
+            return false;
+        return Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.D)
             || Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.S)
             || Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.E)
+            || Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.RightArrow)
+            || Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.DownArrow)
             || Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.Minus)
             || Input.GetKey(KeyCode.KeypadPlus) || Input.GetKey(KeyCode.KeypadMinus);
-        if (MissionControlUI.HasKeyboardFocus())
-            return wasd;
-        return wasd
-            || Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.RightArrow)
-            || Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.DownArrow);
     }
 
     void HandleInput()
@@ -203,46 +202,38 @@ public class CameraFollow : MonoBehaviour
         {
             if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1))
                 orbitDragging = false;
+            return;
         }
-        else
+
+        if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
         {
-            if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
-            {
-                orbitDragging = true;
-                lastMouse = Input.mousePosition;
-                userOrbitLock = true;
-            }
-            if (Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1))
-            {
-                if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1))
-                    orbitDragging = false;
-            }
-
-            if (orbitDragging && (Input.GetMouseButton(0) || Input.GetMouseButton(1)))
-            {
-                Vector3 delta = Input.mousePosition - lastMouse;
-                lastMouse = Input.mousePosition;
-                float dy = delta.y * orbitSensitivity * (invertY ? 1f : -1f);
-                ApplyOrbit(delta.x * orbitSensitivity, dy);
-            }
+            orbitDragging = true;
+            lastMouse = Input.mousePosition;
+            userOrbitLock = true;
+        }
+        if (Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1))
+        {
+            if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1))
+                orbitDragging = false;
         }
 
-        // WASD/QE/zoom always for camera. Arrows orbit only when UI focus is clear.
+        if (orbitDragging && (Input.GetMouseButton(0) || Input.GetMouseButton(1)))
+        {
+            Vector3 delta = Input.mousePosition - lastMouse;
+            lastMouse = Input.mousePosition;
+            float dy = delta.y * orbitSensitivity * (invertY ? 1f : -1f);
+            ApplyOrbit(delta.x * orbitSensitivity, dy);
+        }
+
+        // Keys (yield to Mission Control UI focus — arrows/WASD navigate Selectables)
+        if (!MissionControlUI.HasKeyboardFocus())
         {
             float k = keyOrbitSpeed * Time.unscaledDeltaTime;
             float yD = 0f, pD = 0f, zD = 0f;
-            bool uiNav = MissionControlUI.HasKeyboardFocus();
-            if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.Q)) yD -= k;
-            if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.E)) yD += k;
-            if (Input.GetKey(KeyCode.W)) pD += k * 0.7f;
-            if (Input.GetKey(KeyCode.S)) pD -= k * 0.7f;
-            if (!uiNav)
-            {
-                if (Input.GetKey(KeyCode.LeftArrow)) yD -= k;
-                if (Input.GetKey(KeyCode.RightArrow)) yD += k;
-                if (Input.GetKey(KeyCode.UpArrow)) pD += k * 0.7f;
-                if (Input.GetKey(KeyCode.DownArrow)) pD -= k * 0.7f;
-            }
+            if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.Q)) yD -= k;
+            if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.E)) yD += k;
+            if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) pD += k * 0.7f;
+            if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) pD -= k * 0.7f;
             if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus)) zD -= 1f;
             if (Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.KeypadMinus)) zD += 1f;
 
@@ -252,7 +243,6 @@ public class CameraFollow : MonoBehaviour
                 ApplyOrbit(yD, pD);
                 if (Mathf.Abs(zD) > 0.01f)
                     ApplyZoom(-zD * Time.deltaTime * 12f);
-
             }
         }
 

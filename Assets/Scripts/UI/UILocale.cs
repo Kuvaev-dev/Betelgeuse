@@ -208,7 +208,7 @@ public static class UILocale
         ["btn_ideal"] = new("ІДЕАЛЬНІ ПАРАМЕТРИ (100%)", "IDEAL PRESETS (100%)"),
         ["btn_compare"] = new("ПОРІВНЯТИ  P", "COMPARE  P"),
         ["btn_cancel"] = new("СКАСУВАТИ  X", "CANCEL  X"),
-        ["btn_demo"] = new("ДЕМО ЗАХИСТУ  D", "DEFENSE DEMO  D"),
+        ["btn_demo"] = new("ДЕМО ЗАХИСТУ  M", "DEFENSE DEMO  M"),
         ["btn_follow"] = new("СЛІДКУВАТИ ЗА РАКЕТОЮ", "FOLLOW ROCKET"),
         ["btn_traj_view"] = new("ПОВНА ТРАЄКТОРІЯ", "FULL TRAJECTORY"),
         ["btn_manual"] = new("РУЧНЕ КЕРУВАННЯ", "MANUAL CONTROL"),
@@ -232,14 +232,14 @@ public static class UILocale
             "LMB/RMB — orbit (look under OK) · WASD · scroll — smooth zoom\nF follow · T full path · C manual · R reset"),
 
         // How-to
-        ["how"] = new("D: демо захисту   F1: довідка   1-4: режим   Space: старт   P: порівняти",
-            "D: defense demo   F1: help   1-4: mode   Space: start   P: compare"),
-        ["hint"] = new("Підказка: D — демо захисту · або Hybrid 4 + Ideal I + Start",
-            "Hint: D — defense demo · or Hybrid 4 + Ideal I + Start"),
-        ["tip"] = new("1-4 mode | D demo | I ideal | Space start | P compare | F1 help | E export | H hide",
-            "1-4 mode | D demo | I ideal | Space start | P compare | F1 help | E export | H hide"),
-        ["cam_keys"] = new("ЛКМ/ПКМ оберт · WASD · колесо зум · F follow · T огляд · C ручне · R скинути",
-            "LMB/RMB orbit · WASD · scroll zoom · F follow · T overview · C manual · R reset"),
+        ["how"] = new("M: демо захисту   F1: довідка   1-4: режим   Space: старт   P: порівняти",
+            "M: defense demo   F1: help   1-4: mode   Space: start   P: compare"),
+        ["hint"] = new("Підказка: M — демо захисту · або Hybrid 4 + Ideal I + Start",
+            "Hint: M — defense demo · or Hybrid 4 + Ideal I + Start"),
+        ["tip"] = new("1-4 mode | M demo | I ideal | Space start | P compare | F1 help | E export | H hide",
+            "1-4 mode | M demo | I ideal | Space start | P compare | F1 help | E export | H hide"),
+        ["cam_keys"] = new("ЛКМ/ПКМ оберт · WASD/стрілки · колесо зум · F follow · T огляд · C ручне · R скинути",
+            "LMB/RMB orbit · WASD/arrows · scroll zoom · F/T/C/R · Tab=UI"),
         // Слайдери — що змінюється + одиниця в колонці значення
         ["sl_tests"] = new("Запусків на алгоритм", "Runs per algorithm"),
         ["sl_wind"] = new("Швидкість вітру", "Wind speed"),
@@ -290,6 +290,7 @@ public static class UILocale
             "camera (follow / overview / manual / reset)"),
         ["help_k_io"] = new("шлях · експорт · папка", "path · export · folder"),
         ["help_k_ui"] = new("панелі · мова · тема · довідка", "panels · lang · theme · help"),
+        ["help_k_nav"] = new("Tab - фокус UI · стрілки · Enter; Space - старт; WASD - камера", "Tab - UI focus · arrows · Enter; Space - start; WASD - camera"),
         ["help_landing"] = new("|Vy|<3.5 м/с · нахил<7° · промах · |Vh|",
             "|Vy|<3.5 m/s · tilt<7° · miss · |Vh|"),
         ["help_research"] = new("P — MC лише ділянка посадки · paired seeds\nВітер/шум — після відділення",
@@ -299,9 +300,9 @@ public static class UILocale
             "КЕРУВАННЯ\n" +
             "  1–4  PID / Fuzzy / Neural / Hybrid (лише після sep)\n" +
             "  Space старт · Esc стоп · I ідеал Stage-1 · U пауза\n" +
-            "  D демо (пакет→sep→Hybrid) · P порівняти · X скасувати\n" +
+            "  M демо (пакет→sep→Hybrid) · P порівняти · X скасувати\n" +
             "  F/T/C/R камера · L шлях · E експорт · O папка\n" +
-            "  H панелі · G мова · Y тема · F1 довідка\n\n" +
+            "  H панелі · G мова · Y тема · F1 довідка\n  Tab фокус UI · стрілки · Enter/Space\n\n" +
             "SOFT-LANDING (Stage-1)\n" +
             "  |Vy|<3.5 м/с · нахил<7° · промах · |Vh|\n\n" +
             "ДОСЛІДЖЕННЯ\n" +
@@ -311,9 +312,9 @@ public static class UILocale
             "CONTROLS\n" +
             "  1–4  PID / Fuzzy / Neural / Hybrid (after sep only)\n" +
             "  Space start · Esc stop · I ideal Stage-1 · U pause\n" +
-            "  D demo Hybrid Stage-1 · NAV IMU/GPS→sep→Hybrid) · P compare · X cancel\n" +
+            "  M demo Hybrid Stage-1 · NAV IMU/GPS→sep→Hybrid) · P compare · X cancel\n" +
             "  F/T/C/R camera · L path · E export · O folder\n" +
-            "  H panels · G lang · Y theme · F1 help\n\n" +
+            "  H panels · G lang · Y theme · F1 help\n  Tab UI focus · arrows move · Enter/Space activate\n\n" +
             "SOFT-LANDING (Stage-1)\n" +
             "  |Vy|<3.5 m/s · tilt<7° · miss · |Vh|\n\n" +
             "RESEARCH\n" +
@@ -355,8 +356,8 @@ public static class UILocale
             "Criteria failed — see cards below"),
 
         // Інсайти
-        ["ins_wait"] = new("Об'єкт: 1-й ступінь · Earth LZ. D — демо пакета, 4 — Hybrid, Space — старт.",
-            "Object: first stage · Earth LZ. D — stack demo, 4 — Hybrid, Space — start."),
+        ["ins_wait"] = new("Об'єкт: 1-й ступінь · Earth LZ. M — демо пакета, 4 — Hybrid, Space — старт.",
+            "Object: first stage · Earth LZ. M — stack demo, 4 — Hybrid, Space — start."),
         ["ins_batch"] = new("MC на ділянці посадки Stage-1 (після sep). A–D попарно.",
             "MC on Stage-1 landing segment (after sep). Paired A–D."),
         ["ins_ok"] = new("Посадку 1-го ступеня виконано. Score {0:F0}/100.",

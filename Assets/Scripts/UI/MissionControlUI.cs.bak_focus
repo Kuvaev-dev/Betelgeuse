@@ -1455,7 +1455,7 @@ public class MissionControlUI : MonoBehaviour
         pauseBtn = MenuBtn(row2.transform, PauseButtonLabel(), OnPause, MenuBtnKind.Pause, chipW, out txtPauseBtn);
         pauseBtnImg = pauseBtn != null ? pauseBtn.targetGraphic as Image : null;
         UpdatePauseButtonVisual();
-        MenuBtn(row2.transform, (UILocale.T("top_demo") + "  M").ToUpperInvariant(), OnDefenseDemo, MenuBtnKind.Demo, chipW);
+        MenuBtn(row2.transform, (UILocale.T("top_demo") + "  D").ToUpperInvariant(), OnDefenseDemo, MenuBtnKind.Demo, chipW);
 
         MenuBtn(row2.transform, (UILocale.T("top_ideal") + "  I").ToUpperInvariant(), OnApplyIdealPresets, MenuBtnKind.Normal, chipW);
         trajToggleBtn = MenuBtn(row2.transform, PathButtonLabel(), OnToggleTrajectoryLine, MenuBtnKind.Normal, chipW, out txtTrajBtn);
@@ -1774,8 +1774,7 @@ public class MissionControlUI : MonoBehaviour
 
 
     /// <summary>
-    /// True when EventSystem has an interactable Selectable selected - arrow keys navigate UI.
-    /// WASD stay on camera; letter hotkeys stay global (unless typing in an InputField).
+    /// True when EventSystem has an interactable Selectable selected — arrows/WASD navigate UI, not camera.
     /// </summary>
     public static bool HasKeyboardFocus()
     {
@@ -1839,11 +1838,9 @@ public class MissionControlUI : MonoBehaviour
             var s = selectables[i];
             if (s == null) continue;
 
-            // Overlays / graph tiles / scrollbars: mouse only — not Tab/arrow targets
+            // Full-screen overlay scrims — click to dismiss only, never keyboard focus targets
             string n = s.gameObject.name;
-            if (n == "HelpOverlay" || n == "GraphDetailOverlay"
-                || n.StartsWith("GraphRoot_", System.StringComparison.Ordinal)
-                || n.IndexOf("Scrollbar", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            if (n == "HelpOverlay" || n == "GraphDetailOverlay")
             {
                 var none = new Navigation { mode = Navigation.Mode.None };
                 s.navigation = none;
@@ -1870,13 +1867,8 @@ public class MissionControlUI : MonoBehaviour
         string n = s.gameObject.name;
         if (n == "HelpOverlay" || n == "GraphDetailOverlay")
             return false;
-        // Skip window-caption chrome (min/max/close) - not part of Mission Control workflow
+        // Skip window-caption chrome (min/max/close) — not part of Mission Control workflow
         if (n.StartsWith("Cap", System.StringComparison.Ordinal))
-            return false;
-        // Graph tiles stay mouse-clickable; keep them out of Tab/arrow order
-        if (n.StartsWith("GraphRoot_", System.StringComparison.Ordinal))
-            return false;
-        if (n.IndexOf("Scrollbar", System.StringComparison.OrdinalIgnoreCase) >= 0)
             return false;
         return true;
     }
@@ -1884,27 +1876,13 @@ public class MissionControlUI : MonoBehaviour
     List<Selectable> CollectFocusableSelectables()
     {
         var list = new List<Selectable>(64);
-        var seen = new HashSet<int>();
-
-        void AddFrom(GameObject root, bool includeInactive)
+        if (canvasRoot == null) return list;
+        var arr = canvasRoot.GetComponentsInChildren<Selectable>(false);
+        for (int i = 0; i < arr.Length; i++)
         {
-            if (root == null) return;
-            var arr = root.GetComponentsInChildren<Selectable>(includeInactive);
-            for (int i = 0; i < arr.Length; i++)
-            {
-                var s = arr[i];
-                if (!IsUiNavTarget(s)) continue;
-                int id = s.GetInstanceID();
-                if (!seen.Add(id)) continue;
-                list.Add(s);
-            }
+            if (IsUiNavTarget(arr[i]))
+                list.Add(arr[i]);
         }
-
-        AddFrom(canvasRoot, false);
-        // Conditions are sometimes detached/reparented - always merge them when active
-        if (conditionSectionGo != null && conditionSectionGo.activeInHierarchy)
-            AddFrom(conditionSectionGo, false);
-
         list.Sort((a, b) =>
         {
             Vector3 pa = a.transform.position;
@@ -1943,141 +1921,7 @@ public class MissionControlUI : MonoBehaviour
             idx = reverse ? (idx - 1 + all.Count) % all.Count : (idx + 1) % all.Count;
 
         es.SetSelectedGameObject(all[idx].gameObject);
-        EnsureUiFocusVisible(all[idx]);
     }
-
-    void NavigateUiFocusDirectional(UnityEngine.EventSystems.MoveDirection dir)
-    {
-        var all = CollectFocusableSelectables();
-        if (all.Count == 0) return;
-        var es = UnityEngine.EventSystems.EventSystem.current;
-        if (es == null) return;
-
-        int idx = -1;
-        var cur = es.currentSelectedGameObject;
-        if (cur != null)
-        {
-            for (int i = 0; i < all.Count; i++)
-            {
-                if (all[i] != null && all[i].gameObject == cur)
-                {
-                    idx = i;
-                    break;
-                }
-            }
-        }
-
-        if (idx < 0)
-        {
-            es.SetSelectedGameObject(all[0].gameObject);
-            EnsureUiFocusVisible(all[0]);
-            return;
-        }
-
-        // Sliders: Left/Right nudge value; Up/Down move focus
-        var curSel = all[idx];
-        if (curSel is Slider slider
-            && (dir == UnityEngine.EventSystems.MoveDirection.Left
-                || dir == UnityEngine.EventSystems.MoveDirection.Right))
-        {
-            float step = slider.wholeNumbers ? 1f : Mathf.Max(0.01f, (slider.maxValue - slider.minValue) * 0.02f);
-            slider.value = Mathf.Clamp(
-                slider.value + (dir == UnityEngine.EventSystems.MoveDirection.Left ? -step : step),
-                slider.minValue, slider.maxValue);
-            return;
-        }
-
-        Vector3 origin = curSel.transform.position;
-        Selectable best = null;
-        float bestScore = float.MaxValue;
-        for (int i = 0; i < all.Count; i++)
-        {
-            if (i == idx || all[i] == null) continue;
-            Vector3 d = all[i].transform.position - origin;
-            bool ok = false;
-            float primary = 0f, lateral = 0f;
-            switch (dir)
-            {
-                case UnityEngine.EventSystems.MoveDirection.Up:
-                    ok = d.y > 2f; primary = d.y; lateral = Mathf.Abs(d.x); break;
-                case UnityEngine.EventSystems.MoveDirection.Down:
-                    ok = d.y < -2f; primary = -d.y; lateral = Mathf.Abs(d.x); break;
-                case UnityEngine.EventSystems.MoveDirection.Left:
-                    ok = d.x < -2f; primary = -d.x; lateral = Mathf.Abs(d.y); break;
-                case UnityEngine.EventSystems.MoveDirection.Right:
-                    ok = d.x > 2f; primary = d.x; lateral = Mathf.Abs(d.y); break;
-            }
-            if (!ok) continue;
-            float score = primary + lateral * 2.5f;
-            if (score < bestScore)
-            {
-                bestScore = score;
-                best = all[i];
-            }
-        }
-
-        if (best == null)
-        {
-            int next = dir == UnityEngine.EventSystems.MoveDirection.Up
-                       || dir == UnityEngine.EventSystems.MoveDirection.Left
-                ? (idx - 1 + all.Count) % all.Count
-                : (idx + 1) % all.Count;
-            best = all[next];
-        }
-
-        es.SetSelectedGameObject(best.gameObject);
-        EnsureUiFocusVisible(best);
-    }
-
-    void EnsureUiFocusVisible(Selectable sel)
-    {
-        if (sel == null) return;
-        var rt = sel.transform as RectTransform;
-        if (rt == null) return;
-        var scroll = sel.GetComponentInParent<ScrollRect>();
-        if (scroll == null || scroll.content == null || scroll.viewport == null) return;
-
-        Canvas.ForceUpdateCanvases();
-        Vector3[] cCorners = new Vector3[4];
-        Vector3[] vCorners = new Vector3[4];
-        rt.GetWorldCorners(cCorners);
-        scroll.viewport.GetWorldCorners(vCorners);
-        float itemTop = cCorners[1].y;
-        float itemBot = cCorners[0].y;
-        float viewTop = vCorners[1].y;
-        float viewBot = vCorners[0].y;
-        float dy = 0f;
-        if (itemTop > viewTop) dy = itemTop - viewTop;
-        else if (itemBot < viewBot) dy = itemBot - viewBot;
-        if (Mathf.Abs(dy) < 0.5f) return;
-
-        var contentRt = scroll.content;
-        Vector3 local = contentRt.InverseTransformVector(new Vector3(0f, dy, 0f));
-        var ap = contentRt.anchoredPosition;
-        ap.y -= local.y;
-        contentRt.anchoredPosition = ap;
-    }
-
-    void ActivateFocusedUiControl()
-    {
-        var es = UnityEngine.EventSystems.EventSystem.current;
-        if (es == null) return;
-        var go = es.currentSelectedGameObject;
-        if (go == null) return;
-
-        // Enter activates focused control. Never treat this as the M/Demo path.
-        var input = go.GetComponent<TMP_InputField>();
-        if (input != null)
-        {
-            input.ActivateInputField();
-            return;
-        }
-
-        var ped = new UnityEngine.EventSystems.BaseEventData(es);
-        UnityEngine.EventSystems.ExecuteEvents.Execute(
-            go, ped, UnityEngine.EventSystems.ExecuteEvents.submitHandler);
-    }
-
     void HandleHotkeys()
     {
         var es = UnityEngine.EventSystems.EventSystem.current;
@@ -2092,7 +1936,9 @@ public class MissionControlUI : MonoBehaviour
             var sel = selGo.GetComponent<Selectable>();
             uiFocus = sel != null && sel.IsInteractable();
         }
+        if (typing) return;
 
+        // Tab / Shift+Tab — enter or cycle Mission Control UI focus
         // Click on scene (not UI) clears keyboard focus so camera arrows resume
         if (uiFocus && (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)))
         {
@@ -2101,80 +1947,20 @@ public class MissionControlUI : MonoBehaviour
             {
                 ClearUiFocus();
                 uiFocus = false;
-                typing = false;
             }
         }
-
-        // Tab / Shift+Tab — enter or cycle Mission Control UI focus (also leaves InputField)
         if (Input.GetKeyDown(KeyCode.Tab))
         {
-            if (typing)
-            {
-                var tmp = selGo != null ? selGo.GetComponent<TMP_InputField>() : null;
-                if (tmp != null) tmp.DeactivateInputField();
-                var uif = selGo != null ? selGo.GetComponent<UnityEngine.UI.InputField>() : null;
-                if (uif != null) uif.DeactivateInputField();
-            }
             bool reverse = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             NavigateUiFocus(reverse);
-            var focused = es != null ? es.currentSelectedGameObject : null;
-            if (focused != null)
-                EnsureUiFocusVisible(focused.GetComponent<Selectable>());
             return;
-        }
-
-        // While typing in a number field, only Esc clears — do not steal digits/letters
-        if (typing)
-        {
-            if (Input.GetKeyDown(KeyCode.Escape))
-            {
-                ClearUiFocus();
-            }
-            return;
-        }
-
-        // Arrows only for UI navigation when focus is active (never WASD)
-        if (uiFocus)
-        {
-            if (Input.GetKeyDown(KeyCode.LeftArrow))
-            {
-                NavigateUiFocusDirectional(UnityEngine.EventSystems.MoveDirection.Left);
-                return;
-            }
-            if (Input.GetKeyDown(KeyCode.RightArrow))
-            {
-                NavigateUiFocusDirectional(UnityEngine.EventSystems.MoveDirection.Right);
-                return;
-            }
-            if (Input.GetKeyDown(KeyCode.UpArrow))
-            {
-                NavigateUiFocusDirectional(UnityEngine.EventSystems.MoveDirection.Up);
-                return;
-            }
-            if (Input.GetKeyDown(KeyCode.DownArrow))
-            {
-                NavigateUiFocusDirectional(UnityEngine.EventSystems.MoveDirection.Down);
-                return;
-            }
-        }
-
-        // Enter activates focused control (Submit). Space is always Start when no modal.
-        if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
-        {
-            if (uiFocus)
-            {
-                ActivateFocusedUiControl();
-                return;
-            }
         }
 
         bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-        bool modal = helpVisible || graphDetailVisible;
 
         if (Input.GetKeyDown(KeyCode.H) && !ctrl) TogglePanels();
-        // Space always starts (unless modal/typing). Enter — not Space — activates focused widgets.
-        // Focused Start must not bind M; M remains Demo hotkey below.
-        if (Input.GetKeyDown(KeyCode.Space) && !modal) OnStartLanding();
+        // Space activates focused control via EventSystem Submit; only start landing when no UI focus
+        if (Input.GetKeyDown(KeyCode.Space) && !uiFocus) OnStartLanding();
         if (Input.GetKeyDown(KeyCode.I)) OnApplyIdealPresets();
         if (Input.GetKeyDown(KeyCode.U)) OnPause();
         if (Input.GetKeyDown(KeyCode.Escape))
@@ -2188,7 +1974,7 @@ public class MissionControlUI : MonoBehaviour
         }
         if (Input.GetKeyDown(KeyCode.F1) || Input.GetKeyDown(KeyCode.Slash) || Input.GetKeyDown(KeyCode.Question))
             ToggleHelp();
-        if (Input.GetKeyDown(KeyCode.M) && !ctrl)
+        if (Input.GetKeyDown(KeyCode.D) && !ctrl)
             OnDefenseDemo();
         if (Input.GetKeyDown(KeyCode.L)) OnToggleTrajectoryLine();
         if (Input.GetKeyDown(KeyCode.F)) OnCamFollow();
@@ -2200,7 +1986,7 @@ public class MissionControlUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.G)) UILocale.Toggle();
         if (Input.GetKeyDown(KeyCode.Y)) UiTheme.Cycle();
 
-        // Modes 1-4
+        // Навігація 1–4
         if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
             SelectMode(RocketPhysics.ControlMode.PID);
         if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
@@ -3418,7 +3204,7 @@ public class MissionControlUI : MonoBehaviour
         KeyRow("1–4", "help_k_modes");
         KeyRow("Space · Esc", "help_k_run");
         KeyRow("I · U", "help_k_ideal");
-        KeyRow("M · P · X", "help_k_demo");
+        KeyRow("D · P · X", "help_k_demo");
         KeyRow("F / T / C / R", "help_k_cam");
         KeyRow("L · E · O", "help_k_io");
         KeyRow("H · G · Y · F1", "help_k_ui");
@@ -4510,7 +4296,6 @@ public class MissionControlUI : MonoBehaviour
         }
 
         es.enabled = true;
-        es.sendNavigationEvents = false; // arrows/Enter/Space owned by HandleHotkeys
         if (UnityEngine.EventSystems.EventSystem.current == null)
             UnityEngine.EventSystems.EventSystem.current = es;
 
@@ -5208,15 +4993,6 @@ public class MissionControlUI : MonoBehaviour
         rt.anchoredPosition = new Vector2(0f, y);
         rt.sizeDelta = new Vector2(0f, conditionSectionHeight);
         y -= conditionSectionHeight + 4f;
-
-        // Make noise/wind/defense toggles+sliders Tab/arrow reachable
-        foreach (var s in conditionSectionGo.GetComponentsInChildren<Selectable>(true))
-        {
-            if (s == null) continue;
-            var nav = s.navigation;
-            nav.mode = Navigation.Mode.Automatic;
-            s.navigation = nav;
-        }
     }
 
     void SectionHeader(Transform parent, string localeKey, ref float y, float pad, float width)
@@ -5390,7 +5166,7 @@ public class MissionControlUI : MonoBehaviour
         sld.wholeNumbers = true;
         sld.direction = Slider.Direction.LeftToRight;
         sld.transition = Selectable.Transition.None;
-        sld.navigation = new Navigation { mode = Navigation.Mode.Automatic };
+        sld.navigation = new Navigation { mode = Navigation.Mode.None };
         slideGo.AddComponent<SliderScrollLock>();
 
         // Фонова доріжка (фіксована висота через center anchors + sizeDelta.y)
@@ -5600,11 +5376,6 @@ public class MissionControlUI : MonoBehaviour
         toggle.targetGraphic = box.GetComponent<Image>();
         toggle.graphic = check.GetComponent<Image>();
         toggle.isOn = on;
-        toggle.navigation = new Navigation { mode = Navigation.Mode.Automatic };
-        toggle.transition = Selectable.Transition.ColorTint;
-        var tc = ColorBlock.defaultColorBlock;
-        ApplyBtnColorBlock(ref tc);
-        toggle.colors = tc;
         if (!string.IsNullOrEmpty(labelKey))
             conditionToggleBindings.Add((toggle, txt, labelKey));
         return toggle;

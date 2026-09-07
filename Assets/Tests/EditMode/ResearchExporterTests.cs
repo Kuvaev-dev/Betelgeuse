@@ -129,6 +129,13 @@ public class ResearchExporterTests
             "Test", "t", "h", "#000", true);
         StringAssert.Contains("<polyline", svg);
         StringAssert.Contains("Test", svg);
+        StringAssert.Contains(">t<", svg); // X-axis title
+        StringAssert.Contains(">h<", svg); // Y-axis title
+        // X-axis tick labels must be present (regression: charts previously had no X ticks)
+        StringAssert.Contains("text-anchor=\"middle\"", svg);
+        Assert.IsTrue(svg.Contains(">0<") || svg.Contains(">0.<"), "Expected numeric X/Y tick labels");
+        StringAssert.Contains("start", svg);
+        StringAssert.Contains("end", svg);
     }
 
     [Test]

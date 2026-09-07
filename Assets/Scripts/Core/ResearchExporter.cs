@@ -143,19 +143,19 @@ public static class ResearchExporter
         {
             File.WriteAllText(Path.Combine(charts, "altitude_vs_time.svg"),
                 BuildSvgSeries(samples, s => s.time, s => s.posY,
-                    "Altitude h(t)", "t, s", "h, m", "#222", true), Encoding.UTF8);
+                    "Altitude h(t)", "t, s", "h, m", "#2563eb", true), Encoding.UTF8);
             File.WriteAllText(Path.Combine(charts, "velocity_vs_time.svg"),
                 BuildSvgSeries(samples, s => s.time, s => s.velY,
-                    "Vertical velocity Vy(t)", "t, s", "Vy, m/s", "#333", true), Encoding.UTF8);
+                    "Vertical velocity Vy(t)", "t, s", "Vy, m/s", "#ea580c", true), Encoding.UTF8);
             File.WriteAllText(Path.Combine(charts, "thrust_vs_time.svg"),
                 BuildSvgSeries(samples, s => s.time, s => s.thrustKn,
-                    "Thrust F(t)", "t, s", "F, kN", "#444", true), Encoding.UTF8);
+                    "Thrust F(t)", "t, s", "F, kN", "#16a34a", true), Encoding.UTF8);
             File.WriteAllText(Path.Combine(charts, "track_XZ.svg"),
                 BuildSvgSeries(samples, s => s.posX, s => s.posZ,
-                    "Ground track XZ (pad at 0,0)", "X, m", "Z, m", "#222", false), Encoding.UTF8);
+                    "Ground track XZ (pad at 0,0)", "X, m", "Z, m", "#7c3aed", false), Encoding.UTF8);
             File.WriteAllText(Path.Combine(charts, "side_Xh.svg"),
                 BuildSvgSeries(samples, s => s.posX, s => s.posY,
-                    "Side view X–h", "X, m", "h, m", "#222", false), Encoding.UTF8);
+                    "Side view X-h", "X, m", "h, m", "#0ea5e9", false), Encoding.UTF8);
             File.WriteAllText(calcMd, BuildStepAnalysisMarkdown(data), new UTF8Encoding(true));
         }
         else
@@ -542,17 +542,26 @@ public static class ResearchExporter
         return sb.ToString();
     }
 
-    /// <summary>SVG line chart з samples (xSel, ySel).</summary>
+
+    /// <summary>SVG line chart from samples (xSel, ySel) with titled axes, grid, and tick labels.</summary>
     public static string BuildSvgSeries(
         List<DataLogger.Sample> samples,
         System.Func<DataLogger.Sample, float> xSel,
         System.Func<DataLogger.Sample, float> ySel,
         string title, string xLabel, string yLabel, string stroke, bool markZero)
     {
-        const int W = 900, H = 420;
-        const float padL = 64f, padR = 24f, padT = 40f, padB = 48f;
+        const int W = 960, H = 500;
+        const float padL = 78f, padR = 36f, padT = 56f, padB = 72f;
         float plotW = W - padL - padR;
         float plotH = H - padT - padB;
+
+        if (samples == null || samples.Count == 0)
+        {
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                   $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{W}\" height=\"{H}\" viewBox=\"0 0 {W} {H}\">" +
+                   "<rect width=\"100%\" height=\"100%\" fill=\"#f7f8fa\"/>" +
+                   $"<text x=\"{W / 2}\" y=\"{H / 2}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"14\" fill=\"#888\">No samples</text></svg>";
+        }
 
         float xMin = float.MaxValue, xMax = float.MinValue;
         float yMin = float.MaxValue, yMax = float.MinValue;
@@ -564,59 +573,150 @@ public static class ResearchExporter
         }
         if (Mathf.Approximately(xMin, xMax)) { xMin -= 1f; xMax += 1f; }
         if (Mathf.Approximately(yMin, yMax)) { yMin -= 1f; yMax += 1f; }
+
+        float xPad = (xMax - xMin) * 0.04f;
         float yPad = (yMax - yMin) * 0.08f;
+        xMin -= xPad; xMax += xPad;
         yMin -= yPad; yMax += yPad;
-        if (markZero) { if (yMin > 0) yMin = 0; if (yMax < 0) yMax = 0; }
+        if (markZero)
+        {
+            if (yMin > 0f) yMin = 0f;
+            if (yMax < 0f) yMax = 0f;
+        }
 
         float X(float v) => padL + (v - xMin) / (xMax - xMin) * plotW;
         float Y(float v) => padT + (1f - (v - yMin) / (yMax - yMin)) * plotH;
 
-        var sb = new StringBuilder(samples.Count * 24 + 800);
-        sb.AppendLine($"<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-        sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{W}\" height=\"{H}\" viewBox=\"0 0 {W} {H}\">");
-        sb.AppendLine($"<rect width=\"100%\" height=\"100%\" fill=\"#fafafa\"/>");
-        sb.AppendLine($"<rect x=\"{padL}\" y=\"{padT}\" width=\"{plotW}\" height=\"{plotH}\" fill=\"#fff\" stroke=\"#ccc\"/>");
-        sb.AppendLine($"<text x=\"{W / 2}\" y=\"24\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial\" font-size=\"16\" fill=\"#222\">{EscXml(title)}</text>");
-        sb.AppendLine($"<text x=\"{W / 2}\" y=\"{H - 12}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial\" font-size=\"12\" fill=\"#555\">{EscXml(xLabel)}</text>");
-        sb.AppendLine($"<text x=\"16\" y=\"{H / 2}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial\" font-size=\"12\" fill=\"#555\" transform=\"rotate(-90 16 {H / 2})\">{EscXml(yLabel)}</text>");
+        GetNiceTicks(xMin, xMax, 6, out float[] xTicks, out float xStep);
+        GetNiceTicks(yMin, yMax, 6, out float[] yTicks, out float yStep);
 
-        // grid
-        for (int i = 0; i <= 5; i++)
+        string strokeSafe = string.IsNullOrEmpty(stroke) ? "#2563eb" : stroke;
+        var sb = new StringBuilder(samples.Count * 28 + 2400);
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{W}\" height=\"{H}\" viewBox=\"0 0 {W} {H}\" role=\"img\" aria-label=\"{EscXml(title)}\">");
+        sb.AppendLine("<defs>");
+        sb.AppendLine("<linearGradient id=\"plotBg\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0%\" stop-color=\"#ffffff\"/><stop offset=\"100%\" stop-color=\"#f3f6fb\"/></linearGradient>");
+        sb.AppendLine("<filter id=\"softShadow\" x=\"-2%\" y=\"-2%\" width=\"104%\" height=\"104%\"><feDropShadow dx=\"0\" dy=\"1\" stdDeviation=\"1.2\" flood-color=\"#0f172a\" flood-opacity=\"0.08\"/></filter>");
+        sb.AppendLine("</defs>");
+        sb.AppendLine("<rect width=\"100%\" height=\"100%\" fill=\"#f7f8fa\"/>");
+        sb.AppendLine($"<rect x=\"{padL}\" y=\"{padT}\" width=\"{plotW}\" height=\"{plotH}\" fill=\"url(#plotBg)\" stroke=\"#cbd5e1\" stroke-width=\"1.25\" rx=\"4\" ry=\"4\" filter=\"url(#softShadow)\"/>");
+
+        sb.AppendLine($"<text x=\"{W / 2}\" y=\"30\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"18\" font-weight=\"600\" fill=\"#0f172a\">{EscXml(title)}</text>");
+
+        foreach (float yv in yTicks)
         {
-            float yy = padT + plotH * i / 5f;
-            sb.AppendLine($"<line x1=\"{padL}\" y1=\"{yy}\" x2=\"{padL + plotW}\" y2=\"{yy}\" stroke=\"#eee\"/>");
-            float yv = yMax - (yMax - yMin) * i / 5f;
-            sb.AppendLine($"<text x=\"{padL - 6}\" y=\"{yy + 4}\" text-anchor=\"end\" font-size=\"10\" fill=\"#666\" font-family=\"Consolas,monospace\">{yv.ToString("0.##", Inv)}</text>");
+            if (yv < yMin - 1e-6f || yv > yMax + 1e-6f) continue;
+            float yy = Y(yv);
+            string yys = yy.ToString("0.##", Inv);
+            sb.AppendLine($"<line x1=\"{padL}\" y1=\"{yys}\" x2=\"{(padL + plotW).ToString("0.##", Inv)}\" y2=\"{yys}\" stroke=\"#e2e8f0\" stroke-width=\"1\"/>");
+            sb.AppendLine($"<line x1=\"{(padL - 5).ToString("0.##", Inv)}\" y1=\"{yys}\" x2=\"{padL.ToString("0.##", Inv)}\" y2=\"{yys}\" stroke=\"#64748b\" stroke-width=\"1.25\"/>");
+            sb.AppendLine($"<text x=\"{(padL - 8).ToString("0.##", Inv)}\" y=\"{(yy + 4).ToString("0.##", Inv)}\" text-anchor=\"end\" font-family=\"Segoe UI,Consolas,monospace\" font-size=\"11\" fill=\"#475569\">{FormatTick(yv, yStep)}</text>");
         }
 
-        if (markZero && yMin < 0f && yMax > 0f)
+        foreach (float xv in xTicks)
+        {
+            if (xv < xMin - 1e-6f || xv > xMax + 1e-6f) continue;
+            float xx = X(xv);
+            string xxs = xx.ToString("0.##", Inv);
+            sb.AppendLine($"<line x1=\"{xxs}\" y1=\"{padT.ToString("0.##", Inv)}\" x2=\"{xxs}\" y2=\"{(padT + plotH).ToString("0.##", Inv)}\" stroke=\"#e2e8f0\" stroke-width=\"1\"/>");
+            sb.AppendLine($"<line x1=\"{xxs}\" y1=\"{(padT + plotH).ToString("0.##", Inv)}\" x2=\"{xxs}\" y2=\"{(padT + plotH + 5).ToString("0.##", Inv)}\" stroke=\"#64748b\" stroke-width=\"1.25\"/>");
+            sb.AppendLine($"<text x=\"{xxs}\" y=\"{(padT + plotH + 20).ToString("0.##", Inv)}\" text-anchor=\"middle\" font-family=\"Segoe UI,Consolas,monospace\" font-size=\"11\" fill=\"#475569\">{FormatTick(xv, xStep)}</text>");
+        }
+
+        if (yMin < 0f && yMax > 0f)
         {
             float zy = Y(0f);
-            sb.AppendLine($"<line x1=\"{padL}\" y1=\"{zy}\" x2=\"{padL + plotW}\" y2=\"{zy}\" stroke=\"#999\" stroke-dasharray=\"4 3\"/>");
+            sb.AppendLine($"<line x1=\"{padL}\" y1=\"{zy.ToString("0.##", Inv)}\" x2=\"{(padL + plotW).ToString("0.##", Inv)}\" y2=\"{zy.ToString("0.##", Inv)}\" stroke=\"#94a3b8\" stroke-width=\"1.25\" stroke-dasharray=\"5 4\"/>");
+        }
+        if (xMin < 0f && xMax > 0f)
+        {
+            float zx = X(0f);
+            sb.AppendLine($"<line x1=\"{zx.ToString("0.##", Inv)}\" y1=\"{padT}\" x2=\"{zx.ToString("0.##", Inv)}\" y2=\"{(padT + plotH).ToString("0.##", Inv)}\" stroke=\"#94a3b8\" stroke-width=\"1.25\" stroke-dasharray=\"5 4\"/>");
         }
 
-        sb.Append($"<polyline fill=\"none\" stroke=\"{stroke}\" stroke-width=\"2\" points=\"");
-        int step = Mathf.Max(1, samples.Count / 800);
-        for (int i = 0; i < samples.Count; i += step)
+        sb.AppendLine($"<line x1=\"{padL}\" y1=\"{padT}\" x2=\"{padL}\" y2=\"{(padT + plotH).ToString("0.##", Inv)}\" stroke=\"#334155\" stroke-width=\"1.5\"/>");
+        sb.AppendLine($"<line x1=\"{padL}\" y1=\"{(padT + plotH).ToString("0.##", Inv)}\" x2=\"{(padL + plotW).ToString("0.##", Inv)}\" y2=\"{(padT + plotH).ToString("0.##", Inv)}\" stroke=\"#334155\" stroke-width=\"1.5\"/>");
+
+        sb.Append($"<polyline fill=\"none\" stroke=\"{EscXml(strokeSafe)}\" stroke-width=\"2.4\" stroke-linejoin=\"round\" stroke-linecap=\"round\" points=\"");
+        int stepPts = Mathf.Max(1, samples.Count / 1200);
+        for (int i = 0; i < samples.Count; i += stepPts)
         {
             var s = samples[i];
             sb.Append(X(xSel(s)).ToString("0.##", Inv)).Append(',')
               .Append(Y(ySel(s)).ToString("0.##", Inv)).Append(' ');
         }
-        // остання точка
         var last = samples[samples.Count - 1];
         sb.Append(X(xSel(last)).ToString("0.##", Inv)).Append(',')
           .Append(Y(ySel(last)).ToString("0.##", Inv));
         sb.AppendLine("\"/>");
 
-        // маркери start/end
         var first = samples[0];
-        sb.AppendLine($"<circle cx=\"{X(xSel(first)):0.##}\" cy=\"{Y(ySel(first)):0.##}\" r=\"4\" fill=\"#888\"/>");
-        sb.AppendLine($"<circle cx=\"{X(xSel(last)):0.##}\" cy=\"{Y(ySel(last)):0.##}\" r=\"4\" fill=\"#222\"/>");
+        float fx = X(xSel(first)), fy = Y(ySel(first));
+        float lx = X(xSel(last)), ly = Y(ySel(last));
+        sb.AppendLine($"<circle cx=\"{fx.ToString("0.##", Inv)}\" cy=\"{fy.ToString("0.##", Inv)}\" r=\"4.5\" fill=\"#16a34a\" stroke=\"#fff\" stroke-width=\"1.5\"/>");
+        sb.AppendLine($"<circle cx=\"{lx.ToString("0.##", Inv)}\" cy=\"{ly.ToString("0.##", Inv)}\" r=\"4.5\" fill=\"#dc2626\" stroke=\"#fff\" stroke-width=\"1.5\"/>");
+
+        sb.AppendLine($"<text x=\"{(padL + plotW * 0.5f).ToString("0.##", Inv)}\" y=\"{(H - 14).ToString("0.##", Inv)}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"13\" font-weight=\"600\" fill=\"#334155\">{EscXml(xLabel)}</text>");
+        float yTitleX = 18f;
+        float yTitleY = padT + plotH * 0.5f;
+        sb.AppendLine($"<text x=\"{yTitleX.ToString("0.##", Inv)}\" y=\"{yTitleY.ToString("0.##", Inv)}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"13\" font-weight=\"600\" fill=\"#334155\" transform=\"rotate(-90 {yTitleX.ToString("0.##", Inv)} {yTitleY.ToString("0.##", Inv)})\">{EscXml(yLabel)}</text>");
+
+        float legendX = padL + plotW - 132f;
+        float legendY = padT + 14f;
+        sb.AppendLine($"<rect x=\"{legendX.ToString("0.##", Inv)}\" y=\"{legendY.ToString("0.##", Inv)}\" width=\"120\" height=\"40\" rx=\"4\" ry=\"4\" fill=\"#ffffff\" fill-opacity=\"0.92\" stroke=\"#e2e8f0\"/>");
+        sb.AppendLine($"<circle cx=\"{(legendX + 14).ToString("0.##", Inv)}\" cy=\"{(legendY + 14).ToString("0.##", Inv)}\" r=\"4\" fill=\"#16a34a\"/>");
+        sb.AppendLine($"<text x=\"{(legendX + 24).ToString("0.##", Inv)}\" y=\"{(legendY + 18).ToString("0.##", Inv)}\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"11\" fill=\"#334155\">start</text>");
+        sb.AppendLine($"<circle cx=\"{(legendX + 14).ToString("0.##", Inv)}\" cy=\"{(legendY + 30).ToString("0.##", Inv)}\" r=\"4\" fill=\"#dc2626\"/>");
+        sb.AppendLine($"<text x=\"{(legendX + 24).ToString("0.##", Inv)}\" y=\"{(legendY + 34).ToString("0.##", Inv)}\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"11\" fill=\"#334155\">end</text>");
+
         sb.AppendLine("</svg>");
         return sb.ToString();
     }
 
+    static void GetNiceTicks(float min, float max, int targetCount, out float[] ticks, out float step)
+    {
+        float range = Mathf.Max(max - min, 1e-12f);
+        float rough = range / Mathf.Max(1, targetCount);
+        float mag = Mathf.Pow(10f, Mathf.Floor(Mathf.Log10(rough)));
+        float norm = rough / mag;
+        float nice;
+        if (norm <= 1.5f) nice = 1f;
+        else if (norm <= 3f) nice = 2f;
+        else if (norm <= 7f) nice = 5f;
+        else nice = 10f;
+        step = nice * mag;
+
+        float first = Mathf.Ceil(min / step) * step;
+        if (Mathf.Abs(first) < step * 1e-6f) first = 0f;
+        var list = new List<float>(targetCount + 3);
+        for (float v = first; v <= max + step * 0.5f; v += step)
+        {
+            float t = Mathf.Abs(v) < step * 1e-6f ? 0f : v;
+            if (t >= min - step * 1e-6f && t <= max + step * 1e-6f)
+                list.Add(t);
+            if (list.Count > 24) break;
+        }
+        if (list.Count == 0)
+        {
+            list.Add(min);
+            list.Add(max);
+            step = range;
+        }
+        ticks = list.ToArray();
+    }
+
+    static string FormatTick(float value, float step)
+    {
+        float a = Mathf.Abs(value);
+        float s = Mathf.Abs(step);
+        if (a == 0f) return "0";
+        if (a >= 1e5f || (a > 0f && a < 1e-3f && s < 1e-3f))
+            return value.ToString("0.##e0", Inv);
+        if (s >= 1f) return value.ToString("0.##", Inv);
+        if (s >= 0.1f) return value.ToString("0.##", Inv);
+        if (s >= 0.01f) return value.ToString("0.###", Inv);
+        return value.ToString("0.####", Inv);
+    }
     public static string BuildStepAnalysisMarkdown(LandingExportData d)
     {
         var sb = new StringBuilder(2048);
