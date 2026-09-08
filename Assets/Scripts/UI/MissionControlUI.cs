@@ -231,6 +231,9 @@ public class MissionControlUI : MonoBehaviour
         float[] snapAlt = graphAlt != null ? graphAlt.GetSamples() : null;
         float[] snapVel = graphVel != null ? graphVel.GetSamples() : null;
         float[] snapThr = graphThr != null ? graphThr.GetSamples() : null;
+        float[] snapAltT = graphAlt != null ? graphAlt.GetSampleTimes() : null;
+        float[] snapVelT = graphVel != null ? graphVel.GetSampleTimes() : null;
+        float[] snapThrT = graphThr != null ? graphThr.GetSampleTimes() : null;
         // Значення слайдерів живуть у conditionSectionGo — зберегти, від’єднавши секцію
         DetachConditionSection();
 
@@ -261,9 +264,9 @@ public class MissionControlUI : MonoBehaviour
 
         loadingSettings = false;
         SetHelpVisible(helpWas);
-        if (snapAlt != null && snapAlt.Length > 0) graphAlt?.RestoreSamples(snapAlt);
-        if (snapVel != null && snapVel.Length > 0) graphVel?.RestoreSamples(snapVel);
-        if (snapThr != null && snapThr.Length > 0) graphThr?.RestoreSamples(snapThr);
+        if (snapAlt != null && snapAlt.Length > 0) graphAlt?.RestoreSamples(snapAlt, snapAltT);
+        if (snapVel != null && snapVel.Length > 0) graphVel?.RestoreSamples(snapVel, snapVelT);
+        if (snapThr != null && snapThr.Length > 0) graphThr?.RestoreSamples(snapThr, snapThrT);
         if (graphDetailWas)
         {
             TelemetryGraph src = null;
@@ -3578,8 +3581,9 @@ public class MissionControlUI : MonoBehaviour
         graphDetailPlot.SetInteractiveView(true);
         graphDetailPlot.Clear();
         float[] samples = source.GetSamples();
+        float[] times = source.GetSampleTimes();
         if (samples != null && samples.Length > 0)
-            graphDetailPlot.RestoreSamples(samples);
+            graphDetailPlot.RestoreSamples(samples, times);
 
         if (txtGraphDetailTitle != null)
         {
@@ -3600,7 +3604,7 @@ public class MissionControlUI : MonoBehaviour
         if (!graphDetailVisible || graphDetailPlot == null || graphDetailSource == null) return;
         float[] samples = graphDetailSource.GetSamples();
         if (samples == null) return;
-        graphDetailPlot.RestoreSamples(samples);
+        graphDetailPlot.RestoreSamples(samples, graphDetailSource.GetSampleTimes());
     }
 
     void SetGraphDetailVisible(bool on)
@@ -4242,9 +4246,9 @@ public class MissionControlUI : MonoBehaviour
             && !s.simulationFinished)
         {
             sampleTimer = 0f;
-            graphAlt?.Push(s.position.y);
-            graphVel?.Push(Mathf.Abs(s.velocity.y));
-            graphThr?.Push(s.currentThrust / 1000f);
+            graphAlt?.Push(s.position.y, s.time);
+            graphVel?.Push(Mathf.Abs(s.velocity.y), s.time);
+            graphThr?.Push(s.currentThrust / 1000f, s.time);
             SyncGraphDetailLive();
         }
 
@@ -4793,7 +4797,7 @@ public class MissionControlUI : MonoBehaviour
     {
         const float fX = 10f;
         const float fW = 318f;
-        const float gH = 100f;
+        const float gH = 114f;
 
         // Root holds frame + plot + labels; also click hit-target for detail popup
         var root = CreatePanel("GraphRoot_" + title, parent, new Color(0, 0, 0, 0));

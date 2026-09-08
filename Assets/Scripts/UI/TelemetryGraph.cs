@@ -9,6 +9,7 @@ using System.Collections.Generic;
 /// (not under the RawImage) so TMP stays readable and clickable when interactive.
 /// Optional view window: zoom/pan over live data without fighting RestoreSamples.
 /// Detail/interactive mode: denser Y ticks, hover point highlight + value tooltip.
+/// X-axis labels along the bottom show sample time (seconds) for the visible window.
 /// </summary>
 [RequireComponent(typeof(RawImage))]
 public class TelemetryGraph : MonoBehaviour,
@@ -41,6 +42,7 @@ public class TelemetryGraph : MonoBehaviour,
     RawImage image;
     Texture2D tex;
     readonly List<float> samples = new();
+    readonly List<float> sampleTimes = new();
     int w = 300, h = 90;
     bool dirty = true;
 
@@ -60,9 +62,11 @@ public class TelemetryGraph : MonoBehaviour,
     const float WheelZoomStep = 1.12f;
     const float ButtonZoomStep = 1.25f;
     const int YTickCapacity = 7;
+    const int XTickCapacity = 5;
 
     TMP_Text lblTitle, lblCur;
     TMP_Text[] lblYTicks;
+    TMP_Text[] lblXTicks;
 
     // Hover readouts (interactive detail modal only)
     bool pointerInside;
@@ -130,8 +134,13 @@ public class TelemetryGraph : MonoBehaviour,
         {
             for (int i = 0; i < lblYTicks.Length; i++) Kill(lblYTicks[i]);
         }
+        if (lblXTicks != null)
+        {
+            for (int i = 0; i < lblXTicks.Length; i++) Kill(lblXTicks[i]);
+        }
         lblTitle = lblCur = lblTooltip = null;
         lblYTicks = null;
+        lblXTicks = null;
         if (hoverMarker != null) Destroy(hoverMarker.gameObject);
         if (tooltipRoot != null) Destroy(tooltipRoot.gameObject);
         hoverMarker = tooltipRoot = null;
@@ -169,7 +178,8 @@ public class TelemetryGraph : MonoBehaviour,
 
     void EnsureLabels()
     {
-        if (lblTitle != null && lblYTicks != null && lblYTicks.Length == YTickCapacity) return;
+        if (lblTitle != null && lblYTicks != null && lblYTicks.Length == YTickCapacity
+            && lblXTicks != null && lblXTicks.Length == XTickCapacity) return;
         Transform p = labelRoot != null ? labelRoot : transform;
 
         if (lblTitle == null)
@@ -200,9 +210,25 @@ public class TelemetryGraph : MonoBehaviour,
             }
         }
 
+        if (lblXTicks == null || lblXTicks.Length != XTickCapacity)
+        {
+            if (lblXTicks != null)
+            {
+                for (int i = 0; i < lblXTicks.Length; i++)
+                    if (lblXTicks[i] != null) Destroy(lblXTicks[i].gameObject);
+            }
+            lblXTicks = new TMP_Text[XTickCapacity];
+            for (int i = 0; i < XTickCapacity; i++)
+            {
+                lblXTicks[i] = MakeLabel(p, "GX" + i, 9f, labelColor, TextAlignmentOptions.Midline);
+                lblXTicks[i].text = "";
+            }
+        }
+
         if (interactiveView)
             EnsureHoverUi(p);
         LayoutYTicks();
+        LayoutXTicks();
 
         if (labelRoot != null)
         {
@@ -214,6 +240,9 @@ public class TelemetryGraph : MonoBehaviour,
         if (lblCur) lblCur.text = "-";
         for (int i = 0; i < lblYTicks.Length; i++)
             if (lblYTicks[i]) lblYTicks[i].text = "-";
+        if (lblXTicks != null)
+            for (int i = 0; i < lblXTicks.Length; i++)
+                if (lblXTicks[i]) lblXTicks[i].text = "";
     }
 
     static Sprite HoverDotSprite()
@@ -344,6 +373,9 @@ public class TelemetryGraph : MonoBehaviour,
         if (lblYTicks != null)
             for (int i = 0; i < lblYTicks.Length; i++)
                 if (lblYTicks[i]) lblYTicks[i].transform.SetAsLastSibling();
+        if (lblXTicks != null)
+            for (int i = 0; i < lblXTicks.Length; i++)
+                if (lblXTicks[i]) lblXTicks[i].transform.SetAsLastSibling();
         if (lblTitle) lblTitle.transform.SetAsLastSibling();
         if (lblCur) lblCur.transform.SetAsLastSibling();
         if (hoverMarker) hoverMarker.SetAsLastSibling();
@@ -373,7 +405,7 @@ public class TelemetryGraph : MonoBehaviour,
             float h = interactiveView ? 13f : 14f;
             // Top padding for title row (~20px when interactive denser stack)
             float topPad = interactiveView ? -18f : -20f;
-            float botPad = 4f;
+            float botPad = interactiveView ? 18f : 16f;
             // Place along left edge; y from bottom of parent
             Stretch(t.rectTransform, 4f, 0f, interactiveView ? 78f : 70f, h, 0f, frac, 0f, 0.5f);
             // Nudge ends so they don't sit under title / clip bottom
@@ -391,6 +423,80 @@ public class TelemetryGraph : MonoBehaviour,
                 rt.sizeDelta = new Vector2(interactiveView ? 78f : 70f, h);
             }
         }
+    }
+
+    void LayoutXTicks()
+    {
+        if (lblXTicks == null) return;
+        int shown = interactiveView ? XTickCapacity : 3;
+        for (int i = 0; i < XTickCapacity; i++)
+        {
+            var t = lblXTicks[i];
+            if (t == null) continue;
+            bool on = i < shown;
+            t.gameObject.SetActive(on);
+            if (!on) continue;
+
+            float frac = shown <= 1 ? 0.5f : i / (float)(shown - 1);
+            bool has = TryTimeAtPlotFrac(frac, out float time);
+            t.text = has ? FmtTime(time) : "";
+            if (!has)
+            {
+                t.gameObject.SetActive(false);
+                continue;
+            }
+
+            float px = plotW > 0 ? plotL + frac * plotW : frac * Mathf.Max(1, w);
+            PlaceXLabel(t.rectTransform, px / Mathf.Max(1f, w), i == 0, i == shown - 1);
+        }
+    }
+
+    void PlaceXLabel(RectTransform rt, float nxInImage, bool first, bool last)
+    {
+        RectTransform root = labelRoot != null ? labelRoot : (transform as RectTransform);
+        RectTransform img = image != null ? image.rectTransform : root;
+        if (root == null || img == null) return;
+
+        float nx = Mathf.Clamp01(nxInImage);
+        Vector3 world = img.TransformPoint(new Vector3(
+            Mathf.Lerp(img.rect.xMin, img.rect.xMax, nx),
+            img.rect.yMin + 1f,
+            0f));
+        Vector3 local = root.InverseTransformPoint(world);
+
+        float pivotX = first ? 0f : (last ? 1f : 0.5f);
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(pivotX, 0f);
+        rt.anchoredPosition = new Vector2(local.x, local.y);
+        rt.sizeDelta = new Vector2(interactiveView ? 56f : 44f, 12f);
+        rt.SetAsLastSibling();
+    }
+
+    bool TryTimeAtPlotFrac(float frac, out float time)
+    {
+        time = 0f;
+        int n = samples.Count;
+        if (n == 0 || sampleTimes.Count != n) return false;
+
+        GetVisibleX(out float vx0, out float vx1);
+        float nx = vx0 + Mathf.Clamp01(frac) * Mathf.Max(1e-6f, vx1 - vx0);
+        float shift = maxSamples - n;
+        float denom = Mathf.Max(1, maxSamples - 1);
+        float idx = nx * denom - shift;
+        if (idx < -0.02f || idx > n - 0.98f) return false;
+        idx = Mathf.Clamp(idx, 0f, n - 1f);
+        int i0 = Mathf.Clamp(Mathf.FloorToInt(idx), 0, n - 1);
+        int i1 = Mathf.Min(i0 + 1, n - 1);
+        float u = Mathf.Clamp01(idx - i0);
+        time = Mathf.Lerp(sampleTimes[i0], sampleTimes[i1], u);
+        return true;
+    }
+
+    static string FmtTime(float t)
+    {
+        float a = Mathf.Abs(t);
+        if (a < 10f) return t.ToString("0.0") + "s";
+        return Mathf.RoundToInt(t).ToString() + "s";
     }
 
     static void Stretch(RectTransform rt, float x, float y, float w, float h,
@@ -412,6 +518,12 @@ public class TelemetryGraph : MonoBehaviour,
             float fs = interactiveView ? 9f : 10f;
             for (int i = 0; i < lblYTicks.Length; i++)
                 if (lblYTicks[i]) { lblYTicks[i].color = muted; lblYTicks[i].fontSize = fs; }
+        }
+        if (lblXTicks != null)
+        {
+            float fs = interactiveView ? 9f : 8.5f;
+            for (int i = 0; i < lblXTicks.Length; i++)
+                if (lblXTicks[i]) { lblXTicks[i].color = muted; lblXTicks[i].fontSize = fs; }
         }
         if (lblCur) { lblCur.color = lineColor; lblCur.fontSize = 12f; }
     }
@@ -457,6 +569,7 @@ public class TelemetryGraph : MonoBehaviour,
     public void Clear()
     {
         samples.Clear();
+        sampleTimes.Clear();
         dirty = true;
         ClearHover();
         EnsureLabels();
@@ -464,6 +577,9 @@ public class TelemetryGraph : MonoBehaviour,
         if (lblYTicks != null)
             for (int i = 0; i < lblYTicks.Length; i++)
                 if (lblYTicks[i]) lblYTicks[i].text = "-";
+        if (lblXTicks != null)
+            for (int i = 0; i < lblXTicks.Length; i++)
+                if (lblXTicks[i]) lblXTicks[i].text = "";
     }
 
     public float[] GetSamples()
@@ -471,13 +587,37 @@ public class TelemetryGraph : MonoBehaviour,
         return samples.Count == 0 ? System.Array.Empty<float>() : samples.ToArray();
     }
 
+    public float[] GetSampleTimes()
+    {
+        return sampleTimes.Count == 0 ? System.Array.Empty<float>() : sampleTimes.ToArray();
+    }
+
     public void RestoreSamples(float[] data)
     {
+        RestoreSamples(data, null);
+    }
+
+    public void RestoreSamples(float[] data, float[] times)
+    {
         samples.Clear();
+        sampleTimes.Clear();
         if (data != null && data.Length > 0)
         {
             samples.AddRange(data);
             while (samples.Count > maxSamples) samples.RemoveAt(0);
+            if (times != null && times.Length > 0)
+            {
+                int start = Mathf.Max(0, times.Length - samples.Count);
+                for (int i = start; i < times.Length && sampleTimes.Count < samples.Count; i++)
+                    sampleTimes.Add(times[i]);
+            }
+            while (sampleTimes.Count < samples.Count)
+            {
+                float prev = sampleTimes.Count > 0 ? sampleTimes[sampleTimes.Count - 1] + 1f : 0f;
+                sampleTimes.Add(prev);
+            }
+            while (sampleTimes.Count > samples.Count)
+                sampleTimes.RemoveAt(0);
         }
         dirty = true;
     }
@@ -498,8 +638,21 @@ public class TelemetryGraph : MonoBehaviour,
 
     public void Push(float value)
     {
+        float next = sampleTimes.Count > 0 ? sampleTimes[sampleTimes.Count - 1] + 1f : 0f;
+        Push(value, next);
+    }
+
+    public void Push(float value, float time)
+    {
         samples.Add(value);
-        while (samples.Count > maxSamples) samples.RemoveAt(0);
+        sampleTimes.Add(time);
+        while (samples.Count > maxSamples)
+        {
+            samples.RemoveAt(0);
+            if (sampleTimes.Count > 0) sampleTimes.RemoveAt(0);
+        }
+        while (sampleTimes.Count > samples.Count)
+            sampleTimes.RemoveAt(0);
         dirty = true;
     }
 
@@ -947,7 +1100,7 @@ public class TelemetryGraph : MonoBehaviour,
 
         plotL = interactiveView ? 56 : 48;
         plotR = w - 3;
-        plotB = 3;
+        plotB = interactiveView ? 18 : 14;
         plotT = h - 3;
         plotH = Mathf.Max(1, plotT - plotB);
         plotW = Mathf.Max(1, plotR - plotL);
@@ -959,8 +1112,23 @@ public class TelemetryGraph : MonoBehaviour,
         for (int y = 1; y < h - 1; y++)
         for (int x = 1; x < plotL; x++)
             pixels[y * w + x] = gut;
+        for (int y = 1; y < plotB; y++)
+        for (int x = plotL; x < w - 1; x++)
+            pixels[y * w + x] = gut;
         for (int y = 1; y < h - 1; y++)
             pixels[y * w + plotL] = Color.Lerp(borderColor, axisColor, 0.4f);
+        for (int x = plotL; x < w - 1; x++)
+            pixels[plotB * w + x] = Color.Lerp(borderColor, axisColor, 0.55f);
+
+        int xShown = interactiveView ? XTickCapacity : 3;
+        for (int i = 0; i < xShown; i++)
+        {
+            float frac = xShown <= 1 ? 0.5f : i / (float)(xShown - 1);
+            if (!TryTimeAtPlotFrac(frac, out _)) continue;
+            int tx = Mathf.Clamp(Mathf.RoundToInt(plotL + frac * plotW), plotL, plotR);
+            for (int y = 1; y < plotB; y++)
+                pixels[y * w + tx] = axisColor;
+        }
 
         int hDiv = interactiveView ? (YTickCapacity - 1) : 4;
         for (int i = 1; i < hDiv; i++)
@@ -1055,6 +1223,7 @@ public class TelemetryGraph : MonoBehaviour,
         tex.Apply(false);
 
         UpdateYTickTexts(lo, hi);
+        LayoutXTicks();
 
         if (lblTitle)
             lblTitle.text = string.IsNullOrEmpty(unit) ? title : title + "  (" + unit + ")";
