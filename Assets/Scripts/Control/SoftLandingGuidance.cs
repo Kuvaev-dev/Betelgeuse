@@ -17,7 +17,10 @@ public static class SoftLandingGuidance
         return -Mathf.Clamp(Mathf.Sqrt(2f * 1.3f * h), 4f, 50f);
     }
 
-    /// <summary>Тяга профілю, Н. Без bounce біля pad.</summary>
+    /// <summary>
+    /// Тяга профілю, Н. Баланс soft-touchdown + запас палива (~60 с з h₀=1600).
+    /// Агресивний catch-up спалював бак за ~130 с → Vy~22 після dry-out.
+    /// </summary>
     public static float ProfileThrust(float height, float verticalVelocity, float mass)
     {
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
@@ -32,7 +35,7 @@ public static class SoftLandingGuidance
         float aUp = h < 8f ? 0.35f : (h < 80f ? 1.05f : 1.2f);
         float mult = 1f + aUp / Mathf.Max(0.1f, g);
 
-        float err = target - v;
+        float err = target - v; // >0 when descending too fast
         float kp = h < 80f ? 0.055f : 0.04f;
         mult += Mathf.Clamp(err * kp, -0.4f, 0.9f);
 
@@ -41,7 +44,6 @@ public static class SoftLandingGuidance
 
         if (h < 25f)
         {
-            // Сильніше terminal-гальмування, щоб Fuzzy/Hybrid лишались під gate 3.5 м/с
             if (v < -3.2f) mult = Mathf.Max(mult, 1.35f);
             else if (v < -2.2f) mult = Mathf.Max(mult, 1.22f);
         }
@@ -91,23 +93,24 @@ public static class SoftLandingGuidance
             Mathf.Clamp(-yawErrorDeg * 0.55f - yawRateDeg * 0.65f, -maxDeg, maxDeg));
     }
 
+    /// <summary>
+    /// Знижує тягу лише при великому нахилі (не різати burn на 10–25°).
+    /// </summary>
     public static float UprightThrustScale(float tiltDeg)
     {
-        if (tiltDeg < 10f) return 1f;
-        if (tiltDeg > 50f) return 0.25f;
-        return Mathf.Lerp(1f, 0.25f, (tiltDeg - 10f) / 40f);
+        if (tiltDeg < 28f) return 1f;
+        if (tiltDeg > 60f) return 0.55f;
+        return Mathf.Lerp(1f, 0.55f, (tiltDeg - 28f) / 32f);
     }
 
     /// <summary>
     /// Змішує профіль і «розумну» тягу.
     /// Біля землі (h&lt;25 м) smartWeight → 0 — гарантія soft contact.
-    /// maxDevFrac — наскільки smart може відхилятись від профілю (реалізм алгоритмів).
     /// </summary>
     public static float BlendThrust(float profileThrust, float smartThrust, float smartWeight,
         float mass, float height, float maxDevFrac = 0.45f)
     {
         float w = Mathf.Clamp01(smartWeight);
-        // Термінал: усі алгоритми сходяться до soft-landing профілю
         if (height < 25f) w *= Mathf.Clamp01(height / 25f);
 
         float blended = Mathf.Lerp(profileThrust, smartThrust, w);

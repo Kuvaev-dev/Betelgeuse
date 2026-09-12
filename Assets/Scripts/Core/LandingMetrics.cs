@@ -36,11 +36,12 @@ public class LandingMetrics
         get
         {
             if (timedOut) return 0f;
-            float velScore = Mathf.Clamp01(1f - touchdownVelocity / 5f);
-            float angleScore = Mathf.Clamp01(1f - landingAngleError / 10f);
+            // Норми узгоджені з LandingCriteria (реалістичний soft-landing)
+            float velScore = Mathf.Clamp01(1f - touchdownVelocity / LandingCriteria.DefaultMaxTouchdownVelocity);
+            float angleScore = Mathf.Clamp01(1f - landingAngleError / LandingCriteria.DefaultMaxLandingAngle);
             float fuelScore = Mathf.Clamp01(fuelRemaining / 6000f);
-            float missScore = Mathf.Clamp01(1f - horizontalMiss / 30f);
-            float hVelScore = Mathf.Clamp01(1f - horizontalSpeed / 8f);
+            float missScore = Mathf.Clamp01(1f - horizontalMiss / LandingCriteria.DefaultMaxHorizontalMiss);
+            float hVelScore = Mathf.Clamp01(1f - horizontalSpeed / LandingCriteria.DefaultMaxHorizontalSpeed);
             return (velScore * 0.35f + angleScore * 0.25f + fuelScore * 0.15f
                     + missScore * 0.15f + hVelScore * 0.10f) * 100f;
         }
@@ -48,7 +49,11 @@ public class LandingMetrics
 
     /// <summary>Текстовий висновок UA/EN для експорту та діалогів.</summary>
     /// <param name="includeTitle">false — якщо заголовок уже в UI</param>
-    public string BuildUserSummary(float maxV = 3.5f, float maxA = 7f, float maxM = 40f, float maxH = 6.5f,
+    public string BuildUserSummary(
+        float maxV = LandingCriteria.DefaultMaxTouchdownVelocity,
+        float maxA = LandingCriteria.DefaultMaxLandingAngle,
+        float maxM = LandingCriteria.DefaultMaxHorizontalMiss,
+        float maxH = LandingCriteria.DefaultMaxHorizontalSpeed,
         bool includeTitle = true)
     {
         bool uk = UILocale.IsUK;

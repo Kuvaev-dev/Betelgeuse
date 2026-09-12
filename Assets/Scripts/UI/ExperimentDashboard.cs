@@ -102,14 +102,13 @@ public class ExperimentDashboard : MonoBehaviour
     void RunFullExperiment()
     {
         if (simulationManager == null) return;
-        // DefenseBaseline повторно застосовується в SimulationManager; тримати шлях dashboard узгодженим
-        DefenseBaseline.ApplyTo(simulationManager);
-        if (testsCountInput)
-            testsCountInput.text = DefenseBaseline.TestsPerAlgorithm.ToString();
-        if (noiseToggle) noiseToggle.isOn = DefenseBaseline.EnableNoise;
-        if (windSlider) windSlider.value = DefenseBaseline.WindStrength;
+        // Умови з legacy dashboard controls (не форсувати DefenseBaseline)
+        if (testsCountInput && int.TryParse(testsCountInput.text, out int n))
+            simulationManager.testsPerAlgorithm = Mathf.Clamp(n, 5, 40);
+        if (noiseToggle) simulationManager.enableNoise = noiseToggle.isOn;
+        if (windSlider) simulationManager.windStrength = windSlider.value;
         simulationManager.RequestFullExperiment();
-        Debug.Log("▶ Full Monte-Carlo (DefenseBaseline paired): PID · Fuzzy · Neural · Hybrid");
+        Debug.Log("▶ Full Monte-Carlo (user settings, paired seeds): PID · Fuzzy · Neural · Hybrid");
     }
 
     void ResetSimulation()
@@ -123,6 +122,10 @@ public class ExperimentDashboard : MonoBehaviour
         => UpdateStatistics(pidSuccess, fuzzySuccess, neuralSuccess, -1f);
 
     public void UpdateStatistics(float pidSuccess, float fuzzySuccess, float neuralSuccess, float hybridSuccess)
+        => UpdateStatistics(pidSuccess, fuzzySuccess, neuralSuccess, hybridSuccess, -1f, -1f, -1f, -1f);
+
+    public void UpdateStatistics(float pidSuccess, float fuzzySuccess, float neuralSuccess, float hybridSuccess,
+        float pidScore, float fuzzyScore, float neuralScore, float hybridScore)
     {
         if (pidStatsText)
         {
@@ -146,33 +149,42 @@ public class ExperimentDashboard : MonoBehaviour
         }
 
         string winner = "—";
-        float max = -1f;
-        void Consider(string name, float rate)
+        float bestRate = -1f;
+        float bestScore = -1f;
+        void Consider(string name, float rate, float score)
         {
             if (rate < 0f) return;
-            if (rate > max + 1e-4f) { max = rate; winner = name; }
+            if (rate > bestRate + 1e-4f
+                || (Mathf.Abs(rate - bestRate) <= 1e-4f && score > bestScore + 1e-4f))
+            {
+                bestRate = rate;
+                bestScore = score;
+                winner = name;
+            }
         }
-        Consider("PID", pidSuccess);
-        Consider("Fuzzy Sugeno", fuzzySuccess);
-        Consider("Neural ES", neuralSuccess);
-        Consider("Hybrid Neuro-Fuzzy", hybridSuccess);
-        if (max < 0f) max = 0f;
+        Consider("PID", pidSuccess, pidScore);
+        Consider("Fuzzy Sugeno", fuzzySuccess, fuzzyScore);
+        Consider("Neural ES", neuralSuccess, neuralScore);
+        Consider("Hybrid Neuro-Fuzzy", hybridSuccess, hybridScore);
+        if (bestRate < 0f) bestRate = 0f;
 
         if (winnerText)
         {
-            if (max <= 0.05f)
+            if (bestRate <= 0.05f)
             {
                 winnerText.text = "BEST    — (all 0%)";
                 winnerText.color = MissionControlTheme.Muted;
             }
             else
             {
-                winnerText.text = $"BEST    {winner}  ({max:F1}%)";
+                winnerText.text = $"BEST    {winner}  ({bestRate:F1}%)";
                 winnerText.color = MissionControlTheme.Ok;
             }
         }
 
         if (MissionControlUI.Instance != null)
-            MissionControlUI.Instance.UpdateStatistics(pidSuccess, fuzzySuccess, neuralSuccess, hybridSuccess);
+            MissionControlUI.Instance.UpdateStatistics(
+                pidSuccess, fuzzySuccess, neuralSuccess, hybridSuccess,
+                pidScore, fuzzyScore, neuralScore, hybridScore);
     }
 }

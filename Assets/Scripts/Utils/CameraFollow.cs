@@ -121,11 +121,14 @@ public class CameraFollow : MonoBehaviour
 
         if (mode == ViewMode.Manual && focusFrozen)
             targetFocus = frozenFocus;
-        else if (mode == ViewMode.Follow && userOrbitLock && RocketIsSettled())
+        else if (mode == ViewMode.Follow && RocketIsSettled())
         {
-            if (!focusFrozen)
+            // Після посадки завжди якір на ступінь (не lag smoothFocus у повітрі)
+            Vector3 onStage = ComputeFocus();
+            if (!focusFrozen || (frozenFocus - onStage).sqrMagnitude > 4f)
             {
-                frozenFocus = smoothFocus;
+                frozenFocus = onStage;
+                smoothFocus = onStage;
                 focusFrozen = true;
             }
             targetFocus = frozenFocus;
@@ -501,8 +504,8 @@ public class CameraFollow : MonoBehaviour
     }
 
     /// <summary>
-    /// Mid-flight STOP: keep framing the stage. Overview is pad-biased (lookAt at LZ),
-    /// so exit Overview -> Follow. Manual recenters focus on the stopped stage.
+    /// STOP / touchdown: тримати кадр на ступені.
+    /// Overview pad-biased (lookAt LZ) — вийти в Follow на ракету.
     /// </summary>
     public void StayOnRocketAfterAbort()
     {
@@ -512,20 +515,41 @@ public class CameraFollow : MonoBehaviour
             userOrbitLock = false;
             focusFrozen = false;
             ResetOrbitDefaults();
+            // Ближчий кадр на touchdown, не far-auto з h=0
+            distance = Mathf.Clamp(nearDistance * 0.85f, minDist, maxDist);
             mode = ViewMode.Follow;
-            SnapNow();
+            SnapToRocketNow();
             return;
         }
         if (mode == ViewMode.Manual)
         {
             frozenFocus = ComputeFocus();
+            smoothFocus = frozenFocus;
             focusFrozen = true;
-            SnapNow();
+            SnapToRocketNow();
             return;
         }
-        // Follow: track stage where it stopped (clear settle-freeze from a prior landing)
-        focusFrozen = false;
-        SnapNow();
+        // Follow: якір на поточну позу ступеня
+        SnapToRocketNow();
+    }
+
+    /// <summary>Миттєво перевести orbit-focus на ступінь (після посадки / STOP).</summary>
+    public void SnapToRocketNow()
+    {
+        Resolve();
+        Vector3 onStage = ComputeFocus();
+        smoothFocus = onStage;
+        frozenFocus = onStage;
+        focusFrozen = true;
+        focusInited = true;
+        if (mode == ViewMode.Overview)
+            mode = ViewMode.Follow;
+        // Не відлітати на farDistance при h≈0
+        if (distance > nearDistance * 1.4f)
+            distance = Mathf.Lerp(distance, nearDistance, 0.65f);
+        distance = Mathf.Clamp(distance, minDist, maxDist);
+        PlaceOrbit(smoothFocus, yaw, pitch, distance, true);
+        if (cam != null) cam.fieldOfView = fov;
     }
 
     void Resolve()

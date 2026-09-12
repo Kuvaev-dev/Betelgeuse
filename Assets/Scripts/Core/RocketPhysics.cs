@@ -77,7 +77,7 @@ public class RocketPhysics : MonoBehaviour
     const float AngularDamping = 980000f; // сильніше — без mid-flight PIO
     const float InertiaFactor = 55f;
     const float MaxOmega = 0.85f; // rad/s
-    const float MaxOmegaTerminal = 0.35f; // rad/s — анти-раскачка біля pad
+    const float MaxOmegaTerminal = 0.32f; // rad/s — швидше гасити rock перед pad
     // Lumped Cd*S = booster body + 4 grid fins (F9-class analogue). Product unchanged.
     const float Cd = 0.85f;
     const float RefArea = 8.5f;
@@ -143,6 +143,7 @@ public class RocketPhysics : MonoBehaviour
         state.time = 0f;
         state.isLanded = false;
         state.simulationFinished = false;
+        maxHeightRecorded = Mathf.Max(maxHeightRecorded, state.position.y);
         SyncTransformWithState();
         RocketVisualBuilder.SetUpperStackVisible(transform, false);
         AlignNavigationToTruth();
@@ -321,12 +322,13 @@ public class RocketPhysics : MonoBehaviour
         float mass = ctx.Mass;
         float tilt = ctx.TiltDeg;
 
-        // Термінал: сильніший rate-damp upright (анти-раскачка перед touchdown)
-        bool terminal = h < 45f;
-        bool idealTerm = terminal && IdealLandingPresets.Active;
-        float attKp = idealTerm ? 0.48f : (terminal ? 0.55f : 0.7f);
-        float attKd = idealTerm ? 1.55f : (terminal ? 1.35f : 0.92f);
-        float attMax = idealTerm ? 8f : (terminal ? 10f : 16f);
+        // Термінал: rate-damp upright (анти-раскачка; v7 lean@pad → ∠~18–33° і 0%)
+        bool terminal = h < 60f;
+        bool idealLike = IdealLandingPresets.Active;
+        bool idealTerm = terminal && idealLike;
+        float attKp = idealTerm ? 0.48f : (terminal ? 0.72f : 0.7f);
+        float attKd = idealTerm ? 1.55f : (terminal ? 1.85f : 1.05f);
+        float attMax = idealTerm ? 8f : (terminal ? 10f : 14f);
         Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(
             ctx.Rotation, ctx.AngularVelocity, maxDeg: attMax, kp: attKp, kd: attKd);
 
@@ -340,44 +342,37 @@ public class RocketPhysics : MonoBehaviour
 
         float thrustCmd = cmd.Thrust;
         float gBlend = cmd.GimbalBlend;
-        // Terminal: hand attitude to upright PD (strategy gimbal rocked the stage)
-        bool idealLike = IdealLandingPresets.Active; // MC uses cleanNav≠Ideal; only [I] softens terminal
-        float fadeH = idealLike ? 80f : 55f;
+        // Strategy gimbal only mid-course — terminal = pure upright PD
+        float fadeH = idealLike ? 80f : 70f;
         if (h < fadeH) gBlend *= Mathf.Clamp01(h / fadeH);
-        if (h < (idealLike ? 22f : 15f)) gBlend = 0f;
+        if (h < (idealLike ? 22f : 45f)) gBlend = 0f;
         Vector3 gCmd = Vector3.Lerp(baseGimbal, cmd.GimbalEuler, gBlend);
 
-        // Великий нахил — пріоритет вирівнювання, але не душимо посадковий burn
+        // Великий нахил — вирівнювання (без hover-floor: він спалював бак за ~130 с)
         float upright = SoftLandingGuidance.UprightThrustScale(tilt);
         thrustCmd *= upright;
-        if (tilt > 34f || (IdealLandingPresets.Active && terminal && tilt > 12f))
+        float hover = mass * AtmosphereModel.GetGravity(h);
+        if (tilt > 28f || (idealLike && terminal && tilt > 12f))
         {
             gCmd = baseGimbal;
-            float hover = mass * AtmosphereModel.GetGravity(h);
-            // Allow braking (1.05–2.1 × hover) instead of hover-only
-            thrustCmd = Mathf.Clamp(thrustCmd, hover * 1.05f, hover * 2.1f);
+            // Гальмування, не hover-lock
+            thrustCmd = Mathf.Clamp(Mathf.Max(thrustCmd, hover * 1.05f), hover * 0.2f, hover * 2.2f);
         }
 
-        float gLim = terminal ? 8f : 16f;
+        float gLim = terminal ? 7f : 14f;
         gCmd.x = Mathf.Clamp(gCmd.x, -gLim, gLim);
         gCmd.y = 0f;
         gCmd.z = Mathf.Clamp(gCmd.z, -gLim, gLim);
         state.thrustDirection = (Quaternion.Euler(gCmd) * Vector3.up).normalized;
 
-        // Бічне: Ideal/clean м’якше; нижче ~12 м — лише гасіння Vh / off
-        if (tilt < 30f && h > 1.2f)
+        // Бічне mid-course; нижче ~35 м — upright (алгоритми різняться через lat scale)
+        if (tilt < 28f && h > 35f)
         {
             float lat = cmd.LateralScale;
-            // Ideal softens; Monte-Carlo keeps lateral authority (jitter/wind recoverable)
-            if (IdealLandingPresets.Active)
+            if (idealLike)
             {
                 lat = Mathf.Min(lat, 0.85f);
-                if (terminal) lat *= Mathf.Lerp(0.12f, 0.75f, Mathf.Clamp01(h / 45f));
-                if (h < 12f) lat *= 0.35f;
-            }
-            else if (terminal)
-            {
-                lat *= Mathf.Lerp(0.55f, 1f, Mathf.Clamp01(h / 45f));
+                if (h < 100f) lat *= 0.55f;
             }
             ApplyLateralGuidance(lat, in ctx);
         }
@@ -387,22 +382,19 @@ public class RocketPhysics : MonoBehaviour
     }
 
     /// <summary>
-    /// Бічне наведення до pad. Tail TVC: lean TOWARD pad
-    /// (x&gt;0 ⇒ gz&lt;0 ⇒ td.x&gt;0 ⇒ τz&gt;0 ⇒ lean to −X).
-    /// td = R(gx,0,gz)·up ⇒ td.x≈−sin(gz), td.z≈sin(gx).
-    /// gainScale raises kVel (Hybrid damps Vh), not lean angle.
-    /// Shared lean envelope lim = 8.5° (terminal 2.8° at h&lt;20).
+    /// Бічне наведення до pad. Tail TVC lean TOWARD pad.
+    /// gainScale (PID слабкий / Hybrid сильний) — головний диференціатор MC.
     /// </summary>
     void ApplyLateralGuidance(float gainScale, in ControlContext ctx)
     {
         float h = Mathf.Max(0f, ctx.Height);
-        if (h > 2800f || h < 1.2f) return;
+        if (h > 2800f || h < 35f) return;
 
         float tilt = Vector3.Angle(state.rotation * Vector3.up, Vector3.up);
-        if (tilt > 30f) return;
+        if (tilt > 22f) return;
 
-        float scale = Mathf.Clamp(gainScale, 0.35f, 1.6f);
-        float shape = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(h / 2200f));
+        float scale = Mathf.Clamp(gainScale, 0.35f, 1.4f);
+        float shape = Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(h / 2000f));
         float fade = Mathf.Lerp(0.55f, 1.05f, shape);
 
         float px = ctx.PositionX;
@@ -412,72 +404,38 @@ public class RocketPhysics : MonoBehaviour
         float miss = Mathf.Sqrt(px * px + pz * pz);
         float vh = Mathf.Sqrt(vx * vx + vz * vz);
 
-        // PD: mid-course позиція; термінал — майже лише гасіння Vh (анти-раскачка)
-        // Ideal: freeze position lean early (anti-rock). MC: keep kPos until near pad
-        // (freezing at 30 m with DefenseBaseline jitter/wind caused universal 0% success).
         bool ideal = IdealLandingPresets.Active;
-        float kPos = (ideal ? 0.16f : 0.22f) * fade;
-        float kVel = (ideal ? 0.85f : 0.95f) * fade * scale;
-        if (h < 700f) { kPos *= ideal ? 1.15f : 1.3f; kVel *= ideal ? 1.25f : 1.4f; }
-        if (h < 250f) { kPos *= ideal ? 1.15f : 1.25f; kVel *= ideal ? 1.35f : 1.5f; }
-        if (h < 80f)  { kPos *= ideal ? 0.7f : 0.9f;  kVel *= ideal ? 1.5f : 2.0f; }
-        if (ideal)
-        {
-            if (h < 40f)  { kPos *= 0.35f; kVel *= 1.25f; }
-            if (h < 30f)  { kPos = 0f;     kVel *= 0.95f; }
-            if (h < 14f)  { kPos = 0f;     kVel *= 0.7f; }
-            if (h < 6f)   { kPos = 0f;     kVel *= 0.35f; }
-        }
-        else
-        {
-            if (h < 40f)  { kPos *= 0.55f; kVel *= 1.6f; }
-            if (h < 25f)  { kPos *= 0.5f;  kVel *= 2.0f; }
-            if (h < 12f)  { kPos *= 0.35f; kVel *= 1.8f; }
-            if (h < 5f)   { kPos = 0f;     kVel *= 0.5f; }
-        }
+        // Position hold проти ambient wind + Vh damp (scale диференціює A–D)
+        float kPos = (ideal ? 0.14f : 0.22f) * fade * scale;
+        float kVel = (ideal ? 0.85f : 1.15f) * fade * scale;
+        if (h < 800f) { kPos *= 1.2f;  kVel *= 1.25f; }
+        if (h < 350f) { kPos *= 1.25f; kVel *= 1.4f; }
+        if (h < 150f) { kPos *= 0.95f; kVel *= 1.5f; }
+        if (h < 70f)  { kPos *= 0.55f; kVel *= 1.4f; }
+        if (h < 45f)  { kPos *= 0.4f;  kVel *= 1.15f; }
+        if (ideal && h < 100f) { kPos *= 0.4f; kVel *= 0.85f; }
 
-        if (miss > 40f && h > (ideal ? 40f : 20f)) kPos *= ideal ? 1.2f : 1.35f;
-        if (vh > 8f && (!ideal || h > 25f)) kVel *= ideal ? 1.15f : 1.25f;
+        if (miss > 25f && h > 50f) kPos *= 1.3f;
+        if (miss > 50f && h > 60f) kPos *= 1.2f;
+        if (vh > 4f) kVel *= 1.25f;
+        // Steady wind: тримати lean проти дрейфу навіть при малому miss
+        if (!ideal && vh > 2.5f && h > 50f) kVel *= 1.15f;
 
-        float lim = ideal ? 6.0f : 8.5f;
-        if (ideal)
-        {
-            if (h < 40f) lim = 3.2f;
-            if (h < 18f) lim = 1.6f;
-            if (h < 8f)  lim = 0.8f;
-            if (tilt > 10f) lim *= Mathf.Lerp(1f, 0.45f, (tilt - 10f) / 18f);
-            lim = Mathf.Min(lim, h < 40f ? 2.2f : 4.5f);
-        }
-        else
-        {
-            if (h < 20f) lim = 2.8f;
-            if (tilt > 12f) lim *= Mathf.Lerp(1f, 0.5f, (tilt - 12f) / 16f);
-        }
+        float lim = ideal ? 3.2f : 4.5f;
+        if (h < 200f) lim = ideal ? 2.6f : 3.6f;
+        if (h < 100f) lim = ideal ? 1.8f : 2.6f;
+        if (h < 55f)  lim = ideal ? 1.1f : 1.8f;
+        if (tilt > 10f) lim *= Mathf.Lerp(1f, 0.5f, (tilt - 10f) / 12f);
 
-        // Tail TVC lean TOWARD pad (x>0 ⇒ gz<0 ⇒ td.x>0 ⇒ τz>0 ⇒ lean to −X)
         float gx = Mathf.Clamp(+(kPos * pz + kVel * vz), -lim, lim);
         float gz = Mathf.Clamp(-(kPos * px + kVel * vx), -lim, lim);
 
         Vector3 td = state.thrustDirection.normalized;
         float curX = Mathf.Atan2(td.z, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
         float curZ = Mathf.Atan2(-td.x, Mathf.Max(1e-4f, td.y)) * Mathf.Rad2Deg;
-        // Термінал: більше upright PD, менше lateral lean
-        float uprightKeep;
-        float cmdCap;
-        if (ideal)
-        {
-            uprightKeep = h < 40f ? Mathf.Lerp(0.85f, 0.45f, Mathf.Clamp01(h / 40f))
-                                 : (h < 80f ? 0.28f : 0.12f);
-            cmdCap = h < 18f ? 6f : 14f;
-        }
-        else
-        {
-            // MC: leave room for lateral TVC (HEAD-like); Ideal keeps stronger upright
-            uprightKeep = h < 30f ? 0.35f : 0.12f;
-            cmdCap = 18f;
-        }
-        float nx = Mathf.Clamp(curX * uprightKeep + gx, -cmdCap, cmdCap);
-        float nz = Mathf.Clamp(curZ * uprightKeep + gz, -cmdCap, cmdCap);
+        float uprightKeep = h < 120f ? Mathf.Lerp(0.5f, 0.22f, Mathf.Clamp01((h - 35f) / 85f)) : 0.14f;
+        float nx = Mathf.Clamp(curX * uprightKeep + gx, -8f, 8f);
+        float nz = Mathf.Clamp(curZ * uprightKeep + gz, -8f, 8f);
         state.thrustDirection = (Quaternion.Euler(nx, 0f, nz) * Vector3.up).normalized;
     }
 
@@ -535,14 +493,27 @@ public class RocketPhysics : MonoBehaviour
         Vector3 td = state.thrustDirection.sqrMagnitude > 1e-6f
             ? state.thrustDirection.normalized : Vector3.up;
         Vector3 thrustWorld = state.rotation * td * state.currentThrust;
-        acc += thrustWorld / Mathf.Max(1f, state.TotalMass);
+        float mass = Mathf.Max(1f, state.TotalMass);
+        acc += thrustWorld / mass;
 
         // опір відносно повітря (вкл. вітер)
         Vector3 airRel = vel - (applyContinuousWind ? windVelocity : Vector3.zero);
         float density = AtmosphereModel.GetDensity(pos.y);
         float dragMag = 0.5f * density * airRel.sqrMagnitude * Cd * RefArea;
         if (airRel.sqrMagnitude > 0.01f)
-            acc -= airRel.normalized * (dragMag / Mathf.Max(1f, state.TotalMass));
+            acc -= airRel.normalized * (dragMag / mass);
+
+        // Grid fins: помірний aero-damp Vh (не «безкоштовний» soft-landing, не нуль)
+        // Ефективність ∝ ρ; нижче ~60 м fins на посадці майже складені
+        float hAgl = pos.y - EnvironmentBuilder.PadSurfaceY;
+        if (hAgl > 60f && hAgl < 2200f)
+        {
+            float fin = density / 1.225f;
+            float deploy = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((hAgl - 60f) / 100f));
+            float kFin = (0.055f + 0.05f * fin) * deploy;
+            acc.x -= vel.x * kFin;
+            acc.z -= vel.z * kFin;
+        }
 
         return acc;
     }
@@ -555,6 +526,7 @@ public class RocketPhysics : MonoBehaviour
 
         state.isLanded = true;
         state.simulationFinished = true;
+        SyncTransformWithState();
 
         metrics.touchdownVelocity = Mathf.Abs(state.velocity.y);
         metrics.horizontalMiss = new Vector2(state.position.x, state.position.z).magnitude;
@@ -592,14 +564,20 @@ public class RocketPhysics : MonoBehaviour
             // Фіналізувати лінію; видимість НЕ форсувати — лишається як виставив UI (Start не вмикає сам)
             cachedVisualizer?.OnSimulationFinished(metrics.isSuccessfulLanding);
 
+            // Камера лишається на ступені (не pad-overview / не lag-focus у повітрі)
+            StayOnRocketCamera();
+
+            // ES online: одиночний політ (не MC) + toggle «Навчання NN»
             if ((controlMode == ControlMode.Neural || controlMode == ControlMode.Hybrid)
-                && neuralController != null)
+                && neuralController != null
+                && neuralController.enableTraining)
             {
                 neuralController.Train(
                     metrics.touchdownVelocity,
                     metrics.landingAngleError,
                     metrics.fuelRemaining,
-                    metrics.horizontalMiss);
+                    metrics.horizontalMiss,
+                    timedOut: metrics.timedOut);
             }
 
             MissionControlUI.Instance?.ShowLandingResult(metrics);
@@ -688,18 +666,20 @@ public class RocketPhysics : MonoBehaviour
         float windStrength = pendingWindStrength;
         applyContinuousWind = windStrength > 0.05f;
 
+        // windStrength у UI = м/с (реальний ambient wind, не 0.1×)
         if (windStrength > 0.05f)
         {
-            Vector3 kick = new Vector3(
-                SimRng.Range(-windStrength, windStrength),
-                0f,
-                SimRng.Range(-windStrength * 0.55f, windStrength * 0.55f));
-            windVelocity = kick * 0.1f;
-            state.velocity += kick * 0.45f;
+            float yaw = SimRng.Range(0f, Mathf.PI * 2f);
+            float wMag = windStrength * SimRng.Range(0.85f, 1.0f);
+            windVelocity = new Vector3(Mathf.Cos(yaw) * wMag, 0f, Mathf.Sin(yaw) * wMag);
+            // Короткий порив ~15% швидкості вітру (не 0.45× повного діапазону)
+            state.velocity += windVelocity * 0.15f;
+            applyContinuousWind = true;
         }
         else
         {
             windVelocity = Vector3.zero;
+            applyContinuousWind = false;
         }
 
         if (pendingRandomize)

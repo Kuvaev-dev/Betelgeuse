@@ -17,7 +17,7 @@ public class SimulationIntegrationTests
         p.dryMass = 25600f;
         p.fuelMass = 14000f;
         p.maxThrust = 845000f;
-        p.isp = 311f;
+        p.isp = Stage1Vehicle.IspLandingS;
         p.fixedTimeStep = 0.01f;
         p.maxSimulationTime = 120f;
         p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;

@@ -4,14 +4,14 @@
 /// </summary>
 public static class DefenseBaseline
 {
-    public const int ProtocolVersion = 5;
+    public const int ProtocolVersion = 14; // docs: RELEASE.md / HOW_TO_RUN.md
     public const int Seed = 42;
     public const int TestsPerAlgorithm = 15;
-    // v4: м’якший wind/jitter, щоб lateral GNC диференціював A–D замість універсального промаху
-    public const float WindStrength = 5.5f;
-    public const float MassVariationPercent = 6f;
-    public const float AngleVariationDegrees = 5f;
-    public const float PositionJitterMeters = 12f;
+    // v13: wind = true m/s ambient; Isp SL; moderate fins; gates 3.5/7°/40m/6.5
+    public const float WindStrength = 5f;
+    public const float MassVariationPercent = 5f;
+    public const float AngleVariationDegrees = 4f;
+    public const float PositionJitterMeters = 10f;
     public const bool EnableNoise = true;
     public const bool ContinuousWind = true;
     public const bool HybridResidualOn = true;
@@ -26,7 +26,10 @@ public static class DefenseBaseline
     public const string RankingNote =
         "Expected: Hybrid ≥ Fuzzy and Hybrid ≥ PID under DefenseBaseline protocol (seed 42).";
 
-    /// <summary>Записати константи протоколу в живий SimulationManager.</summary>
+    /// <summary>
+    /// Опційний пресет захисту (не викликається автоматично на P).
+    /// UI: лише якщо користувач явно просить baseline.
+    /// </summary>
     public static void ApplyTo(SimulationManager sim)
     {
         if (sim == null) return;

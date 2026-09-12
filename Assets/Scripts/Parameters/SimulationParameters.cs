@@ -17,7 +17,7 @@ public class SimulationParameters : ScriptableObject
     public float dryMass = 25600f; // F9-class first-stage dry mass, kg
     public float fuelMass = 14000f; // landing residual propellant (not full ascent tank)
     public float maxThrust = 845000f; // 1x Merlin-class SL; 9 engines, landing uses center
-    public float isp = 311f; // Merlin-class Isp, s
+    public float isp = 282f; // Merlin-class SL Isp for Earth landing burn, s
 
     [Header("Пакет Stack (до відділення, спрощений підйом)")]
     [Tooltip("Старт пакета біля pad / низький підйом")]
@@ -40,10 +40,10 @@ public class SimulationParameters : ScriptableObject
     public float maxSimulationTime = 400f;
 
     [Header("Критерії успішної посадки")]
-    public float maxTouchdownVelocity = 3.5f;
-    public float maxLandingAngle = 7f;
-    public float maxHorizontalMiss = 40f;
-    public float maxHorizontalSpeed = 6.5f;
+    public float maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
+    public float maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
+    public float maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
+    public float maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
 
     /// <summary>
     /// Підстрахування для старих .asset без нових полів Stack (Unity серіалізує 0).

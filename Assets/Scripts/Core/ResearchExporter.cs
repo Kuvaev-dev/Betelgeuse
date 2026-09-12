@@ -39,10 +39,10 @@ public static class ResearchExporter
         public string algorithm;
         public string timestamp;
         public LandingMetrics metrics;
-        public float maxTouchdownVelocity = 3.5f;
-        public float maxLandingAngle = 7f;
-        public float maxHorizontalMiss = 40f;
-        public float maxHorizontalSpeed = 6.5f;
+        public float maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
+        public float maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
+        public float maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
+        public float maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
         public string trajectoryCsvPath;
         public List<string> trajectoryRows;
         /// <summary>Покрокові семпли для SVG-графіків і детального аналізу.</summary>
@@ -933,7 +933,11 @@ public static class ResearchExporter
         }
         sb.AppendLine("## Критерії успішної посадки (кожен запуск)");
         sb.AppendLine();
-        sb.AppendLine("|Vy| &lt; 3.5 м/с · нахил &lt; 7° · промах &lt; 40 м · |Vh| &lt; 6.5 м/с · без timeout");
+        sb.AppendLine(
+            $"|Vy| &lt; {LandingCriteria.DefaultMaxTouchdownVelocity:0.#} м/с · " +
+            $"нахил &lt; {LandingCriteria.DefaultMaxLandingAngle:0.#}° · " +
+            $"промах &lt; {LandingCriteria.DefaultMaxHorizontalMiss:0.#} м · " +
+            $"|Vh| &lt; {LandingCriteria.DefaultMaxHorizontalSpeed:0.#} м/с · без timeout");
         sb.AppendLine();
         sb.AppendLine("## Файли цього експерименту");
         sb.AppendLine();

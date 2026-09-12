@@ -44,7 +44,7 @@ public static class IdealLandingPresets
             rocket.parameters.dryMass = DryMass;
             rocket.parameters.fuelMass = FuelMass;
             rocket.parameters.maxThrust = MaxThrust;
-            rocket.parameters.isp = 311f;
+            rocket.parameters.isp = Stage1Vehicle.IspLandingS;
             rocket.parameters.fixedTimeStep = 0.005f;
             rocket.parameters.maxSimulationTime = 400f;
             rocket.parameters.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
@@ -114,30 +114,34 @@ public static class IdealLandingPresets
             fuzzy.isActive = true;
             fuzzy.heightScale = 2800f;
             fuzzy.velocityScale = 110f;
-            fuzzy.maxGimbalDeg = 14f;
-            fuzzy.fuzzyThrustWeight = 0.42f;
-            fuzzy.maxDevFrac = 0.4f;
-            fuzzy.gimbalBlend = 0.35f;
+            fuzzy.maxGimbalDeg = 12f;
+            // Профіль домінує по тязі; fuzzy — м’яка корекція
+            fuzzy.fuzzyThrustWeight = 0.3f;
+            fuzzy.maxDevFrac = 0.3f;
+            fuzzy.gimbalBlend = 0.18f;
         }
 
         if (neural != null)
         {
             neural.isActive = true;
-            neural.residualWeight = 0.48f;
-            neural.maxDevFrac = 0.6f;
-            neural.gimbalBiasScale = 0.22f;
-            // training лишається як виставлено UI
+            neural.residualWeight = 0.28f;
+            neural.maxDevFrac = 0.3f;
+            // Майже 0 gimbal bias — інакше clean-run miss~26 м без вітру
+            neural.gimbalBiasScale = 0.04f;
         }
 
         if (hybrid != null)
         {
+            // Не форсувати residual: UI / MC ablation лишає свій вибір
+            bool keepResidual = hybrid.useNeuralResidual;
             hybrid.isActive = true;
-            hybrid.useNeuralResidual = true;
-            hybrid.neuralThrustBlend = 0.2f;
-            hybrid.neuralGimbalBlend = 0.15f;
-            hybrid.maxResidualMult = 0.25f;
-            hybrid.smartWeight = 0.42f;
-            hybrid.maxDevFrac = 0.32f;
+            hybrid.useNeuralResidual = keepResidual;
+            // Thrust residual; gimbal residual майже OFF (анти drift)
+            hybrid.neuralThrustBlend = 0.12f;
+            hybrid.neuralGimbalBlend = 0.03f;
+            hybrid.maxResidualMult = 0.16f;
+            hybrid.smartWeight = 0.34f;
+            hybrid.maxDevFrac = 0.26f;
             hybrid.fuzzy = fuzzy;
             hybrid.neural = neural;
         }

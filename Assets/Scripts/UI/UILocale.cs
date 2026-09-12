@@ -416,8 +416,8 @@ public static class UILocale
         ["msg_cam_reset"] = new("Ракурс скинуто.", "View reset."),
         ["msg_selected"] = new("Обрано: {0}\nНатисніть ЗАПУСТИТИ ПОСАДКУ.", "Selected: {0}\nPress START LANDING."),
         ["msg_compare"] = new(
-            "Порівняння (DefenseBaseline): paired seeds, PID→Fuzzy→NN→Hybrid. Прогрес зверху.",
-            "Compare (DefenseBaseline): paired seeds, PID→Fuzzy→NN→Hybrid. Progress on top."),
+            "Порівняння з вашими умовами (слайдери): paired seeds, PID→Fuzzy→NN→Hybrid.",
+            "Compare with your settings (sliders): paired seeds, PID→Fuzzy→NN→Hybrid."),
         ["msg_compare_zero"] = new(
             "Авто-тест: усі 0%. Зменш вітер/шум або повтори після оновлення симуляції.",
             "Auto-test: all 0%. Lower wind/noise or retry after the simulation fix."),

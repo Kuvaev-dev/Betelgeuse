@@ -29,7 +29,7 @@ public class PhysicsModelTests
     public void IspMassFlow_PositiveAndReasonable()
     {
         const float G0 = 9.80665f;
-        float isp = 311f;
+        float isp = Stage1Vehicle.IspLandingS; // SL ~282 s
         float thrust = 500000f;
         float mdot = thrust / (isp * G0);
         Assert.Greater(mdot, 100f);

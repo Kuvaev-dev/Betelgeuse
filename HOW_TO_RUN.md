@@ -6,55 +6,54 @@
 git clone https://github.com/Kuvaev-dev/Betelgeuse.git
 ```
 
-Шрифти, текстури Earth LZ і Kenney Nature FBX лежать у репозиторії **як звичайні файли** (~31 MB).  
-**Не потрібно** `git lfs pull`, окремо качати ассети чи ставити Git LFS, щоб відкрити проєкт.
+Шрифти, текстури Earth LZ і Kenney Nature FBX — **звичайні файли** у репо (~31 MB).  
+**Не потрібно** `git lfs pull`.
 
-Перевірка: `Assets/Resources/Fonts/LiberationSans.ttf` має бути ~350 KB (не текстовий LFS-pointer на ~130 B).  
-У Editor: меню **Betelgeuse → Validate Runtime Assets**.
+Перевірка: `Assets/Resources/Fonts/LiberationSans.ttf` ~350 KB.  
+Editor: **Betelgeuse → Validate Runtime Assets**.
 
 ## Unity Editor
 
-1. Встановити **Unity 6000.x** з **URP**.
-2. Відкрити теку проєкту `Betelgeuse` (дочекатися імпорту).
-3. Сцена: `Assets/Scenes/SampleScene.unity` → **Play**.
-4. Splash: **Earth LZ** + **1-й ступінь** (booster; `skipStackPhase=true`).
+1. **Unity 6000.x** + **URP**.  
+2. Відкрити `Betelgeuse` → дочекатися імпорту.  
+3. `Assets/Scenes/SampleScene.unity` → **Play**.  
+4. Splash: **Earth LZ** + **1-й ступінь**.
 
-## Демо для захисту (одним натиском)
+## Демо захисту
 
 | Крок | Дія |
 |------|-----|
-| 1 | **`D`** або **ДЕМО ЗАХИСТУ** |
-| 2 | Авто: Hybrid Neuro-Fuzzy · **посадка 1-го ступеня** (Ideal IC) |
-| 3 | Після touchdown: огляд траєкторії |
-| 4 | **`E`** — експорт (Earth LZ · first stage · after sep) |
-| 5 | **`P`** — Monte-Carlo A–D **лише на Stage-1** (DefenseBaseline v5) |
+| 1 | **`D`** / **ДЕМО** — Hybrid + Ideal IC |
+| 2 | Після touchdown камера **на ступені** + лінія шляху |
+| 3 | **`E`** — експорт звіту |
+| 4 | **`P`** — MC A–D з **поточних слайдерів** (paired seeds) |
 
-Довідка: **F1** — об'єкт роботи: посадка першого ступеня · Earth LZ · NAV IMU/GPS.
+**F1** — довідка (об'єкт: 1-й ступінь · Earth LZ · NAV).
 
-## Ideal (стабільний soft-landing)
+## Ideal soft-landing
 
-**`I`** → IC посадки Stage-1, вітер/шум OFF, NAV NoiseScale=0 → **Space**.
+**`I`** → вітер/шум OFF, чисті IC → **Space**.
 
-## Відтворюваний Monte-Carlo
+## Monte-Carlo (`P`)
 
-**DefenseBaseline** при **P**:
+- Умови = **слайдери користувача** (h₀, Vy, вітер м/с, N, seed, шум…)  
+- Paired seeds: trial `i` однаковий для PID/Fuzzy/NN/Hybrid  
+- Training OFF під час pack; ideal weights **лише в RAM** (файл ваг не затирається)  
+- Residual = тогл Hybrid residual (OFF = ablation Fuzzy-only)  
+- Звіт: `SimulationLogs/Comparison_*/01_SUMMARY.md`
 
-- seed **42** · N **15** · paired seeds · protocol v5  
-- Hybrid residual **ON**  
-- лише **landing after separation**  
-- вітер/шум на Stage-1; NAV noise scale 0.2 якщо enableNoise  
+Опційний пресет констант: `DefenseBaseline` (seed 42, protocol v14) — **не** авто на P.
 
-Результат: `SimulationLogs/Comparison_*/01_SUMMARY.md`  
-(старі «місячні» звіти **не** цитувати)
+## Навчання NN
 
-### Ablation
+1. Тогл **Навчання NN** ON.  
+2. Режим **3** Neural (або Hybrid) → кілька **Space**.  
+3. Console: `[NN-ES] NEW best…` · файл `BestWeights_Neural.json`.
 
-Residual OFF (чекбокс Hybrid residual) → Hybrid ≈ Fuzzy-only → повторити **P**.
+## Критерії
 
-## Критерії soft-landing
-
-|Vᵧ| &lt; 3.5 м/с · нахил &lt; 7° · промах &lt; 40 м · |Vₕ| &lt; 6.5 м/с
+|Vᵧ| &lt; 3.5 · нахил &lt; 7° · промах &lt; 40 м · |Vₕ| &lt; 6.5
 
 ## Гарячі клавіші
 
-`1–4` режим · `Space` старт · `D` демо Hybrid · `I` ідеал Stage-1 · `P`/`X` MC · `E`/`O` експорт · `F1` help · `Y` тема UI · `G` мова
+`1–4` режим · `Space` старт · `D` демо · `I` ідеал · `P`/`X` MC · `E`/`O` експорт · `F` follow · `T` overview · `F1` help · `Y` тема · `G` мова

@@ -16,7 +16,7 @@ public class MonteCarloFairnessTests
         p.dryMass = 25600f;
         p.fuelMass = 14000f;
         p.maxThrust = 845000f;
-        p.isp = 311f;
+        p.isp = Stage1Vehicle.IspLandingS;
         p.fixedTimeStep = 0.01f; // трохи грубше заради швидкості тестів
         p.maxSimulationTime = 400f;
         p.maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
@@ -60,11 +60,13 @@ public class MonteCarloFairnessTests
         rp.simulationPaused = false;
 
         // Той самий рецепт збурень, що SimulationManager.ApplyRandomNoiseToState
+        // Той самий рецепт wind, що SimulationManager (ambient м/с + малий порив)
         float w = DefenseBaseline.WindStrength;
-        Vector3 windKick = new Vector3(
-            SimRng.Range(-w, w), 0f, SimRng.Range(-w * 0.55f, w * 0.55f));
-        rp.state.velocity += windKick * 0.45f;
-        rp.windVelocity = windKick * 0.1f;
+        float yaw = SimRng.Range(0f, Mathf.PI * 2f);
+        float wMag = w * SimRng.Range(0.85f, 1.0f);
+        var ambient = new Vector3(Mathf.Cos(yaw) * wMag, 0f, Mathf.Sin(yaw) * wMag);
+        rp.state.velocity += ambient * 0.15f;
+        rp.windVelocity = ambient;
         rp.applyContinuousWind = true;
 
         float massNoise = 1f + SimRng.Range(-DefenseBaseline.MassVariationPercent,
@@ -147,6 +149,9 @@ public class MonteCarloFairnessTests
 
             Debug.Log($"[MC-test] success% PID={rPid:F0} Fuzzy={rFz:F0} NN={rNn:F0} Hybrid={rHy:F0} | " +
                       $"miss PID={AvgMiss(pid):F1} Hybrid={AvgMiss(hybrid):F1}");
+            Debug.Log($"[MC-test] mean |Vy| Fz={AvgVy(fuzzy):F1} NN={AvgVy(neural):F1} Hy={AvgVy(hybrid):F1} | " +
+                      $"∠ PID={AvgAngle(pid):F1} Hy={AvgAngle(hybrid):F1} | " +
+                      $"Vh PID={AvgVh(pid):F1} Hy={AvgVh(hybrid):F1}");
 
             // Не універсальний нуль — хоча б один алгоритм інколи сідає
             Assert.Greater(Mathf.Max(rPid, Mathf.Max(rFz, Mathf.Max(rNn, rHy))), 0.1f,
@@ -205,6 +210,22 @@ public class MonteCarloFairnessTests
         if (list.Count == 0) return 0f;
         float s = 0f;
         foreach (var m in list) s += m.touchdownVelocity;
+        return s / list.Count;
+    }
+
+    static float AvgAngle(List<LandingMetrics> list)
+    {
+        if (list.Count == 0) return 0f;
+        float s = 0f;
+        foreach (var m in list) s += m.landingAngleError;
+        return s / list.Count;
+    }
+
+    static float AvgVh(List<LandingMetrics> list)
+    {
+        if (list.Count == 0) return 0f;
+        float s = 0f;
+        foreach (var m in list) s += m.horizontalSpeed;
         return s / list.Count;
     }
 }

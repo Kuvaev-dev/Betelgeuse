@@ -93,9 +93,9 @@ public class HybridController : MonoBehaviour, ILandingController
             ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
             ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg, ctx.HorizSpeed,
             out float thrust, out Vector3 gimbal);
-        // Бічне: 1.15 (було 1.55) — сильніший scale розганяв mid-course drift
-        float lat = IdealLandingPresets.Active ? 0.70f : 1.15f;
-        float gb = IdealLandingPresets.Active ? 0.15f : 0.35f;
+        // Hybrid: найсильніший hold проти вітру (тема ≥ Fuzzy/PID), без overshoot-lim
+        float lat = IdealLandingPresets.Active ? 0.70f : 1.2f;
+        float gb = IdealLandingPresets.Active ? 0.15f : 0.14f;
         // Ideal: lower blend/scale so upright PD owns terminal (anti-rock)
         return new ControlCommand(thrust, gimbal, lateralScale: lat, gimbalBlend: gb);
     }

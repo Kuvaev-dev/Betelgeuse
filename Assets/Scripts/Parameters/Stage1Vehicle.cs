@@ -29,8 +29,11 @@ public static class Stage1Vehicle
     /// <summary>Тяга одного Merlin-class SL, Н — типова 1-engine landing burn.</summary>
     public const float LandingThrustN = 845000f;
 
-    /// <summary>Isp Merlin-class (vac ~311 с; посадка біля рівня моря ближче до 282 с).</summary>
+    /// <summary>Isp vacuum Merlin-class, с (довідково).</summary>
     public const float IspVacS = 311f;
+
+    /// <summary>Isp sea-level для ділянки посадки Earth LZ, с (~Merlin 1D SL).</summary>
+    public const float IspLandingS = 282f;
 
     public const int GridFinCount = 4;
     public const int LandingLegCount = 4;
@@ -46,6 +49,6 @@ public static class Stage1Vehicle
         p.dryMass = DryMassKg;
         p.fuelMass = LandingFuelKg;
         p.maxThrust = LandingThrustN;
-        p.isp = IspVacS;
+        p.isp = IspLandingS;
     }
 }

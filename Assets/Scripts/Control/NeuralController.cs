@@ -44,9 +44,18 @@ public class NeuralController : MonoBehaviour, ILandingController
     void Awake()
     {
         hSize = Mathf.Clamp(hiddenNeurons, 4, 16);
-        weightsFilePath = Path.Combine(Application.dataPath, "..", "BestWeights_Neural.json");
+        EnsureWeightsPath();
         InitRandomWeights(0.35f);
         SnapshotBest();
+    }
+
+    void EnsureWeightsPath()
+    {
+        if (!string.IsNullOrEmpty(weightsFilePath)) return;
+        // EditMode tests may call InstallIdealWeights before Awake
+        string root = Application.dataPath;
+        if (string.IsNullOrEmpty(root)) return;
+        weightsFilePath = Path.Combine(root, "..", "BestWeights_Neural.json");
     }
 
     void InitRandomWeights(float scale)
@@ -206,26 +215,35 @@ public class NeuralController : MonoBehaviour, ILandingController
             ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
             ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.HorizSpeed,
             out float thrust, out Vector3 gimbal);
-        float lat = IdealLandingPresets.Active ? 0.72f : 1.05f;
-        float gb = IdealLandingPresets.Active ? 0.16f : 0.35f;
+        float lat = IdealLandingPresets.Active ? 0.72f : 0.95f;
+        float gb = IdealLandingPresets.Active ? 0.16f : 0.12f;
         return new ControlCommand(thrust, gimbal, lateralScale: lat, gimbalBlend: gb);
     }
 
     /// <summary>
-    /// Еволюційний крок після епізоду. Cost: vel, angle, fuel, горизонтальний miss.
+    /// ES(1+1) online після епізоду: оцінити поточні ваги → еліта / відкат → мутація на наступний політ.
+    /// Повний (1+λ) турнір потребує λ паралельних симуляцій; λ тут лише масштабує σ.
     /// </summary>
-    public void Train(float touchdownVelocity, float angleError, float fuelRemaining, float horizontalMiss = 0f)
+    public void Train(float touchdownVelocity, float angleError, float fuelRemaining,
+        float horizontalMiss = 0f, bool timedOut = false)
     {
         if (!enableTraining) return;
+        // Ideal-демо не змінює ваги
+        if (IdealLandingPresets.Active) return;
 
-        // Cost для ES(1+1): м'яка посадка + кут + промах + паливо + штрафи критеріїв
+        float vGate = LandingCriteria.DefaultMaxTouchdownVelocity;
+        float aGate = LandingCriteria.DefaultMaxLandingAngle;
+        float mGate = LandingCriteria.DefaultMaxHorizontalMiss;
+
         float cost = touchdownVelocity * 0.50f
                    + angleError * 0.28f
                    + Mathf.Max(0f, 4000f - fuelRemaining) / 1000f * 0.08f
-                   + horizontalMiss * 0.035f
-                   + (touchdownVelocity > 3.5f ? 12f : 0f)
-                   + (angleError > 7f ? 9f : 0f)
-                   + (horizontalMiss > 25f ? 7f : 0f);
+                   + horizontalMiss * 0.04f
+                   + (touchdownVelocity >= vGate ? 12f : 0f)
+                   + (angleError >= aGate ? 9f : 0f)
+                   + (horizontalMiss >= mGate * 0.7f ? 7f : 0f)
+                   + (horizontalMiss >= mGate ? 10f : 0f)
+                   + (timedOut ? 25f : 0f);
 
         if (cost < bestCost)
         {
@@ -238,15 +256,12 @@ public class NeuralController : MonoBehaviour, ILandingController
         else
         {
             RestoreBest();
-            mutationSigma = Mathf.Min(0.25f, mutationSigma / sigmaDecay); // м'яке «підігрівання» при stall
+            mutationSigma = Mathf.Min(0.25f, mutationSigma / sigmaDecay);
         }
 
-        // ES(1+λ): λ мутантів від еліти; для online-епізоду беремо 1-го
-        // (повний λ-турнір потребує λ паралельних симуляцій — див. Monte-Carlo).
-        // Тут застосовуємо σ-масштабовану мутацію; λ впливає на силу розкиду.
+        // Наступний епізод — offspring від еліти (1+1)
         float sigmaScale = 1f + 0.08f * Mathf.Max(0, lambda - 1);
         MutateFromBest(mutationSigma * sigmaScale);
-        // Додаткові «віртуальні» мутації звужують σ (ефект більшої популяції)
         for (int k = 1; k < lambda; k++)
             mutationSigma = Mathf.Max(0.02f, mutationSigma * 0.998f);
         generation++;
@@ -254,7 +269,7 @@ public class NeuralController : MonoBehaviour, ILandingController
 
     // Зворотна сумісність
     public void Train(float touchdownVelocity, float angleError, float fuelRemaining)
-        => Train(touchdownVelocity, angleError, fuelRemaining, 0f);
+        => Train(touchdownVelocity, angleError, fuelRemaining, 0f, false);
 
     void MutateFromBest(float sigma = -1f)
     {
@@ -280,6 +295,8 @@ public class NeuralController : MonoBehaviour, ILandingController
 
     public void SaveBestWeights()
     {
+        EnsureWeightsPath();
+        if (string.IsNullOrEmpty(weightsFilePath)) return;
         var data = new NeuralWeights
         {
             inputSize = InputSize,
@@ -299,7 +316,8 @@ public class NeuralController : MonoBehaviour, ILandingController
                 ? new[] { bestWHO[0], bestBO[0] }
                 : new[] { 1.3f, -0.9f }
         };
-        File.WriteAllText(weightsFilePath, JsonUtility.ToJson(data, true));
+        try { File.WriteAllText(weightsFilePath, JsonUtility.ToJson(data, true)); }
+        catch (System.Exception e) { Debug.LogWarning($"[NN-ES] Save weights skipped: {e.Message}"); }
     }
 
     public void LoadBestWeights()
@@ -354,9 +372,13 @@ public class NeuralController : MonoBehaviour, ILandingController
     /// ( thr↑ при малій h / великій |Vy| ; gimbal bias ≈ 0 ).
     /// Використовується кнопкою «Ідеальні параметри».
     /// </summary>
-    public void InstallIdealWeights()
+    /// <param name="persist">
+    /// false — лише в RAM (MC paired pack); true — також BestWeights_Neural.json.
+    /// </param>
+    public void InstallIdealWeights(bool persist = true)
     {
         hSize = Mathf.Clamp(hiddenNeurons, 4, 16);
+        EnsureWeightsPath();
         wIH = new float[hSize * InputSize];
         bH = new float[hSize];
         wHO = new float[OutputSize * hSize];
@@ -384,8 +406,11 @@ public class NeuralController : MonoBehaviour, ILandingController
         bestCost = 2.5f;
         generation = Mathf.Max(generation, 1);
         SnapshotBest();
-        SaveBestWeights();
-        Debug.Log("[NN-ES] Встановлено ідеальні ваги для гарантованої посадки.");
+        // MC не має затирати натреновані ваги на диску
+        if (persist) SaveBestWeights();
+        Debug.Log(persist
+            ? "[NN-ES] Ideal weights installed + saved."
+            : "[NN-ES] Ideal weights installed (RAM only, MC).");
     }
 }
 

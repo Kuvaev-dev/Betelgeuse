@@ -783,24 +783,26 @@ public class MissionControlUI : MonoBehaviour
 
     static float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 
-    /// <summary>Заливка NumField — має контрастувати зі SliderBlock/panel на кожній темі.</summary>
+    /// <summary>Заливка NumField — контраст зі SliderBlock/panel на кожній темі.</summary>
     static Color NumFieldBg()
     {
         var p = UiTheme.Current;
         if (UiTheme.IsLightBackground)
         {
-            // Виразний холодний чіп на білій панелі (раніше майже невидимий)
             Color bg = new Color(0.86f, 0.89f, 0.94f, 1f);
             bg = Color.Lerp(bg, p.Btn, 0.35f);
             bg = Color.Lerp(bg, p.Accent, 0.1f);
             bg.a = 1f;
             return bg;
         }
-        // Темні теми: panel + btn + edge + accent, щоб Cyan/Amber/Violet/Green відрізнялись
-        Color baseBg = Color.Lerp(p.PanelSoft, p.Btn, 0.5f);
-        baseBg = Color.Lerp(baseBg, p.Edge, 0.22f);
-        baseBg = Color.Lerp(baseBg, p.Accent, 0.1f);
-        baseBg = Color.Lerp(baseBg, Color.white, 0.06f);
+        // Темні: явно темніший чіп (не білий cold-start)
+        Color baseBg = Color.Lerp(p.PanelSoft, p.Btn, 0.55f);
+        baseBg = Color.Lerp(baseBg, p.Edge, 0.18f);
+        baseBg = Color.Lerp(baseBg, p.Accent, 0.08f);
+        // Підняти трохи над panel, але тримати Luma ≪ 0.5
+        float lu = 0.2126f * baseBg.r + 0.7152f * baseBg.g + 0.0722f * baseBg.b;
+        if (lu > 0.35f)
+            baseBg = Color.Lerp(baseBg, new Color(0.12f, 0.14f, 0.18f, 1f), 0.55f);
         baseBg.a = 1f;
         return baseBg;
     }
@@ -835,16 +837,18 @@ public class MissionControlUI : MonoBehaviour
         Color fieldBg = NumFieldBg();
         Color focusBg = NumFieldFocusBg(fieldBg);
 
-        // ColorTint множить graphic.color — лишати білим
-        fieldImg.color = Color.white;
+        // Пряма заливка (не ColorTint×white — на першому кадрі давало білі поля в dark theme)
+        fieldImg.color = fieldBg;
         if (input != null)
         {
+            input.transition = Selectable.Transition.ColorTint;
             var ic = input.colors;
-            ic.normalColor = fieldBg;
-            ic.highlightedColor = Color.Lerp(fieldBg, UiTheme.Current.Accent, 0.18f);
-            ic.pressedColor = focusBg;
-            ic.selectedColor = focusBg;
-            ic.disabledColor = new Color(fieldBg.r, fieldBg.g, fieldBg.b, 0.45f);
+            // Множник до graphic.color=fieldBg: white = idle, легкий tint у focus
+            ic.normalColor = Color.white;
+            ic.highlightedColor = Color.Lerp(Color.white, UiTheme.Current.Accent, 0.2f);
+            ic.pressedColor = Color.Lerp(Color.white, UiTheme.Current.Accent, 0.35f);
+            ic.selectedColor = Color.Lerp(Color.white, UiTheme.Current.Accent, 0.35f);
+            ic.disabledColor = new Color(1f, 1f, 1f, 0.45f);
             ic.colorMultiplier = 1f;
             ic.fadeDuration = 0.06f;
             input.colors = ic;
@@ -860,14 +864,12 @@ public class MissionControlUI : MonoBehaviour
         var outline = fieldImg.GetComponent<UnityEngine.UI.Outline>();
         if (outline != null)
         {
-            // Idle: видимий край; focused outline і далі з акцентом (увімк. при select)
             bool focused = input != null && input.isFocused;
             if (focused)
             {
                 var oc = UiTheme.Current.Accent; oc.a = 1f;
                 outline.effectColor = oc;
                 outline.effectDistance = new Vector2(2.5f, -2.5f);
-                outline.enabled = true;
             }
             else
             {
@@ -875,8 +877,8 @@ public class MissionControlUI : MonoBehaviour
                 outline.effectDistance = UiTheme.IsLightBackground
                     ? new Vector2(1.2f, -1.2f)
                     : new Vector2(1f, -1f);
-                outline.enabled = true; // завжди показувати бокс на light-темах
             }
+            outline.enabled = true;
         }
     }
 
@@ -2704,17 +2706,21 @@ public class MissionControlUI : MonoBehaviour
             massVar = 0f;
             angVar = 0f;
         }
-        // Single-flight NAV noise: раніше виставлявся ЛИШЕ в MC → після MC лишався 0.2 і Ideal «їхав» вбік
-        rocket.NavNoiseScale = noise ? 0.2f : 0f;
+        // NAV noise лише при увімкненому шумі (Ideal = 0)
+        rocket.NavNoiseScale = noise ? 0.35f : 0f;
+        // Бічний offset IC: реалістичний розкид точки входу (не Ideal)
+        float jitter = 0f;
+        if (noise && !IdealLandingPresets.Active)
+            jitter = Mathf.Clamp(wind * 1.15f + angVar * 0.9f, 0f, 35f);
         if (sim != null)
         {
             sim.windStrength = wind;
             sim.enableNoise = noise;
             sim.massVariationPercent = massVar;
             sim.angleVariationDegrees = angVar;
+            sim.positionJitterMeters = jitter;
         }
-        // positionJitter=0 — інакше default 18 м зсуває IC і ламає Ideal soft-landing
-        rocket.ApplyFlightDisturbances(wind, noise, massVar, angVar, positionJitterMeters: 0f);
+        rocket.ApplyFlightDisturbances(wind, noise, massVar, angVar, positionJitterMeters: jitter);
 
         float h0 = rocket.state.position.y;
         string dist = UILocale.IsUK
@@ -3102,18 +3108,34 @@ public class MissionControlUI : MonoBehaviour
         ClearGraphs();
         sampleTimer = 0f;
         ResetFlightPeaks();
-        // Зафіксувати справедливий paired Monte-Carlo протокол (однакові ПУ + збурення для A–D)
-        DefenseBaseline.ApplyTo(sim);
-        IdealLandingPresets.ClearActive(); // Ideal soft-GNC must not leak into MC
-        if (rocket?.hybridController != null)
-            rocket.hybridController.useNeuralResidual = DefenseBaseline.HybridResidualOn;
-        SyncUiFromDefenseBaseline();
+        // Умови порівняння = поточні слайдери/тогли користувача (не DefenseBaseline)
+        IdealLandingPresets.ClearActive(); // Ideal soft-GNC не має «текти» в MC
+        if (trainToggle) trainToggle.isOn = false; // ES mid-pack ламає paired fairness
         ApplySettings();
+        PersistCompareSettingsFromUi();
         sim.RequestFullExperiment();
         NotifyInfo(UILocale.T("msg_compare"));
     }
 
-    /// <summary>Віддзеркалити константи DefenseBaseline на слайдери, щоб export/UI збігались із запуском.</summary>
+    /// <summary>Записати поточні умови порівняння в UserSettings (наступний запуск / export).</summary>
+    void PersistCompareSettingsFromUi()
+    {
+        if (testsSlider) UserSettings.Tests = Mathf.RoundToInt(testsSlider.value);
+        if (windSlider) UserSettings.Wind = windSlider.value;
+        if (noiseToggle) UserSettings.Noise = noiseToggle.isOn;
+        if (seedSlider) UserSettings.ExperimentSeed = Mathf.RoundToInt(seedSlider.value);
+        if (massNoiseSlider) UserSettings.MassNoise = massNoiseSlider.value;
+        if (angleNoiseSlider) UserSettings.AngleNoise = angleNoiseSlider.value;
+        if (heightSlider) UserSettings.StartHeight = heightSlider.value;
+        if (descentSlider) UserSettings.StartDescentSpeed = descentSlider.value;
+        if (tilt0Slider) UserSettings.StartTilt = tilt0Slider.value;
+        if (timeScaleSlider) UserSettings.TimeScale = timeScaleSlider.value;
+        if (residualToggle) UserSettings.HybridResidual = residualToggle.isOn;
+        UserSettings.Train = false;
+        UserSettings.Save();
+    }
+
+    /// <summary>Опційно: підставити константи захисту в слайдери (не викликається на P).</summary>
     void SyncUiFromDefenseBaseline()
     {
         loadingSettings = true;
@@ -3129,20 +3151,7 @@ public class MissionControlUI : MonoBehaviour
         if (residualToggle) residualToggle.isOn = DefenseBaseline.HybridResidualOn;
         if (trainToggle) trainToggle.isOn = false;
         loadingSettings = false;
-
-        UserSettings.Tests = DefenseBaseline.TestsPerAlgorithm;
-        UserSettings.Wind = DefenseBaseline.WindStrength;
-        UserSettings.Noise = DefenseBaseline.EnableNoise;
-        UserSettings.ExperimentSeed = DefenseBaseline.Seed;
-        UserSettings.MassNoise = DefenseBaseline.MassVariationPercent;
-        UserSettings.AngleNoise = DefenseBaseline.AngleVariationDegrees;
-        UserSettings.StartHeight = DefenseBaseline.StartHeight;
-        UserSettings.StartDescentSpeed = DefenseBaseline.StartDescentSpeed;
-        UserSettings.StartTilt = DefenseBaseline.StartTiltDeg;
-        UserSettings.HybridResidual = DefenseBaseline.HybridResidualOn;
-        UserSettings.Train = false;
-        UserSettings.Save();
-        // Підписи значень слайдера оновлюються через onValueChanged (шлях SetValue)
+        PersistCompareSettingsFromUi();
     }
 
     void OnDefenseDemo()
@@ -3702,8 +3711,8 @@ public class MissionControlUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Після Демо: режим огляду — камера на повну траєкторію + лінія видима.
-    /// Не залежить від userOrbitLock (на відміну від звичайного Start).
+    /// Після Демо: лишити кадр на ступені + показати лінію шляху.
+    /// (Раніше Overview dig pad-center — «камера кудись злітала».)
     /// </summary>
     void EnterPostLandingInspect()
     {
@@ -3719,10 +3728,10 @@ public class MissionControlUI : MonoBehaviour
 
         var cam = ResolveCamera();
         if (cam == null) return;
+        overviewCam = false;
         cam.userOrbitLock = false;
-        overviewCam = true;
-        // Максимально далеко — scroll наближує, запас зуму повний
-        cam.SnapToFullTrajectoryView(maxZoomOut: true);
+        cam.SetMode(CameraFollow.ViewMode.Follow);
+        cam.StayOnRocketAfterAbort();
         RefreshCamLabel();
         UpdateViewButtonVisual();
     }
@@ -4261,48 +4270,60 @@ public class MissionControlUI : MonoBehaviour
     }
 
     public void UpdateStatistics(float pid, float fuzzy, float neural, float hybrid = -1f)
+        => UpdateStatistics(pid, fuzzy, neural, hybrid, -1f, -1f, -1f, -1f);
+
+    public void UpdateStatistics(float pid, float fuzzy, float neural, float hybrid,
+        float pidScore, float fuzzyScore, float neuralScore, float hybridScore)
     {
         WriteStatBadge(txtPid, pid);
         WriteStatBadge(txtFuzzy, fuzzy);
         WriteStatBadge(txtNeural, neural);
         if (hybrid >= 0f) WriteStatBadge(txtHybrid, hybrid);
 
+        // Переможець: вищий success %; при рівності — вищий SuccessScore
         string winner = "—";
-        float max = -1f;
-        void Consider(string name, float rate)
+        float bestRate = -1f;
+        float bestScore = -1f;
+        void Consider(string name, float rate, float score)
         {
             if (rate < 0f) return;
-            if (rate > max + 1e-4f) { max = rate; winner = name; }
+            if (rate > bestRate + 1e-4f
+                || (Mathf.Abs(rate - bestRate) <= 1e-4f && score > bestScore + 1e-4f))
+            {
+                bestRate = rate;
+                bestScore = score;
+                winner = name;
+            }
         }
-        Consider(UILocale.T("mode_pid"), pid);
-        Consider(UILocale.T("mode_fuzzy"), fuzzy);
-        Consider(UILocale.T("mode_neural"), neural);
-        Consider(UILocale.T("mode_hybrid"), hybrid);
-        if (max < 0f) max = 0f;
+        Consider(UILocale.T("mode_pid"), pid, pidScore);
+        Consider(UILocale.T("mode_fuzzy"), fuzzy, fuzzyScore);
+        Consider(UILocale.T("mode_neural"), neural, neuralScore);
+        Consider(UILocale.T("mode_hybrid"), hybrid, hybridScore);
+        if (bestRate < 0f) bestRate = 0f;
 
         if (txtWinner)
         {
-            if (max <= 0.05f)
+            if (bestRate <= 0.05f)
             {
                 txtWinner.text = UILocale.T("winner_none");
                 txtWinner.color = C_Muted;
             }
             else
             {
-                txtWinner.text = string.Format(UILocale.T("winner_fmt"), winner, max);
+                txtWinner.text = string.Format(UILocale.T("winner_fmt"), winner, bestRate);
                 txtWinner.color = C_Ok;
             }
         }
         if (txtInfo)
         {
-            if (max <= 0.05f)
+            if (bestRate <= 0.05f)
             {
                 txtInfo.text = UILocale.T("msg_compare_zero");
                 txtInfo.color = C_Alert;
             }
             else
             {
-                txtInfo.text = string.Format(UILocale.T("msg_compare_done"), winner, max);
+                txtInfo.text = string.Format(UILocale.T("msg_compare_done"), winner, bestRate);
                 txtInfo.color = C_Ok;
             }
         }
@@ -4345,8 +4366,11 @@ public class MissionControlUI : MonoBehaviour
         if (sim != null)
         {
             if (testsSlider) sim.testsPerAlgorithm = Mathf.RoundToInt(testsSlider.value);
+            else sim.testsPerAlgorithm = UserSettings.Tests;
             if (windSlider) sim.windStrength = windSlider.value;
+            else sim.windStrength = UserSettings.Wind;
             if (noiseToggle) sim.enableNoise = noiseToggle.isOn;
+            else sim.enableNoise = UserSettings.Noise;
             if (timeScaleSlider) sim.experimentTimeScale = timeScaleSlider.value;
             else sim.experimentTimeScale = UserSettings.TimeScale;
             if (seedSlider) sim.experimentSeed = Mathf.RoundToInt(seedSlider.value);
@@ -4361,9 +4385,20 @@ public class MissionControlUI : MonoBehaviour
             else sim.startDescentSpeed = UserSettings.StartDescentSpeed;
             if (tilt0Slider) sim.startTiltDeg = tilt0Slider.value;
             else sim.startTiltDeg = UserSettings.StartTilt;
+
+            // Jitter немає окремого слайдера — від вітру + шуму кута (користувач крутить умови)
+            float w = Mathf.Max(0f, sim.windStrength);
+            float ang = Mathf.Max(0f, sim.angleVariationDegrees);
+            sim.positionJitterMeters = sim.enableNoise
+                ? Mathf.Clamp(w * 1.1f + ang * 0.8f, 0f, 40f)
+                : Mathf.Clamp(w * 0.35f, 0f, 12f);
+            sim.continuousWind = w > 0.05f;
+            sim.includeHybrid = true;
         }
         if (trainToggle && rocket?.neuralController != null)
             rocket.neuralController.enableTraining = trainToggle.isOn;
+        else if (rocket?.neuralController != null)
+            rocket.neuralController.enableTraining = UserSettings.Train;
         if (rocket?.hybridController != null)
         {
             bool res = residualToggle != null ? residualToggle.isOn : UserSettings.HybridResidual;
@@ -5306,8 +5341,10 @@ public class MissionControlUI : MonoBehaviour
         var fieldImg = fieldGo.GetComponent<Image>();
         StyleSimpleImage(fieldImg, fieldBg);
         fieldImg.raycastTarget = true;
+        // Пряма заливка теми (не white×ColorBlock — інакше cold-start = білі поля)
+        fieldImg.color = fieldBg;
 
-        // Завжди видима рамка, щоб light-теми показували поле; акцент товщає у фокусі
+        // Завжди видима рамка
         var focusOutline = fieldGo.AddComponent<Outline>();
         focusOutline.effectColor = NumFieldEdge();
         focusOutline.effectDistance = UiTheme.IsLightBackground
@@ -5355,18 +5392,16 @@ public class MissionControlUI : MonoBehaviour
         input.targetGraphic = fieldImg;
         input.transition = Selectable.Transition.ColorTint;
         var ic = ColorBlock.defaultColorBlock;
-        Color idleBg = fieldBg;
-        Color focusBg = NumFieldFocusBg(fieldBg);
-        ic.normalColor = idleBg;
-        ic.highlightedColor = Color.Lerp(idleBg, C_Accent, 0.18f);
-        ic.pressedColor = focusBg;
-        ic.selectedColor = focusBg;
-        ic.disabledColor = new Color(idleBg.r, idleBg.g, idleBg.b, 0.45f);
+        // graphic.color = fieldBg; ColorBlock — множник (white = без змін)
+        ic.normalColor = Color.white;
+        ic.highlightedColor = Color.Lerp(Color.white, C_Accent, 0.2f);
+        ic.pressedColor = Color.Lerp(Color.white, C_Accent, 0.35f);
+        ic.selectedColor = Color.Lerp(Color.white, C_Accent, 0.35f);
+        ic.disabledColor = new Color(1f, 1f, 1f, 0.45f);
         ic.colorMultiplier = 1f;
         ic.fadeDuration = 0.06f;
         input.colors = ic;
-        // ColorTint множить graphic.color — лишати білим, щоб ColorBlock керував заливкою
-        fieldImg.color = Color.white;
+        fieldImg.color = fieldBg;
         input.text = Mathf.RoundToInt(val).ToString();
         // Зберігати посилання display TMP_Text для legacy-оновлень txtSeedVal
         TMP_Text displayVal = v;

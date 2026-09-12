@@ -16,7 +16,8 @@ public sealed class PidLandingStrategy : ILandingController
     public void SetGains(float thrustKp, float thrustKi, float thrustKd,
         float attKp, float attKi, float attKd)
     {
-        Thrust.Kp = thrustKp; Thrust.Ki = thrustKi; Thrust.Kd = thrustKd;
+        // Ki=0 на тязі: I-windup на довгому спуску → hover-out of fuel
+        Thrust.Kp = thrustKp; Thrust.Ki = 0f; Thrust.Kd = thrustKd;
         Pitch.Kp = attKp; Pitch.Ki = attKi; Pitch.Kd = attKd;
         Yaw.Kp = attKp; Yaw.Ki = attKi; Yaw.Kd = attKd;
     }
@@ -41,9 +42,9 @@ public sealed class PidLandingStrategy : ILandingController
             Mathf.Clamp(baseGimbal.x + pc * pidLean, -16f, 16f),
             0f,
             Mathf.Clamp(baseGimbal.z + yc * pidLean, -16f, 16f));
-        // Найслабше бічне наведення — baseline для диференціації Monte-Carlo
-        float lat = IdealLandingPresets.Active ? 0.55f : 0.78f;
-        float gb = IdealLandingPresets.Active ? 0.75f : 1f;
+        // Найслабше бічне — baseline; при сильному вітрі/jitter програє Hybrid
+        float lat = IdealLandingPresets.Active ? 0.55f : 0.62f;
+        float gb = IdealLandingPresets.Active ? 0.75f : 0.45f;
         return new ControlCommand(thrust, g, lateralScale: lat, gimbalBlend: gb);
     }
 
@@ -59,11 +60,12 @@ public sealed class PidLandingStrategy : ILandingController
         float maxT = ctx.MaxThrust > 0.1f ? ctx.MaxThrust : hover * 3f;
         thrust = Mathf.Clamp(thrust, hover * 0.15f, maxT);
 
-        if (h < 12f)
+        // Профіль лише біля pad (інакше PID ≈ ідеальний soft-landing завжди)
+        if (h < 30f)
         {
             float profile = SoftLandingGuidance.ProfileThrust(h, ctx.VerticalVelocity, mass);
-            float t = 1f - Mathf.Clamp01(h / 12f);
-            thrust = Mathf.Lerp(thrust, profile, t * 0.7f);
+            float t = 1f - Mathf.Clamp01(h / 30f);
+            thrust = Mathf.Lerp(thrust, profile, t * 0.75f);
         }
         return thrust;
     }

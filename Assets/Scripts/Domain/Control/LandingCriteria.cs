@@ -5,9 +5,9 @@ using UnityEngine;
 /// </summary>
 public static class LandingCriteria
 {
+    // Soft-landing 1-го ступеня (Earth LZ). Реалістичні gate — інакше «успіх за будь-яких умов».
     public const float DefaultMaxTouchdownVelocity = 3.5f;
     public const float DefaultMaxLandingAngle = 7f;
-    // Клас 1-го ступеня: промах pad ±40 м / Vh 6.5 м/с усе ще soft-landing
     public const float DefaultMaxHorizontalMiss = 40f;
     public const float DefaultMaxHorizontalSpeed = 6.5f;
 

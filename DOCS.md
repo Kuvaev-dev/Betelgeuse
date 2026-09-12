@@ -79,7 +79,9 @@ Ideal `[I]`, демо `[D]` і Monte-Carlo `[P]` — ділянка посадк
 ### Критерії (`LandingCriteria`)
 
 - |Vᵧ| &lt; **3.5** м/с · нахил &lt; **7°** · промах &lt; **40** м · |Vₕ| &lt; **6.5** м/с  
-- SuccessScore 0…100
+- SuccessScore 0…100  
+- Вітер у UI = **м/с ambient** (drag relative to air); Isp посадки **SL ~282 с**  
+- Ideal `[I]` — чисті ПУ; шум/вітер — реальний розкид (jitter + NAV)
 
 ---
 
