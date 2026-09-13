@@ -5,7 +5,7 @@
 
 **Платформа:** Unity 6000.x (URP) · C#  
 **Тип:** симулятор GNC **1-го ступеня** · **Earth LZ**  
-**Версія:** **v1.3.2**
+**Версія:** **v1.3.4**
 
 ---
 
@@ -65,8 +65,8 @@ Ideal `[I]`, демо `[D]` і Monte-Carlo `[P]` — ділянка посадк
 
 1. Unity **6000.x** + URP → `SampleScene` → **Play**.  
 2. Splash: Earth LZ + **1-й ступінь** (booster).  
-3. **`D`** або **4** Hybrid → **`I`** (опційно) → **Space**.  
-4. **`P`** — MC. **`E`** — експорт.
+3. **`M`** демо або **4** Hybrid → **`I`** (опційно) → **Space**.  
+4. **`B`** — протокол захисту · **`P`** — MC · **`E`** — експорт.
 
 ---
 
@@ -123,11 +123,12 @@ Ablation: вимкнути Hybrid residual → Hybrid ≈ Fuzzy-only.
 ## 7. Експорт і MC
 
 - Середовище: `Earth LZ` · об'єкт: `first stage` · фаза: `landing after separation`  
-- Monte-Carlo: paired seeds, fairness v5, Hybrid residual ON  
+- Monte-Carlo: paired seeds, Hybrid residual ON, SVG bar charts A–D  
 - Не коронувати winner при ~0% success  
+- **B** — `DefenseBaseline` v14 у UI (seed 42); **P** читає слайдери  
 
 ---
 
 ## 8. Версія
 
-**v1.3.2** — автономна навігація (IMU/GPS/висотомір), Hybrid residual ON за замовчуванням, ідентичність F9-class 1-го ступеня, Earth Stage-1 framing.
+**v1.3.4** — MC SVG charts, кнопка протоколу захисту **B**, узгоджені Stage-1 підписи, Hybrid residual ON, F9-class 1-й ступінь, Earth LZ.

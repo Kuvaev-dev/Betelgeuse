@@ -1,4 +1,4 @@
-# Betelgeuse v1.3.3 — нотатки релізу
+# Betelgeuse v1.3.4 — нотатки релізу
 
 **Дата:** 2026-09-12  
 **Статус:** GNC-симулятор посадки **1-го ступеня** · Earth LZ · **готовий до захисту**  
@@ -12,8 +12,9 @@
 | Нечітка логіка | Sugeno 5×5 (режим B) |
 | ML | MLP 5→8→2 + online ES (`BestWeights_Neural.json`) |
 | Гібрид | Neuro-Fuzzy residual (тогл ON/OFF = ablation) |
-| Порівняння | Monte-Carlo A–D, **paired seeds**, умови з UI |
-| Демо | **D**: Hybrid + Ideal IC · камера лишається на ступені |
+| Порівняння | Monte-Carlo A–D, **paired seeds**, SVG bar charts |
+| Демо | **M**: Hybrid + Ideal IC · камера лишається на ступені |
+| Протокол | **B**: DefenseBaseline v14 → слайдери (не авто-P) |
 
 ## Критерії soft-landing
 
@@ -26,17 +27,25 @@
 - Grid fins — помірний aero-damp (не «безкоштовний» успіх)
 - Ideal `[I]` — чисті ПУ; шум/вітер — jitter + NAV
 - **P** не перезаписує UI-умови і не затирає `BestWeights_Neural.json`
+- Comparison: **не** коронує winner при ≈0% success
 
 ## Сценарій захисту
 
 1. **F1** — тема: 1-й ступінь · Earth LZ · NAV  
-2. **D** — Hybrid Ideal soft-landing  
+2. **M** — Hybrid Ideal soft-landing  
 3. **1–4** + **I** + **Space** — кожен алгоритм  
-4. Вітер 8–12 + шум ON → **P** — диференціація A–D  
-5. **E** — експорт `SimulationLogs/`  
+4. **B** (протокол) → вітер/шум → **P** — диференціація A–D  
+5. **E** — експорт `SimulationLogs/` (SUMMARY + charts SVG)  
 6. Опційно: residual OFF → ablation Hybrid ≈ Fuzzy  
 
 Цитувати лише пакети `SimulationLogs/` після v1.3.x.
+
+## v1.3.4 (завершення)
+
+- SVG-діаграми Monte-Carlo (`success_rate`, `score`, `Vy`, `miss`)
+- Кнопка / **B** — DefenseBaseline у UI
+- Узгоджені підписи Stage-1 (без застарілого stack→sep у демо)
+- Документація: демо = **M**, версія 1.3.4
 
 ## Ассети (CC0)
 

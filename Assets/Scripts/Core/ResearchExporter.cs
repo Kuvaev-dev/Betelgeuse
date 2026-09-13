@@ -179,6 +179,8 @@ public static class ResearchExporter
         string packName = $"Comparison_{stamp}";
         string dir = Path.Combine(LogsDirectory, packName);
         Directory.CreateDirectory(dir);
+        string charts = Path.Combine(dir, "charts");
+        Directory.CreateDirectory(charts);
 
         File.WriteAllText(Path.Combine(dir, "00_README.md"),
             BuildComparisonReadme(data, packName), new UTF8Encoding(true));
@@ -188,6 +190,22 @@ public static class ResearchExporter
             BuildComparisonCsv(data), Encoding.UTF8);
         File.WriteAllText(Path.Combine(dir, "03_results.json"),
             BuildComparisonJson(data), Encoding.UTF8);
+
+        if (data.algorithms != null && data.algorithms.Count > 0)
+        {
+            File.WriteAllText(Path.Combine(charts, "success_rate.svg"),
+                BuildSvgBarChart(data.algorithms, a => a.successRate,
+                    "Success rate A–D (%)", "% success", 100f, true), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "success_score.svg"),
+                BuildSvgBarChart(data.algorithms, a => a.avgSuccessScore,
+                    "Mean SuccessScore A–D", "score / 100", 100f, true), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "touchdown_vy.svg"),
+                BuildSvgBarChart(data.algorithms, a => a.avgTouchdownVelocity,
+                    "Mean |Vy| at touchdown", "m/s", 0f, false), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(charts, "horizontal_miss.svg"),
+                BuildSvgBarChart(data.algorithms, a => a.avgHorizontalMiss,
+                    "Mean horizontal miss", "m", 0f, false), Encoding.UTF8);
+        }
 
         Debug.Log($"[Export] Пакет порівняння: {dir}");
         return dir;
@@ -512,6 +530,7 @@ public static class ResearchExporter
             sb.AppendLine("| **`01_SUMMARY.md`** | Головний звіт + переможець |");
             sb.AppendLine("| `02_results.csv` | Таблиця для Excel |");
             sb.AppendLine("| `03_results.json` | Для скриптів |");
+            sb.AppendLine("| `charts/*.svg` | Стовпчикові діаграми A–D |");
             sb.AppendLine();
             sb.AppendLine($"- Запусків на алгоритм: **{d.testsPerAlgorithm}**");
             sb.AppendLine($"- Збурення: **{(d.HasDisturbances ? "увімкнено" : "вимкнено")}** (вітер={d.windStrength:F1}, jitter={d.positionJitterMeters:F0} м)");
@@ -531,6 +550,7 @@ public static class ResearchExporter
             sb.AppendLine("| **`01_SUMMARY.md`** | Main report + winner |");
             sb.AppendLine("| `02_results.csv` | Excel table |");
             sb.AppendLine("| `03_results.json` | For scripts |");
+            sb.AppendLine("| `charts/*.svg` | A–D bar charts |");
             sb.AppendLine();
             sb.AppendLine($"- Runs per algorithm: **{d.testsPerAlgorithm}**");
             sb.AppendLine($"- Disturbances: **{(d.HasDisturbances ? "on" : "off")}** (wind={d.windStrength:F1}, jitter={d.positionJitterMeters:F0} m)");
@@ -915,9 +935,20 @@ public static class ResearchExporter
                 winner = a.name;
             }
         }
-        sb.AppendLine($"## Переможець: **{winner}** ({bestRate:F1}% успішних)");
-        sb.AppendLine();
-        sb.AppendLine("Критерій перемоги: вищий **% успіху**; при рівності — вищий середній **SuccessScore**.");
+        // Не коронувати winner при ~0% — протокол/умови занадто жорсткі або GNC зламано
+        if (bestRate <= 0.05f)
+        {
+            sb.AppendLine("## Переможець: **не визначено** (усі ≈ 0% успіху)");
+            sb.AppendLine();
+            sb.AppendLine("Жоден алгоритм не пройшов soft-landing gate у значущій частці запусків. " +
+                         "Зменшіть вітер/jitter або перевірте GNC; не цитуйте «переможця» з цього пакета.");
+        }
+        else
+        {
+            sb.AppendLine($"## Переможець: **{winner}** ({bestRate:F1}% успішних)");
+            sb.AppendLine();
+            sb.AppendLine("Критерій перемоги: вищий **% успіху**; при рівності — вищий середній **SuccessScore**.");
+        }
         sb.AppendLine();
         sb.AppendLine("## Деталі по алгоритмах");
         sb.AppendLine();
@@ -939,6 +970,25 @@ public static class ResearchExporter
             $"промах &lt; {LandingCriteria.DefaultMaxHorizontalMiss:0.#} м · " +
             $"|Vh| &lt; {LandingCriteria.DefaultMaxHorizontalSpeed:0.#} м/с · без timeout");
         sb.AppendLine();
+        sb.AppendLine("## Графіки");
+        sb.AppendLine();
+        sb.AppendLine("Відкрийте SVG у браузері.");
+        sb.AppendLine();
+        sb.AppendLine("| Файл | Що показує |");
+        sb.AppendLine("|------|------------|");
+        sb.AppendLine("| `charts/success_rate.svg` | % успішних посадок A–D |");
+        sb.AppendLine("| `charts/success_score.svg` | Середній SuccessScore |");
+        sb.AppendLine("| `charts/touchdown_vy.svg` | Середня |Vy| touchdown |");
+        sb.AppendLine("| `charts/horizontal_miss.svg` | Середній промах |");
+        sb.AppendLine();
+        sb.AppendLine("![success%](charts/success_rate.svg)");
+        sb.AppendLine();
+        sb.AppendLine("![score](charts/success_score.svg)");
+        sb.AppendLine();
+        sb.AppendLine("![Vy](charts/touchdown_vy.svg)");
+        sb.AppendLine();
+        sb.AppendLine("![miss](charts/horizontal_miss.svg)");
+        sb.AppendLine();
         sb.AppendLine("## Файли цього експерименту");
         sb.AppendLine();
         sb.AppendLine("| Файл | Призначення |");
@@ -947,10 +997,99 @@ public static class ResearchExporter
         sb.AppendLine("| `01_SUMMARY.md` | Цей звіт |");
         sb.AppendLine("| `02_results.csv` | Excel |");
         sb.AppendLine("| `03_results.json` | Скрипти |");
+        sb.AppendLine("| `charts/*.svg` | Діаграми порівняння |");
         sb.AppendLine();
         sb.AppendLine("---");
         sb.AppendLine("*Betelgeuse · Monte-Carlo · один експеримент = один каталог*");
         return sb.ToString();
+    }
+
+    /// <summary>Стовпчикова SVG-діаграма для Monte-Carlo A–D (захист / Excel-free).</summary>
+    public static string BuildSvgBarChart(
+        List<AlgoStats> algos,
+        System.Func<AlgoStats, float> valueSel,
+        string title, string yLabel,
+        float fixedMax = 0f, bool clampToMax = false)
+    {
+        const int W = 920, H = 480;
+        const float padL = 72f, padR = 36f, padT = 56f, padB = 78f;
+        float plotW = W - padL - padR;
+        float plotH = H - padT - padB;
+
+        if (algos == null || algos.Count == 0)
+        {
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                   $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{W}\" height=\"{H}\" viewBox=\"0 0 {W} {H}\">" +
+                   "<rect width=\"100%\" height=\"100%\" fill=\"#f7f8fa\"/>" +
+                   $"<text x=\"{W / 2}\" y=\"{H / 2}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"14\" fill=\"#888\">No data</text></svg>";
+        }
+
+        float yMax = 0f;
+        foreach (var a in algos)
+            yMax = Mathf.Max(yMax, Mathf.Abs(valueSel(a)));
+        if (fixedMax > 0.01f && clampToMax)
+            yMax = fixedMax;
+        else if (fixedMax > 0.01f)
+            yMax = Mathf.Max(yMax, fixedMax * 0.15f);
+        if (yMax < 1e-3f) yMax = 1f;
+        yMax *= 1.12f;
+
+        string[] palette = { "#64748b", "#0ea5e9", "#a855f7", "#16a34a", "#ea580c", "#e11d48" };
+        float slot = plotW / algos.Count;
+        float barW = slot * 0.58f;
+
+        GetNiceTicks(0f, yMax, 6, out float[] yTicks, out float yStep);
+        float Y(float v) => padT + (1f - Mathf.Clamp01(v / yMax)) * plotH;
+
+        var sb = new StringBuilder(algos.Count * 220 + 1800);
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine($"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{W}\" height=\"{H}\" viewBox=\"0 0 {W} {H}\" role=\"img\" aria-label=\"{EscXml(title)}\">");
+        sb.AppendLine("<rect width=\"100%\" height=\"100%\" fill=\"#f7f8fa\"/>");
+        sb.AppendLine($"<rect x=\"{padL}\" y=\"{padT}\" width=\"{plotW}\" height=\"{plotH}\" fill=\"#ffffff\" stroke=\"#cbd5e1\" stroke-width=\"1.25\" rx=\"4\"/>");
+        sb.AppendLine($"<text x=\"{W / 2}\" y=\"30\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"18\" font-weight=\"600\" fill=\"#0f172a\">{EscXml(title)}</text>");
+
+        foreach (float yv in yTicks)
+        {
+            if (yv < -1e-6f || yv > yMax + 1e-6f) continue;
+            float yy = Y(yv);
+            string yys = yy.ToString("0.##", Inv);
+            sb.AppendLine($"<line x1=\"{padL}\" y1=\"{yys}\" x2=\"{(padL + plotW).ToString("0.##", Inv)}\" y2=\"{yys}\" stroke=\"#e2e8f0\" stroke-width=\"1\"/>");
+            sb.AppendLine($"<text x=\"{(padL - 8).ToString("0.##", Inv)}\" y=\"{(yy + 4).ToString("0.##", Inv)}\" text-anchor=\"end\" font-family=\"Segoe UI,Consolas,monospace\" font-size=\"11\" fill=\"#475569\">{FormatTick(yv, yStep)}</text>");
+        }
+
+        float baseY = Y(0f);
+        for (int i = 0; i < algos.Count; i++)
+        {
+            var a = algos[i];
+            float val = Mathf.Max(0f, valueSel(a));
+            float cx = padL + slot * (i + 0.5f);
+            float top = Y(val);
+            float h = Mathf.Max(1.5f, baseY - top);
+            string color = palette[i % palette.Length];
+            string shortName = ShortAlgoName(a.name);
+            sb.AppendLine($"<rect x=\"{(cx - barW * 0.5f).ToString("0.##", Inv)}\" y=\"{top.ToString("0.##", Inv)}\" width=\"{barW.ToString("0.##", Inv)}\" height=\"{h.ToString("0.##", Inv)}\" fill=\"{color}\" rx=\"3\"/>");
+            sb.AppendLine($"<text x=\"{cx.ToString("0.##", Inv)}\" y=\"{(top - 8).ToString("0.##", Inv)}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"12\" font-weight=\"600\" fill=\"#0f172a\">{val.ToString("0.#", Inv)}</text>");
+            sb.AppendLine($"<text x=\"{cx.ToString("0.##", Inv)}\" y=\"{(padT + plotH + 22).ToString("0.##", Inv)}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"12\" fill=\"#334155\">{EscXml(shortName)}</text>");
+        }
+
+        sb.AppendLine($"<line x1=\"{padL}\" y1=\"{padT}\" x2=\"{padL}\" y2=\"{(padT + plotH).ToString("0.##", Inv)}\" stroke=\"#334155\" stroke-width=\"1.5\"/>");
+        sb.AppendLine($"<line x1=\"{padL}\" y1=\"{(padT + plotH).ToString("0.##", Inv)}\" x2=\"{(padL + plotW).ToString("0.##", Inv)}\" y2=\"{(padT + plotH).ToString("0.##", Inv)}\" stroke=\"#334155\" stroke-width=\"1.5\"/>");
+        float yTitleX = 18f;
+        float yTitleY = padT + plotH * 0.5f;
+        sb.AppendLine($"<text x=\"{yTitleX.ToString("0.##", Inv)}\" y=\"{yTitleY.ToString("0.##", Inv)}\" text-anchor=\"middle\" font-family=\"Segoe UI,Arial,sans-serif\" font-size=\"13\" font-weight=\"600\" fill=\"#334155\" transform=\"rotate(-90 {yTitleX.ToString("0.##", Inv)} {yTitleY.ToString("0.##", Inv)})\">{EscXml(yLabel)}</text>");
+        sb.AppendLine("</svg>");
+        return sb.ToString();
+    }
+
+    static string ShortAlgoName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return "?";
+        string n = name.ToLowerInvariant();
+        if (n.Contains("hybrid")) return "Hybrid";
+        if (n.Contains("fuzzy")) return "Fuzzy";
+        if (n.Contains("neural") || n.Contains("nn")) return "Neural";
+        if (n.Contains("pid")) return "PID";
+        return name.Length <= 10 ? name : name.Substring(0, 10);
     }
 
     static string Row(string name, string val, string norm, bool ok)

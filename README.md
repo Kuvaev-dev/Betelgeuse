@@ -1,6 +1,6 @@
 # Betelgeuse — інтелектуальна автономна посадка першого ступеня
 
-**v1.3.3** · дипломний GNC-симулятор (Unity URP) · GNC protocol v14
+**v1.3.4** · дипломний GNC-симулятор (Unity URP) · GNC protocol v14
 
 **Тема:** Розроблення інтелектуальної системи автономної посадки **першого ступеня** ракети-носія на основі нечіткої логіки та машинного навчання.
 
@@ -35,8 +35,8 @@ git clone https://github.com/Kuvaev-dev/Betelgeuse.git
 
 1. Unity **6000.x** (URP) → відкрити проєкт → `Assets/Scenes/SampleScene.unity` → **Play**
 2. На екрані: **Earth LZ** + **1-й ступінь** (ноги, grid fins, 9 сопел)
-3. **`4`** Hybrid → **`I`** Ideal → **`Space`** — посадка  
-4. **`D`** — демо · **`P`** — MC A–D (**умови зі слайдерів**) · **`E`** — експорт
+3. **`M`** демо Hybrid Ideal · або **`4`** Hybrid → **`I`** Ideal → **`Space`**
+4. **`B`** — протокол захисту (seed 42) · **`P`** — MC A–D · **`E`** — експорт
 
 ## Режими керування
 
@@ -75,7 +75,7 @@ git clone https://github.com/Kuvaev-dev/Betelgeuse.git
 | Машинне навчання | MLP + ES (**C**), ваги в репо | ✅ |
 | Інтелектуальна система | Hybrid Neuro-Fuzzy residual ON (**D**) | ✅ |
 | Земні умови | Earth LZ, g=9.81 | ✅ |
-| Оцінювання | Monte-Carlo A–D, логи Comparison | ✅ |
+| Оцінювання | Monte-Carlo A–D, SVG-графіки, Comparison | ✅ |
 
 **Готовність до захисту: ТАК.**
 

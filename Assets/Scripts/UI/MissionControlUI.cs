@@ -61,6 +61,8 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text txtGraphDetailTitle;
     TMP_Text txtGraphDetailHint;
     Coroutine defenseDemoCo;
+    /// <summary>&gt;0 після B (DefenseBaseline): ApplySettings/P не перетирають protocol jitter.</summary>
+    float protocolJitterOverride = -1f;
     TMP_Text txtSeedVal;
     TMP_Text txtHideBtn;
     TMP_Text txtLangBtn;
@@ -615,15 +617,17 @@ public class MissionControlUI : MonoBehaviour
             else if (n == "MBtn_Pause")
                 bg = BtnBlue();
             else if (n == "MBtn_Demo")
-                bg = BtnAmber();
+                bg = BtnYellow();
             else if (n.StartsWith("MBtn_"))
                 bg = C_Btn;
             else if (n == "Action_Demo")
-                bg = BtnAmber();
+                bg = BtnYellow();
             else if (n == "Action_Compare")
                 bg = BtnViolet();
             else if (n == "Action_Cancel")
                 bg = BtnPink();
+            else if (n == "Action_Baseline")
+                bg = BtnOrange();
             else if (n == "Action")
                 bg = BtnViolet();
             else if (n == "HelpOkBtn" || n == "GraphDetailCloseBtn" || n == "CloseResult" || n == "ShowTraj" || n == "ExportResult")
@@ -1022,9 +1026,16 @@ public class MissionControlUI : MonoBehaviour
         s.onValueChanged.AddListener(handler);
     }
 
+    void ClearProtocolOverride()
+    {
+        if (loadingSettings) return;
+        protocolJitterOverride = -1f;
+    }
+
     void OnHeightChanged(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.StartHeight = v;
         UserSettings.Save();
         ApplySettings();
@@ -1033,6 +1044,7 @@ public class MissionControlUI : MonoBehaviour
     void OnDescentChanged(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.StartDescentSpeed = v;
         UserSettings.Save();
         ApplySettings();
@@ -1041,6 +1053,7 @@ public class MissionControlUI : MonoBehaviour
     void OnTilt0Changed(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.StartTilt = v;
         UserSettings.Save();
         ApplySettings();
@@ -1049,6 +1062,7 @@ public class MissionControlUI : MonoBehaviour
     void OnMassNoiseChanged(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.MassNoise = v;
         UserSettings.Save();
         ApplySettings();
@@ -1057,6 +1071,7 @@ public class MissionControlUI : MonoBehaviour
     void OnAngleNoiseChanged(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.AngleNoise = v;
         UserSettings.Save();
         ApplySettings();
@@ -1077,6 +1092,7 @@ public class MissionControlUI : MonoBehaviour
     void OnSeedChanged(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         int s = Mathf.RoundToInt(v);
         UserSettings.ExperimentSeed = s;
         UserSettings.Save();
@@ -1089,6 +1105,7 @@ public class MissionControlUI : MonoBehaviour
     void OnWindChanged(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.Wind = v;
         UserSettings.Save();
         ApplySettings();
@@ -1097,6 +1114,7 @@ public class MissionControlUI : MonoBehaviour
     void OnTestsChanged(float v)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.Tests = Mathf.RoundToInt(v);
         UserSettings.Save();
         ApplySettings();
@@ -1124,6 +1142,7 @@ public class MissionControlUI : MonoBehaviour
     void OnNoiseChanged(bool on)
     {
         if (loadingSettings) return;
+        ClearProtocolOverride();
         UserSettings.Noise = on;
         UserSettings.Save();
         ApplySettings();
@@ -1744,7 +1763,7 @@ public class MissionControlUI : MonoBehaviour
                 txtCol = ButtonLabelOn(bg);
                 break;
             case MenuBtnKind.Demo:
-                bg = BtnAmber();
+                bg = BtnYellow();
                 txtCol = ButtonLabelOn(bg);
                 break;
             default:
@@ -2217,6 +2236,7 @@ public class MissionControlUI : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.P)) OnStartCompare();
         if (Input.GetKeyDown(KeyCode.X)) OnCancelCompare();
+        if (Input.GetKeyDown(KeyCode.B) && !ctrl) OnApplyDefenseBaseline();
 
         if (Input.GetKeyDown(KeyCode.F11)) BorderlessWindow.ToggleFullscreen();
     }
@@ -2578,6 +2598,9 @@ public class MissionControlUI : MonoBehaviour
             "Action_Compare", BtnViolet(), OnStartCompare);
         ActionButtonAt(root, pad + halfW + gap, y, halfW, btnH, UILocale.T("btn_cancel"),
             "Action_Cancel", BtnPink(), OnCancelCompare);
+        y -= btnH + gap;
+        ActionButtonAt(root, pad, y, inner, btnH, UILocale.T("btn_baseline"),
+            "Action_Baseline", BtnOrange(), OnApplyDefenseBaseline);
         y -= btnH + 10f;
 
         // ── 4. Результати порівняння 2x2 ──
@@ -2742,6 +2765,7 @@ public class MissionControlUI : MonoBehaviour
             return;
         }
 
+        protocolJitterOverride = -1f;
         IdealLandingPresets.Apply(rocket, sim, out string uk, out string en);
         string msg = UILocale.IsUK ? uk : en;
 
@@ -3154,6 +3178,25 @@ public class MissionControlUI : MonoBehaviour
         PersistCompareSettingsFromUi();
     }
 
+    /// <summary>B / кнопка: фіксований протокол захисту (seed 42, v14) → слайдери + sim.</summary>
+    void OnApplyDefenseBaseline()
+    {
+        if (sim != null && sim.IsExperimentRunning)
+        {
+            NotifyInfo(UILocale.T("msg_cancel_first"));
+            return;
+        }
+        IdealLandingPresets.ClearActive();
+        protocolJitterOverride = DefenseBaseline.PositionJitterMeters;
+        SyncUiFromDefenseBaseline();
+        DefenseBaseline.ApplyTo(sim);
+        ApplySettings();
+        if (rocket != null && !rocket.simulationArmed)
+            ApplyExperimentInitialConditions();
+        NotifyInfo(string.Format(UILocale.T("msg_baseline"), DefenseBaseline.ProtocolVersion,
+            DefenseBaseline.Seed, DefenseBaseline.TestsPerAlgorithm, DefenseBaseline.WindStrength));
+    }
+
     void OnDefenseDemo()
     {
         if (rocket == null) return;
@@ -3385,7 +3428,7 @@ public class MissionControlUI : MonoBehaviour
         void KeyRow(string keys, string descKey)
         {
             const float rowH = 28f;
-            const float keyW = 128f;
+            const float keyW = 148f;
             var row = CreatePanel("HelpRow", content.transform, new Color(0, 0, 0, 0));
             row.GetComponent<Image>().raycastTarget = false;
             PinTL(row.GetComponent<RectTransform>(), rowPad, y, inner - rowPad * 2f, rowH);
@@ -3430,7 +3473,7 @@ public class MissionControlUI : MonoBehaviour
         KeyRow("1–4", "help_k_modes");
         KeyRow("Space · Esc", "help_k_run");
         KeyRow("I · U", "help_k_ideal");
-        KeyRow("M · P · X", "help_k_demo");
+        KeyRow("M · B · P · X", "help_k_demo");
         KeyRow("F / T / C / R", "help_k_cam");
         KeyRow("L · E · O", "help_k_io");
         KeyRow("H · G · Y · F1", "help_k_ui");
@@ -4386,12 +4429,17 @@ public class MissionControlUI : MonoBehaviour
             if (tilt0Slider) sim.startTiltDeg = tilt0Slider.value;
             else sim.startTiltDeg = UserSettings.StartTilt;
 
-            // Jitter немає окремого слайдера — від вітру + шуму кута (користувач крутить умови)
+            // Jitter: protocol B override, інакше від вітру + шуму кута
             float w = Mathf.Max(0f, sim.windStrength);
             float ang = Mathf.Max(0f, sim.angleVariationDegrees);
-            sim.positionJitterMeters = sim.enableNoise
-                ? Mathf.Clamp(w * 1.1f + ang * 0.8f, 0f, 40f)
-                : Mathf.Clamp(w * 0.35f, 0f, 12f);
+            if (protocolJitterOverride >= 0f)
+                sim.positionJitterMeters = protocolJitterOverride;
+            else
+            {
+                sim.positionJitterMeters = sim.enableNoise
+                    ? Mathf.Clamp(w * 1.1f + ang * 0.8f, 0f, 40f)
+                    : Mathf.Clamp(w * 0.35f, 0f, 12f);
+            }
             sim.continuousWind = w > 0.05f;
             sim.includeHybrid = true;
         }
@@ -5106,10 +5154,14 @@ public class MissionControlUI : MonoBehaviour
     static Color BtnBlue() => UiTheme.IsLightBackground
         ? new Color(0.14f, 0.32f, 0.55f, 1f)
         : new Color(0.12f, 0.26f, 0.45f, 1f);
-    /// <summary>Amber тієї ж насиченості, що Start/Stop (не розмитий theme-amber).</summary>
-    static Color BtnAmber() => UiTheme.IsLightBackground
-        ? new Color(0.78f, 0.48f, 0.06f, 1f)
-        : new Color(0.68f, 0.42f, 0.08f, 1f);
+    /// <summary>Yellow — Demo; тієї ж насиченості, що Start/Stop.</summary>
+    static Color BtnYellow() => UiTheme.IsLightBackground
+        ? new Color(0.72f, 0.58f, 0.06f, 1f)
+        : new Color(0.60f, 0.48f, 0.08f, 1f);
+    /// <summary>Orange — Протокол захисту; тепліший за yellow, та сама смуга яскравості.</summary>
+    static Color BtnOrange() => UiTheme.IsLightBackground
+        ? new Color(0.80f, 0.38f, 0.06f, 1f)
+        : new Color(0.70f, 0.32f, 0.08f, 1f);
     /// <summary>Violet — та сама смуга яскравості, що Pause blue.</summary>
     static Color BtnViolet() => UiTheme.IsLightBackground
         ? new Color(0.42f, 0.22f, 0.62f, 1f)

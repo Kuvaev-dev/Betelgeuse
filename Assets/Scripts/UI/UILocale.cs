@@ -110,7 +110,7 @@ public static class UILocale
         // Status (короткі — вміщуються в бейдж ~118 px)
         ["st_ready"] = new("ГОТОВО · 1-й СТУПІНЬ", "READY · FIRST STAGE"),
         ["st_wait"] = new("ОЧІКУВАННЯ", "WAITING"),
-        ["st_start"] = new("СТАРТ (ПАКЕТ→SEP)", "START (STACK→SEP)"),
+        ["st_start"] = new("СТАРТ STAGE-1", "START STAGE-1"),
         ["st_descent"] = new("ПОСАДКА STAGE-1", "STAGE-1 LANDING"),
         ["st_success"] = new("ПОСАДКА 1-го УСПІШНА", "STAGE-1 LANDING OK"),
         ["st_fail"] = new("ПОСАДКА 1-го НЕВДАЛА", "STAGE-1 LANDING FAIL"),
@@ -208,6 +208,7 @@ public static class UILocale
         ["btn_ideal"] = new("ІДЕАЛЬНІ ПАРАМЕТРИ (100%)", "IDEAL PRESETS (100%)"),
         ["btn_compare"] = new("ПОРІВНЯТИ  P", "COMPARE  P"),
         ["btn_cancel"] = new("СКАСУВАТИ  X", "CANCEL  X"),
+        ["btn_baseline"] = new("ПРОТОКОЛ ЗАХИСТУ  B", "DEFENSE PROTOCOL  B"),
         ["btn_demo"] = new("ДЕМО ЗАХИСТУ  M", "DEFENSE DEMO  M"),
         ["btn_follow"] = new("СЛІДКУВАТИ ЗА РАКЕТОЮ", "FOLLOW ROCKET"),
         ["btn_traj_view"] = new("ПОВНА ТРАЄКТОРІЯ", "FULL TRAJECTORY"),
@@ -232,12 +233,12 @@ public static class UILocale
             "LMB/RMB — orbit (look under OK) · WASD · scroll — smooth zoom\nF follow · T full path · C manual · R reset"),
 
         // How-to
-        ["how"] = new("M: демо захисту   F1: довідка   1-4: режим   Space: старт   P: порівняти",
-            "M: defense demo   F1: help   1-4: mode   Space: start   P: compare"),
-        ["hint"] = new("Підказка: M — демо захисту · або Hybrid 4 + Ideal I + Start",
-            "Hint: M — defense demo · or Hybrid 4 + Ideal I + Start"),
-        ["tip"] = new("1-4 mode | M demo | I ideal | Space start | P compare | F1 help | E export | H hide",
-            "1-4 mode | M demo | I ideal | Space start | P compare | F1 help | E export | H hide"),
+        ["how"] = new("M: демо   B: протокол захисту   1-4: режим   Space: старт   P: порівняти",
+            "M: demo   B: defense protocol   1-4: mode   Space: start   P: compare"),
+        ["hint"] = new("Підказка: M — демо Hybrid Ideal · B — протокол MC · 4+I+Space",
+            "Hint: M — Hybrid Ideal demo · B — MC protocol · 4+I+Space"),
+        ["tip"] = new("1-4 mode | M demo | B protocol | I ideal | Space | P compare | F1 help | E export",
+            "1-4 mode | M demo | B protocol | I ideal | Space | P compare | F1 help | E export"),
         ["cam_keys"] = new("ЛКМ/ПКМ оберт · WASD/стрілки · колесо зум · F follow · T огляд · C ручне · R скинути",
             "LMB/RMB orbit · WASD/arrows · scroll zoom · F/T/C/R · Tab=UI"),
         // Слайдери — що змінюється + одиниця в колонці значення
@@ -284,8 +285,8 @@ public static class UILocale
             "PID / Fuzzy / Neural / Hybrid (after sep only)"),
         ["help_k_run"] = new("старт · стоп", "start · stop"),
         ["help_k_ideal"] = new("ідеал Stage-1 · пауза", "ideal Stage-1 · pause"),
-        ["help_k_demo"] = new("демо (пакет→sep→Hybrid) · порівняти · скасувати",
-            "demo (stack→sep→Hybrid) · compare · cancel"),
+        ["help_k_demo"] = new("демо Hybrid Ideal · порівняти · скасувати · протокол B",
+            "demo Hybrid Ideal · compare · cancel · protocol B"),
         ["help_k_cam"] = new("камера (follow / огляд / ручне / скинути)",
             "camera (follow / overview / manual / reset)"),
         ["help_k_io"] = new("шлях · експорт · папка", "path · export · folder"),
@@ -296,34 +297,33 @@ public static class UILocale
         ["help_research"] = new("P — MC лише ділянка посадки · paired seeds\nВітер/шум — після відділення",
             "P — MC landing segment only · paired seeds\nNAV: IMU + altimeter + GPS complementary\nWind/noise — after separation"),
         ["help_body"] = new(
-            "ОБ'ЄКТ: посадка 1-го ступеня після відділення · Earth LZ\n\n" +
+            "ОБ'ЄКТ: посадка 1-го ступеня (Earth LZ) · автономний GNC A–D\n\n" +
             "КЕРУВАННЯ\n" +
-            "  1–4  PID / Fuzzy / Neural / Hybrid (лише після sep)\n" +
+            "  1–4  PID / Fuzzy / Neural / Hybrid\n" +
             "  Space старт · Esc стоп · I ідеал Stage-1 · U пауза\n" +
-            "  M демо (пакет→sep→Hybrid) · P порівняти · X скасувати\n" +
+            "  M демо Hybrid Ideal · B протокол захисту · P MC · X скасувати\n" +
             "  F/T/C/R камера · L шлях · E експорт · O папка\n" +
-            "  H панелі · G мова · Y тема · F1 довідка\n  Tab фокус UI · стрілки · Enter/Space\n\n" +
+            "  H панелі · G мова · Y тема · F1 довідка\n  Tab фокус UI · стрілки · Enter\n\n" +
             "SOFT-LANDING (Stage-1)\n" +
-            "  |Vy|<3.5 м/с · нахил<7° · промах · |Vh|\n\n" +
+            "  |Vy|<3.5 м/с · нахил<7° · промах<40 м · |Vh|<6.5\n\n" +
             "ДОСЛІДЖЕННЯ\n" +
-            "  P — MC лише ділянка посадки · paired seeds\n" +
-            "  Вітер/шум — після відділення",
-            "OBJECT: first-stage landing after separation · Earth LZ\n\n" +
+            "  B — DefenseBaseline v14 (seed 42) · P — MC paired seeds\n" +
+            "  NAV: IMU + висотомір + GPS complementary",
+            "OBJECT: first-stage landing (Earth LZ) · autonomous GNC A–D\n\n" +
             "CONTROLS\n" +
-            "  1–4  PID / Fuzzy / Neural / Hybrid (after sep only)\n" +
+            "  1–4  PID / Fuzzy / Neural / Hybrid\n" +
             "  Space start · Esc stop · I ideal Stage-1 · U pause\n" +
-            "  M demo Hybrid Stage-1 · NAV IMU/GPS→sep→Hybrid) · P compare · X cancel\n" +
+            "  M Hybrid Ideal demo · B defense protocol · P MC · X cancel\n" +
             "  F/T/C/R camera · L path · E export · O folder\n" +
-            "  H panels · G lang · Y theme · F1 help\n  Tab UI focus · arrows move · Enter/Space activate\n\n" +
+            "  H panels · G lang · Y theme · F1 help\n  Tab UI focus · arrows · Enter\n\n" +
             "SOFT-LANDING (Stage-1)\n" +
-            "  |Vy|<3.5 m/s · tilt<7° · miss · |Vh|\n\n" +
+            "  |Vy|<3.5 m/s · tilt<7° · miss<40 m · |Vh|<6.5\n\n" +
             "RESEARCH\n" +
-            "  P — MC landing segment only · paired seeds\n" +
-            "  NAV: IMU + altimeter + GPS complementary\n" +
-            "  Wind/noise — after separation"),
+            "  B — DefenseBaseline v14 (seed 42) · P — MC paired seeds\n" +
+            "  NAV: IMU + altimeter + GPS complementary"),
 
         // Смуга фази польоту (низ)
-        ["step_ready"] = new("Крок: готовність | пакет на Earth LZ", "Step: ready | stack on Earth LZ"),
+        ["step_ready"] = new("Крок: готовність | 1-й ступінь на Earth LZ", "Step: ready | first stage on Earth LZ"),
         ["step_stack"] = new("Крок: підйом пакета | до відділення", "Step: stack ascent | before separation"),
         ["step_sep"] = new("Крок: відділення | далі лише 1-й ступінь", "Step: separation | first stage only"),
         ["step_high"] = new("Крок: високий спуск Stage-1 | профіль", "Step: Stage-1 high descent | profile"),
@@ -356,8 +356,8 @@ public static class UILocale
             "Criteria failed — see cards below"),
 
         // Інсайти
-        ["ins_wait"] = new("Об'єкт: 1-й ступінь · Earth LZ. M — демо пакета, 4 — Hybrid, Space — старт.",
-            "Object: first stage · Earth LZ. M — stack demo, 4 — Hybrid, Space — start."),
+        ["ins_wait"] = new("Об'єкт: 1-й ступінь · Earth LZ. M — демо Hybrid Ideal · B — протокол · Space — старт.",
+            "Object: first stage · Earth LZ. M — Hybrid Ideal demo · B — protocol · Space — start."),
         ["ins_batch"] = new("MC на ділянці посадки Stage-1 (після sep). A–D попарно.",
             "MC on Stage-1 landing segment (after sep). Paired A–D."),
         ["ins_ok"] = new("Посадку 1-го ступеня виконано. Score {0:F0}/100.",
@@ -393,8 +393,8 @@ public static class UILocale
         ["prog_run"] = new("Авто-тест: {0}  ·  {1}/{2}", "Auto-test: {0}  ·  {1}/{2}"),
         ["msg_compare_export"] = new("Авто-тест завершено. Звіти: {0}", "Auto-test complete. Reports: {0}"),
         ["msg_compare_stopped"] = new("Авто-тест зупинено користувачем.", "Auto-test stopped by user."),
-        ["msg_started"] = new("Політ ({0}). Earth LZ · 1-й ступінь після sep.",
-            "Flight ({0}). Earth LZ · first stage after sep."),
+        ["msg_started"] = new("Політ ({0}). Earth LZ · 1-й ступінь · автономна посадка.",
+            "Flight ({0}). Earth LZ · first stage · autonomous landing."),
         ["msg_stopped"] = new("Політ зупинено. ЗАПУСТИТИ — знову.", "Flight stopped. START — again."),
         ["msg_paused"] = new("Пауза. ПАУЗА / ДАЛІ — продовжити.", "Paused. PAUSE / RESUME — continue."),
         ["msg_resumed"] = new("Політ продовжено.", "Flight resumed."),
@@ -418,9 +418,12 @@ public static class UILocale
         ["msg_compare"] = new(
             "Порівняння з вашими умовами (слайдери): paired seeds, PID→Fuzzy→NN→Hybrid.",
             "Compare with your settings (sliders): paired seeds, PID→Fuzzy→NN→Hybrid."),
+        ["msg_baseline"] = new(
+            "Протокол захисту v{0}: seed={1}, N={2}, вітер={3:F0} м/с. Далі P — Monte-Carlo.",
+            "Defense protocol v{0}: seed={1}, N={2}, wind={3:F0} m/s. Then P — Monte-Carlo."),
         ["msg_compare_zero"] = new(
-            "Авто-тест: усі 0%. Зменш вітер/шум або повтори після оновлення симуляції.",
-            "Auto-test: all 0%. Lower wind/noise or retry after the simulation fix."),
+            "Авто-тест: усі 0%. Зменш вітер/шум або B (протокол) і повтори P.",
+            "Auto-test: all 0%. Lower wind/noise or press B (protocol) then P again."),
         ["msg_compare_done"] = new("Авто-тест завершено.\n{0} ({1:F1}%).\nЕкспорт у SimulationLogs/.",
             "Auto-test done.\n{0} ({1:F1}%).\nExport in SimulationLogs/."),
         ["stat_a"] = new("A  PID", "A  PID"),

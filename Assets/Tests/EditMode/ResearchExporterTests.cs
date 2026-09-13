@@ -47,9 +47,10 @@ public class ResearchExporterTests
     {
         var data = SampleLanding();
         string md = ResearchExporter.BuildLandingMarkdown(data);
-        StringAssert.Contains("# Betelgeuse", md);
+        StringAssert.Contains("Звіт посадки", md);
         StringAssert.Contains("| Параметр |", md);
         StringAssert.Contains("УСПІШНА", md);
+        StringAssert.Contains("first stage", md);
     }
 
     [Test]
@@ -81,6 +82,36 @@ public class ResearchExporterTests
         string md = ResearchExporter.BuildComparisonMarkdown(SampleComparison());
         StringAssert.Contains("Переможець", md);
         StringAssert.Contains("Fuzzy Sugeno", md);
+        StringAssert.Contains("charts/success_rate.svg", md);
+    }
+
+    [Test]
+    public void BuildComparisonMarkdown_NoWinnerWhenAllZero()
+    {
+        var d = new ResearchExporter.ComparisonExportData
+        {
+            timestamp = "20260101_000000",
+            testsPerAlgorithm = 5
+        };
+        d.algorithms.Add(ResearchExporter.ComputeStats("PID",
+            new List<LandingMetrics> { Fail(9f), Fail(10f) }));
+        d.algorithms.Add(ResearchExporter.ComputeStats("Hybrid Neuro-Fuzzy",
+            new List<LandingMetrics> { Fail(8f), Fail(11f) }));
+        string md = ResearchExporter.BuildComparisonMarkdown(d);
+        StringAssert.Contains("не визначено", md);
+        StringAssert.DoesNotContain("## Переможець: **Hybrid", md);
+    }
+
+    [Test]
+    public void BuildSvgBarChart_ContainsBars()
+    {
+        var data = SampleComparison();
+        string svg = ResearchExporter.BuildSvgBarChart(data.algorithms, a => a.successRate,
+            "Success %", "%", 100f, true);
+        StringAssert.Contains("<rect", svg);
+        StringAssert.Contains("Success %", svg);
+        StringAssert.Contains("PID", svg);
+        StringAssert.Contains("Fuzzy", svg);
     }
 
     [Test]
@@ -150,6 +181,8 @@ public class ResearchExporterTests
         Assert.IsTrue(File.Exists(Path.Combine(dir, "01_SUMMARY.md")));
         Assert.IsTrue(File.Exists(Path.Combine(dir, "02_results.csv")));
         Assert.IsTrue(File.Exists(Path.Combine(dir, "03_results.json")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "charts", "success_rate.svg")));
+        Assert.IsTrue(File.Exists(Path.Combine(dir, "charts", "horizontal_miss.svg")));
         try { Directory.Delete(dir, true); } catch { /* ignore */ }
     }
 
