@@ -189,8 +189,8 @@ public class SplashScreenUI : MonoBehaviour
 
         var txtSub = MakeText(card.transform,
             UILocale.IsUK
-                ? "Автономна посадка  ·  GNC Mission Control"
-                : "Autonomous Landing  ·  GNC Mission Control",
+                ? "1-й ступінь  ·  Earth LZ  ·  Fuzzy + ML"
+                : "First stage  ·  Earth LZ  ·  Fuzzy + ML",
             13, ColMuted, FontStyles.Normal);
         var sr = txtSub.rectTransform;
         sr.anchorMin = new Vector2(0f, 0.40f);
@@ -231,8 +231,8 @@ public class SplashScreenUI : MonoBehaviour
     {
         var foot = MakeText(parent,
             UILocale.IsUK
-                ? "МКР 2026  ·  Soft-landing GNC  ·  v1.0.0"
-                : "MSc Thesis 2026  ·  Soft-landing GNC  ·  v1.0.0",
+                ? "МКР 2026  ·  автономна посадка 1-го ступеня  ·  v1.3.5"
+                : "MSc 2026  ·  autonomous first-stage landing  ·  v1.3.5",
             12, new Color(ColDim.r, ColDim.g, ColDim.b, 0.85f), FontStyles.Normal);
         var ft = foot.rectTransform;
         ft.anchorMin = new Vector2(0f, 0f);

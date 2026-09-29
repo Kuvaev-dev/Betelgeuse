@@ -7,6 +7,42 @@ using UnityEngine;
 public class ThesisCoverageTests
 {
     [Test]
+    public void Stage1Vehicle_MatchesThesisObject()
+    {
+        Assert.AreEqual(25600f, Stage1Vehicle.DryMassKg);
+        Assert.AreEqual(3.66f, Stage1Vehicle.DiameterM, 1e-3f);
+        Assert.AreEqual(9, Stage1Vehicle.EngineCount);
+        Assert.AreEqual(1, Stage1Vehicle.LandingEngineCount);
+        Assert.AreEqual(4, Stage1Vehicle.GridFinCount);
+        Assert.AreEqual(4, Stage1Vehicle.LandingLegCount);
+        Assert.AreEqual(282f, Stage1Vehicle.IspLandingS, 0.1f);
+        StringAssert.Contains("first stage", Stage1Vehicle.AnalogueName.ToLowerInvariant());
+    }
+
+    [Test]
+    public void HelpLocale_CoversCommitteeQuestions()
+    {
+        foreach (var key in new[]
+        {
+            "help_topic", "help_gnc", "help_algo", "help_limits", "help_defense",
+            "explain_a", "explain_b", "explain_c", "explain_d"
+        })
+        {
+            string uk = UILocale.T(key);
+            Assert.AreNotEqual(key, uk, key);
+            Assert.Greater(uk.Length, 20, key);
+        }
+        StringAssert.Contains("Sugeno", UILocale.T("help_algo"));
+        StringAssert.Contains("MLP", UILocale.T("help_algo"));
+        StringAssert.Contains("Hybrid", UILocale.T("help_algo"));
+        StringAssert.Contains("1+1", UILocale.T("help_algo"));
+        StringAssert.Contains("ANFIS", UILocale.T("help_limits"));
+        StringAssert.Contains("3.5", UILocale.T("help_landing"));
+        StringAssert.Contains("40", UILocale.T("help_landing"));
+        StringAssert.Contains("6.5", UILocale.T("help_landing"));
+    }
+
+    [Test]
     public void SoftLanding_Ideal_MeetsVelocityCriterion()
     {
         Assert.IsTrue(IdealLandingPresets.ProfileGuaranteesSoftLanding(out float v));
@@ -86,7 +122,7 @@ public class ThesisCoverageTests
             var hybrid = go.AddComponent<HybridController>();
             hybrid.fuzzy = fuzzy;
             hybrid.neural = neural;
-            neural.InstallIdealWeights();
+            neural.InstallIdealWeights(persist: false);
             neural.enableTraining = false;
 
             ILandingController[] all =

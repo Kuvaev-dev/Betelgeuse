@@ -192,7 +192,7 @@ public static class IdealLandingPresets
                     neural.maxDevFrac = 0.28f;
                     neural.gimbalBiasScale = 0.1f;
                     neural.mutationSigma = 0.03f;
-                    neural.InstallIdealWeights();
+                    neural.InstallIdealWeights(persist: false);
                 }
                 break;
 
@@ -210,7 +210,7 @@ public static class IdealLandingPresets
                     neural.residualWeight = 0.15f;
                     neural.maxDevFrac = 0.22f;
                     neural.gimbalBiasScale = 0.05f;
-                    neural.InstallIdealWeights();
+                    neural.InstallIdealWeights(persist: false);
                 }
                 if (hybrid != null)
                 {

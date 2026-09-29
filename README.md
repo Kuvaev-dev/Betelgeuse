@@ -1,6 +1,6 @@
 # Betelgeuse — інтелектуальна автономна посадка першого ступеня
 
-**v1.3.4** · дипломний GNC-симулятор (Unity URP) · GNC protocol v14
+**v1.3.5** · дипломний GNC-симулятор (Unity URP) · GNC protocol v14
 
 **Тема:** Розроблення інтелектуальної системи автономної посадки **першого ступеня** ракети-носія на основі нечіткої логіки та машинного навчання.
 
@@ -35,8 +35,8 @@ git clone https://github.com/Kuvaev-dev/Betelgeuse.git
 
 1. Unity **6000.x** (URP) → відкрити проєкт → `Assets/Scenes/SampleScene.unity` → **Play**
 2. На екрані: **Earth LZ** + **1-й ступінь** (ноги, grid fins, 9 сопел)
-3. **`M`** демо Hybrid Ideal · або **`4`** Hybrid → **`I`** Ideal → **`Space`**
-4. **`B`** — протокол захисту (seed 42) · **`P`** — MC A–D · **`E`** — експорт
+3. **`F1`** — тема МКР (відповіді комісії) · **`M`** демо Hybrid Ideal
+4. **`1–4`** метод · **`I`** Ideal · **`Space`** · **`B`** протокол · **`P`** MC · **`E`** експорт
 
 ## Режими керування
 
@@ -44,7 +44,7 @@ git clone https://github.com/Kuvaev-dev/Betelgeuse.git
 |---|--------|--------|
 | A | **PID** | Soft-landing `v=−√(2ah)` + PID |
 | B | **Fuzzy** | Zero-order **Sugeno** 5×5 |
-| C | **Neural** | MLP 5→8→2 + **ES (1+λ)** · `BestWeights_Neural.json` |
+| C | **Neural** | MLP 5→8→2 + **ES(1+1)** онлайн (λ масштабує σ) · `BestWeights_Neural.json` |
 | D | **Hybrid** ★ | Neuro-Fuzzy (Sugeno + MLP residual ON) |
 
 ## Критерії soft-landing

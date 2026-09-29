@@ -51,6 +51,8 @@ public class ResearchExporterTests
         StringAssert.Contains("| Параметр |", md);
         StringAssert.Contains("УСПІШНА", md);
         StringAssert.Contains("first stage", md);
+        StringAssert.Contains("Відповідність темі", md);
+        StringAssert.Contains("Sugeno", md);
     }
 
     [Test]
@@ -83,6 +85,8 @@ public class ResearchExporterTests
         StringAssert.Contains("Переможець", md);
         StringAssert.Contains("Fuzzy Sugeno", md);
         StringAssert.Contains("charts/success_rate.svg", md);
+        StringAssert.Contains("Відповідність темі", md);
+        StringAssert.Contains("Neuro-Fuzzy", md);
     }
 
     [Test]

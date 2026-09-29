@@ -34,7 +34,7 @@ public class SimRngAndHybridAblationTests
         var go = new GameObject("HybAblation");
         var fuzzy = go.AddComponent<FuzzyLandingController>();
         var neural = go.AddComponent<NeuralController>();
-        neural.InstallIdealWeights();
+        neural.InstallIdealWeights(persist: false);
         neural.enableTraining = false;
         var hybrid = go.AddComponent<HybridController>();
         hybrid.fuzzy = fuzzy;

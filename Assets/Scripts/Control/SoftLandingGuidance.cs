@@ -111,13 +111,19 @@ public static class SoftLandingGuidance
         float mass, float height, float maxDevFrac = 0.45f)
     {
         float w = Mathf.Clamp01(smartWeight);
-        if (height < 25f) w *= Mathf.Clamp01(height / 25f);
+        bool ideal = IdealLandingPresets.Active;
+        if (height < 25f)
+        {
+            float floor = ideal ? 0f : 0.38f;
+            w *= Mathf.Lerp(floor, 1f, Mathf.Clamp01(height / 25f));
+        }
 
         float blended = Mathf.Lerp(profileThrust, smartThrust, w);
         float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
         float hover = mass * g;
         float maxDev = hover * Mathf.Clamp(maxDevFrac, 0.1f, 1.2f);
-        if (height < 30f) maxDev = Mathf.Min(maxDev, hover * 0.22f);
+        if (height < 30f)
+            maxDev = Mathf.Min(maxDev, hover * (ideal ? 0.22f : 0.42f));
         return Mathf.Clamp(blended, profileThrust - maxDev, profileThrust + maxDev);
     }
 

@@ -5,7 +5,7 @@
 
 **Платформа:** Unity 6000.x (URP) · C#  
 **Тип:** симулятор GNC **1-го ступеня** · **Earth LZ**  
-**Версія:** **v1.3.4**
+**Версія:** **v1.3.5**
 
 ---
 
@@ -17,7 +17,7 @@
 |-----|----------|------|
 | **A** | Класичний **PID** | Еталон |
 | **B** | **Нечітка логіка** Sugeno-0 5×5 | Правила |
-| **C** | **Нейромережа** MLP 5→8→2 + ES(1+λ) | ML |
+| **C** | **Нейромережа** MLP 5→8→2 + ES(1+1) онлайн | ML |
 | **D** | **Гібрид Neuro-Fuzzy** (Sugeno + MLP residual) | ★ Тема |
 
 Мета — показати стійкість гібриду під збуреннями на **ділянці посадки Stage-1** (RTLS-style, вертикальна посадка на pad).
@@ -89,7 +89,7 @@ Ideal `[I]`, демо `[D]` і Monte-Carlo `[P]` — ділянка посадк
 
 Замкнений контур **без пілота** на ділянці посадки:
 
-1. **Navigation** — `NavigationEstimator`: IMU (accel+gyro), радіовисотомір, GPS-подібний; complementary. Plant лишається truth; закон керування читає оцінку. Ideal: NoiseScale=0 (pipeline все одно працює). MC: малий шум (0.2).  
+1. **Navigation** — `NavigationEstimator`: IMU (accel+gyro), радіовисотомір, GPS-подібний; complementary. Plant лишається truth; закон керування читає оцінку. Ideal і MC: NoiseScale=0 (pipeline працює; шум сенсорів у MC вимкнено заради paired fairness — збурення plant однакові для A–D).  
 2. **Guidance** — профіль зниження + бічне наведення до центру pad.  
 3. **Control** — TVC gimbal + throttle.
 
@@ -97,7 +97,7 @@ Ideal `[I]`, демо `[D]` і Monte-Carlo `[P]` — ділянка посадк
 |-------|--------|
 | **A PID** | Hover FF + PID на `v_target` |
 | **B Fuzzy** | Sugeno 5×5 + soft-landing blend |
-| **C Neural** | MLP residual + ES; ваги `BestWeights_Neural.json` |
+| **C Neural** | MLP residual + ES(1+1) онлайн; ваги `BestWeights_Neural.json` |
 | **D Hybrid** | Sugeno + MLP residual → один blend (за замовч. residual **ON**) |
 
 Ablation: вимкнути Hybrid residual → Hybrid ≈ Fuzzy-only.  
@@ -131,4 +131,4 @@ Ablation: вимкнути Hybrid residual → Hybrid ≈ Fuzzy-only.
 
 ## 8. Версія
 
-**v1.3.4** — MC SVG charts, кнопка протоколу захисту **B**, узгоджені Stage-1 підписи, Hybrid residual ON, F9-class 1-й ступінь, Earth LZ.
+**v1.3.5** — F1 відповідає на питання комісії (тема / GNC / A–D / обмеження / сценарій захисту); навчання ES видиме в UI; реалістичний вітер (fins по air-relative) і запазнення TVC/тяги; Ideal [I] лишається чистим номіналом.

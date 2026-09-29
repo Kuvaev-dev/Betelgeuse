@@ -36,7 +36,7 @@ public class MonteCarloFairnessTests
         hybrid.neural = neural;
         hybrid.useNeuralResidual = true;
         neural.enableTraining = false;
-        neural.InstallIdealWeights();
+        neural.InstallIdealWeights(persist: false);
 
         var rp = go.AddComponent<RocketPhysics>();
         rp.parameters = p;
@@ -65,7 +65,7 @@ public class MonteCarloFairnessTests
         float yaw = SimRng.Range(0f, Mathf.PI * 2f);
         float wMag = w * SimRng.Range(0.85f, 1.0f);
         var ambient = new Vector3(Mathf.Cos(yaw) * wMag, 0f, Mathf.Sin(yaw) * wMag);
-        rp.state.velocity += ambient * 0.15f;
+        rp.state.velocity += ambient * 0.32f;
         rp.windVelocity = ambient;
         rp.applyContinuousWind = true;
 

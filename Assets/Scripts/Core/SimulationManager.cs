@@ -372,7 +372,7 @@ public class SimulationManager : MonoBehaviour
             float yaw = SimRng.Range(0f, Mathf.PI * 2f);
             float wMag = w * SimRng.Range(0.85f, 1.0f);
             var ambient = new Vector3(Mathf.Cos(yaw) * wMag, 0f, Mathf.Sin(yaw) * wMag);
-            rocketPhysics.state.velocity += ambient * 0.15f;
+            rocketPhysics.state.velocity += ambient * 0.32f;
             rocketPhysics.windVelocity = continuousWind ? ambient : Vector3.zero;
             rocketPhysics.applyContinuousWind = continuousWind;
         }
@@ -382,17 +382,22 @@ public class SimulationManager : MonoBehaviour
             rocketPhysics.applyContinuousWind = false;
         }
 
-        if (enableNoise)
+        if (massVariationPercent > 0.05f)
         {
             float massNoise = 1f + SimRng.Range(-massVariationPercent, massVariationPercent) / 100f;
             rocketPhysics.state.currentFuelMass = Mathf.Max(800f, rocketPhysics.state.currentFuelMass * massNoise);
+        }
 
+        if (angleVariationDegrees > 0.05f)
+        {
             float ax = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
             float az = SimRng.Range(-angleVariationDegrees, angleVariationDegrees);
             rocketPhysics.state.rotation = Quaternion.Normalize(
                 rocketPhysics.state.rotation * Quaternion.Euler(ax, 0f, az));
+        }
 
-            // Бічний offset — головний диференціатор (PID слабкий / Hybrid сильний lateral)
+        if (enableNoise)
+        {
             float jit = Mathf.Max(0f, positionJitterMeters);
             if (jit > 0.1f)
             {

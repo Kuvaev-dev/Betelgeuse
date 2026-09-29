@@ -257,7 +257,7 @@ public class SimulationIntegrationTests
             rp.hybridController.useNeuralResidual = true;
         if (rp.neuralController != null)
         {
-            rp.neuralController.InstallIdealWeights();
+            rp.neuralController.InstallIdealWeights(persist: false);
             rp.neuralController.enableTraining = false;
         }
 

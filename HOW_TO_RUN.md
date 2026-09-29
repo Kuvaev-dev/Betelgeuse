@@ -23,12 +23,12 @@ Editor: **Betelgeuse → Validate Runtime Assets**.
 
 | Крок | Дія |
 |------|-----|
+| 0 | **`F1`** — тема МКР, GNC, A–D, обмеження, сценарій (відповіді комісії) |
 | 1 | **`M`** / **ДЕМО** — Hybrid + Ideal IC (Stage-1 only) |
 | 2 | Після touchdown камера **на ступені** + лінія шляху |
-| 3 | **`E`** — експорт звіту (SVG + CSV + MD) |
-| 4 | **`B`** — протокол захисту v14 → **`P`** — MC A–D (paired seeds) |
-
-**F1** — довідка (об'єкт: 1-й ступінь · Earth LZ · NAV).
+| 3 | **`1–4`** — кожен метод (у панелі — що це науково) · опційно **`I`** + **Space** |
+| 4 | **`E`** — експорт звіту (SVG + CSV + MD, блок «Відповідність темі») |
+| 5 | **`B`** — протокол захисту v14 → **`P`** — MC A–D (paired seeds) |
 
 ## Ideal soft-landing
 
@@ -54,7 +54,8 @@ Editor: **Betelgeuse → Validate Runtime Assets**.
 
 1. Тогл **Навчання NN** ON.  
 2. Режим **3** Neural (або Hybrid) → кілька **Space**.  
-3. Console: `[NN-ES] NEW best…` · файл `BestWeights_Neural.json`.
+3. Після посадки: ES(1+1) — краще зберігає ваги, гірше відкат. Файл `BestWeights_Neural.json`.  
+4. **I** (Ideal) більше **не затирає** натренований файл (ваги ideal лише в RAM).
 
 ## Критерії
 

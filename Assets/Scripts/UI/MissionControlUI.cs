@@ -49,7 +49,7 @@ public class MissionControlUI : MonoBehaviour
     /// <summary>Переживає RebuildUi — слайдери/інпути умов ніколи не знищуються → без миготіння NumField.</summary>
     GameObject conditionSectionGo;
     float conditionSectionHeight;
-    const int kSliderLook = 4;
+    const int kSliderLook = 5;
     int conditionLookVer;
     readonly List<(TMP_Text label, TMP_Text unit, string labelKey, string unitKey)> conditionLabelBindings = new();
     readonly List<(Toggle toggle, TMP_Text label, string key)> conditionToggleBindings = new();
@@ -64,6 +64,7 @@ public class MissionControlUI : MonoBehaviour
     /// <summary>&gt;0 після B (DefenseBaseline): ApplySettings/P не перетирають protocol jitter.</summary>
     float protocolJitterOverride = -1f;
     TMP_Text txtSeedVal;
+    TMP_Text txtNnStatus;
     TMP_Text txtHideBtn;
     TMP_Text txtLangBtn;
     TMP_Text txtThemeBtn;
@@ -174,6 +175,8 @@ public class MissionControlUI : MonoBehaviour
         WireLegacyDashboard();
         LoadUserSettingsIntoUi();
         WireSettingsPersistence();
+        NeuralController.Trained -= OnNeuralTrained;
+        NeuralController.Trained += OnNeuralTrained;
         built = true;
     }
 
@@ -190,6 +193,7 @@ public class MissionControlUI : MonoBehaviour
         SaveUserSettingsFromUi();
         UILocale.OnLanguageChanged -= OnLanguageChanged;
         UiTheme.OnThemeChanged -= OnThemeChanged;
+        NeuralController.Trained -= OnNeuralTrained;
         if (Instance == this) Instance = null;
     }
 
@@ -326,6 +330,7 @@ public class MissionControlUI : MonoBehaviour
                 b.label.color = C_Text;
             }
         }
+        RefreshNnStatus();
     }
 
     void SyncAllConditionFieldsFromSliders()
@@ -1026,16 +1031,23 @@ public class MissionControlUI : MonoBehaviour
         s.onValueChanged.AddListener(handler);
     }
 
-    void ClearProtocolOverride()
+    void ClearProtocolOverride() => UserEditedConditions();
+
+    void UserEditedConditions()
     {
         if (loadingSettings) return;
         protocolJitterOverride = -1f;
+        if (IdealLandingPresets.Active)
+        {
+            IdealLandingPresets.ClearActive();
+            NotifyInfo(UILocale.T("msg_ideal_cleared"));
+        }
     }
 
     void OnHeightChanged(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.StartHeight = v;
         UserSettings.Save();
         ApplySettings();
@@ -1044,7 +1056,7 @@ public class MissionControlUI : MonoBehaviour
     void OnDescentChanged(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.StartDescentSpeed = v;
         UserSettings.Save();
         ApplySettings();
@@ -1053,7 +1065,7 @@ public class MissionControlUI : MonoBehaviour
     void OnTilt0Changed(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.StartTilt = v;
         UserSettings.Save();
         ApplySettings();
@@ -1062,7 +1074,7 @@ public class MissionControlUI : MonoBehaviour
     void OnMassNoiseChanged(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.MassNoise = v;
         UserSettings.Save();
         ApplySettings();
@@ -1071,7 +1083,7 @@ public class MissionControlUI : MonoBehaviour
     void OnAngleNoiseChanged(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.AngleNoise = v;
         UserSettings.Save();
         ApplySettings();
@@ -1080,6 +1092,7 @@ public class MissionControlUI : MonoBehaviour
     void OnResidualChanged(bool on)
     {
         if (loadingSettings) return;
+        UserEditedConditions();
         UserSettings.HybridResidual = on;
         UserSettings.Save();
         if (rocket?.hybridController != null)
@@ -1092,7 +1105,7 @@ public class MissionControlUI : MonoBehaviour
     void OnSeedChanged(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         int s = Mathf.RoundToInt(v);
         UserSettings.ExperimentSeed = s;
         UserSettings.Save();
@@ -1105,7 +1118,7 @@ public class MissionControlUI : MonoBehaviour
     void OnWindChanged(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.Wind = v;
         UserSettings.Save();
         ApplySettings();
@@ -1114,7 +1127,7 @@ public class MissionControlUI : MonoBehaviour
     void OnTestsChanged(float v)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.Tests = Mathf.RoundToInt(v);
         UserSettings.Save();
         ApplySettings();
@@ -1142,7 +1155,7 @@ public class MissionControlUI : MonoBehaviour
     void OnNoiseChanged(bool on)
     {
         if (loadingSettings) return;
-        ClearProtocolOverride();
+        UserEditedConditions();
         UserSettings.Noise = on;
         UserSettings.Save();
         ApplySettings();
@@ -1151,9 +1164,32 @@ public class MissionControlUI : MonoBehaviour
     void OnTrainChanged(bool on)
     {
         if (loadingSettings) return;
+        UserEditedConditions();
         UserSettings.Train = on;
         UserSettings.Save();
         ApplySettings();
+        RefreshNnStatus();
+        NotifyInfo(on ? UILocale.T("msg_train_on") : UILocale.T("msg_train_off"));
+    }
+
+    void OnNeuralTrained(NeuralController.EsTrainStep step)
+    {
+        if (!step.Applied) return;
+        RefreshNnStatus();
+        NotifyInfo(step.Improved
+            ? string.Format(UILocale.T("msg_nn_better"), step.Generation, step.Cost, step.Sigma)
+            : string.Format(UILocale.T("msg_nn_worse"), step.Generation, step.Cost, step.BestCost));
+    }
+
+    void RefreshNnStatus()
+    {
+        if (txtNnStatus == null) return;
+        var nn = rocket != null ? rocket.neuralController : null;
+        bool on = nn != null ? nn.enableTraining : (trainToggle != null && trainToggle.isOn);
+        txtNnStatus.text = nn != null
+            ? nn.StatusLine(UILocale.IsUK)
+            : UILocale.T(on ? "nn_status_on" : "nn_status_off");
+        txtNnStatus.color = on ? C_Amber : C_Muted;
     }
 
     void SaveUserSettingsFromUi()
@@ -2260,6 +2296,7 @@ public class MissionControlUI : MonoBehaviour
         UserSettings.ControlMode = (int)mode;
         UserSettings.Save();
         NotifyInfo(string.Format(UILocale.T("msg_selected"), UILocale.ModeName(mode))
+                   + "\n" + UILocale.ModeExplain(mode)
                    + "\n" + UILocale.T("ins_ideal_hint"));
     }
 
@@ -2749,7 +2786,13 @@ public class MissionControlUI : MonoBehaviour
         string dist = UILocale.IsUK
             ? $"Earth LZ · 1-й ступінь · h={h0:F0} м · вітер≈{wind:F0}"
             : $"Earth LZ · first stage · h={h0:F0} m · wind≈{wind:F0}";
+        bool trainOn = rocket.neuralController != null && rocket.neuralController.enableTraining
+            && (rocket.controlMode == RocketPhysics.ControlMode.Neural
+                || rocket.controlMode == RocketPhysics.ControlMode.Hybrid);
+        if (trainOn)
+            dist += "\n" + UILocale.T("msg_train_flight");
         NotifyInfo(string.Format(UILocale.T("msg_started"), UILocale.ModeName(rocket.controlMode)) + "\n" + dist);
+        RefreshNnStatus();
     }
 
     /// <summary>
@@ -3278,8 +3321,8 @@ public class MissionControlUI : MonoBehaviour
         dimBtn.transition = Selectable.Transition.None;
         dimBtn.onClick.AddListener(() => SetHelpVisible(false));
 
-        const float cardW = 560f;
-        const float cardH = 468f;
+        const float cardW = 580f;
+        const float cardH = 540f;
         const float headerH = 52f;
         const float footerH = 52f;
         const float padX = 18f;
@@ -3402,14 +3445,14 @@ public class MissionControlUI : MonoBehaviour
         // Об'єкт місії — soft banner
         var objBg = CreatePanel("HelpObjectBg", content.transform, C_PanelSoft);
         objBg.GetComponent<Image>().raycastTarget = false;
-        PinTL(objBg.GetComponent<RectTransform>(), rowPad, y, inner - rowPad * 2f, 40f);
+        PinTL(objBg.GetComponent<RectTransform>(), rowPad, y, inner - rowPad * 2f, 44f);
         var objTxt = CreateText(objBg.transform, UILocale.T("help_object"), 12, C_Text);
         objTxt.textWrappingMode = TextWrappingModes.Normal;
         objTxt.alignment = TextAlignmentOptions.MidlineLeft;
         objTxt.overflowMode = TextOverflowModes.Ellipsis;
         objTxt.raycastTarget = false;
         StretchFull(objTxt.rectTransform, 12, 6, 12, 6);
-        y -= 48f;
+        y -= 52f;
 
         void SecHeader(string key)
         {
@@ -3468,7 +3511,13 @@ public class MissionControlUI : MonoBehaviour
             y -= h + 4f;
         }
 
-        // Рядки = існуюча довідка (без вигаданих хоткеїв)
+        SecHeader("help_sec_topic");
+        NoteLine("help_topic", 72f);
+        SecHeader("help_sec_gnc");
+        NoteLine("help_gnc", 72f);
+        SecHeader("help_sec_algo");
+        NoteLine("help_algo", 88f);
+
         SecHeader("help_sec_controls");
         KeyRow("1–4", "help_k_modes");
         KeyRow("Space · Esc", "help_k_run");
@@ -3483,7 +3532,13 @@ public class MissionControlUI : MonoBehaviour
         NoteLine("help_landing", 28f);
 
         SecHeader("help_sec_research");
-        NoteLine("help_research", 56f);
+        NoteLine("help_research", 72f);
+
+        SecHeader("help_sec_limits");
+        NoteLine("help_limits", 56f);
+
+        SecHeader("help_sec_defense");
+        NoteLine("help_defense", 56f);
 
         contRt.sizeDelta = new Vector2(0f, Mathf.Max(10f, -y + 12f));
 
@@ -4455,6 +4510,13 @@ public class MissionControlUI : MonoBehaviour
         // Тримати ПУ ракети синхронними в idle (прев’ю на наступний Start / зміну режиму)
         if (rocket != null && !rocket.simulationArmed && (sim == null || !sim.IsExperimentRunning))
             ApplyExperimentInitialConditions();
+        else if (rocket != null && rocket.simulationArmed && !rocket.state.simulationFinished
+                 && (sim == null || !sim.IsExperimentRunning))
+        {
+            float wLive = windSlider != null ? windSlider.value : UserSettings.Wind;
+            rocket.ApplyLiveWind(wLive);
+        }
+        RefreshNnStatus();
     }
 
     /// <summary>Застосувати гнучкі ПУ з UI/налаштувань у SimulationParameters.</summary>
@@ -4483,12 +4545,14 @@ public class MissionControlUI : MonoBehaviour
             sim.startTiltDeg = tilt;
         }
 
-        // Прев’ю припаркованої ракети на нових ПУ, коли не летить
-        if (!rocket.simulationArmed && !rocket.state.simulationFinished)
+        if (!rocket.simulationArmed)
         {
             rocket.state.position = p.startPosition;
             rocket.state.velocity = p.startVelocity;
             rocket.state.rotation = Quaternion.Euler(p.startEulerAngles);
+            rocket.state.angularVelocity = Vector3.zero;
+            rocket.state.isLanded = false;
+            rocket.state.simulationFinished = false;
             rocket.SyncTransformWithState();
         }
     }
@@ -5072,25 +5136,7 @@ public class MissionControlUI : MonoBehaviour
             sub.raycastTarget = false;
         }
 
-        btn.onClick.AddListener(() =>
-        {
-            if (rocket == null) return;
-            if (sim != null && sim.IsExperimentRunning)
-            {
-                NotifyInfo(UILocale.T("msg_cancel_first"));
-                return;
-            }
-            HideLandingResult();
-            ClearGraphs();
-            ResetFlightPeaks();
-            overviewCam = false;
-            ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
-            rocket.PrepareMode(mode);
-            RefreshCamLabel();
-            string nice = UILocale.ModeName(mode);
-            NotifyInfo(string.Format(UILocale.T("msg_selected"), nice)
-                       + "\n" + UILocale.T("ins_ideal_hint"));
-        });
+        btn.onClick.AddListener(() => SelectMode(mode));
         return btn;
     }
 
@@ -5201,6 +5247,7 @@ public class MissionControlUI : MonoBehaviour
             massNoiseSlider = angleNoiseSlider = liveSpeedSlider = null;
             testsSlider = timeScaleSlider = seedSlider = null;
             noiseToggle = trainToggle = residualToggle = null;
+            txtNnStatus = null;
         }
         bool fresh = conditionSectionGo == null;
 
@@ -5233,6 +5280,14 @@ public class MissionControlUI : MonoBehaviour
             noiseToggle = ToggleAt(sec, pad, ly, halfW, 26f, UILocale.T("tg_noise"), UserSettings.Noise, "tg_noise");
             trainToggle = ToggleAt(sec, pad + halfW + gap, ly, halfW, 26f, UILocale.T("tg_train"), UserSettings.Train, "tg_train");
             ly -= 32f;
+
+            txtNnStatus = CreateText(sec, "", 10, C_Muted);
+            txtNnStatus.gameObject.name = "NnStatus";
+            txtNnStatus.textWrappingMode = TextWrappingModes.Normal;
+            txtNnStatus.overflowMode = TextOverflowModes.Ellipsis;
+            txtNnStatus.alignment = TextAlignmentOptions.TopLeft;
+            PinTL(txtNnStatus.rectTransform, pad, ly, inner, 36f);
+            ly -= 40f;
 
             SectionHeader(sec, "h_mc", ref ly, pad, inner);
             txtTestsVal = SliderLine(sec, UILocale.T("sl_tests"), UILocale.T("sl_tests_u"),
@@ -5287,6 +5342,8 @@ public class MissionControlUI : MonoBehaviour
                 var inp = seedSlider.transform.parent.GetComponentInChildren<TMP_InputField>(true);
                 txtSeedVal = inp != null ? inp.textComponent : txtSeedVal;
             }
+            var nnGo = conditionSectionGo.transform.Find("NnStatus");
+            if (nnGo != null) txtNnStatus = nnGo.GetComponent<TMP_Text>();
             RefreshConditionLabels();
         }
 

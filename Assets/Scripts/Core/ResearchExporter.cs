@@ -51,8 +51,8 @@ public static class ResearchExporter
             "Розроблення інтелектуальної системи автономної посадки першого ступеня ракети-носія " +
             "на основі нечіткої логіки та машинного навчання (Earth LZ, після відділення)";
         public string environment = "Earth LZ";
-        public string vehicle = "first stage";
-        public string phase = "landing after separation";
+        public string vehicle = "1-й ступінь (first stage)";
+        public string phase = "посадка після відділення / landing after separation";
     }
 
     public sealed class ComparisonExportData
@@ -66,15 +66,15 @@ public static class ResearchExporter
         public float positionJitterMeters = 18f;
         public bool continuousWind = true;
         public int experimentSeed = 42;
-        public int protocolVersion = 2;
+        public int protocolVersion = DefenseBaseline.ProtocolVersion;
         public bool pairedSeeds = true;
         public bool hybridResidual = true;
         public float startHeight = 1800f;
         public float startDescentSpeed = 72f;
         public float startTiltDeg = 3.5f;
         public string environment = "Earth LZ";
-        public string vehicle = "first stage";
-        public string phase = "landing after separation";
+        public string vehicle = "1-й ступінь (first stage)";
+        public string phase = "посадка після відділення / landing after separation";
         public List<AlgoStats> algorithms = new();
 
         /// <summary>True, якщо активний будь-який канал збурень (для формулювань звіту).</summary>
@@ -426,6 +426,19 @@ public static class ResearchExporter
         return sb.ToString();
     }
 
+    public static string ThesisMappingMarkdown()
+    {
+        return
+            "**Відповідність темі МКР**\n\n" +
+            "- **Автономія:** `NavigationEstimator` (IMU + радіовисотомір + GPS-подібний, complementary) → " +
+            "`SoftLandingGuidance` → `ILandingController` A–D. Закон читає оцінку NAV.\n" +
+            "- **Нечітка логіка:** Sugeno-0 5×5 (`FuzzyLandingController`).\n" +
+            "- **Машинне навчання:** MLP 5→8→2 + ES(1+1) онлайн (`NeuralController`; λ масштабує σ, не паралельна популяція).\n" +
+            "- **Інтелектуальна система:** Hybrid Neuro-Fuzzy residual (`HybridController`; OFF = ablation Fuzzy-only).\n" +
+            "- **Об'єкт:** 1-й ступінь F9-class (25.6 т, Ø 3.66 м, 9 РРД / посадка 1, 4 fins, 4 ноги), Earth LZ, після відділення.\n" +
+            "- **Не моделюється:** орбіта, 2/3 ступені, Місяць, industrial Kalman/INS, CFD, сертифікація. Гібрид ≠ ANFIS.";
+    }
+
     public static string BuildLandingMarkdown(LandingExportData d, string packFolder = null)
     {
         var m = d.metrics;
@@ -450,6 +463,8 @@ public static class ResearchExporter
         sb.AppendLine("### Тема роботи");
         sb.AppendLine();
         sb.AppendLine(d.thesisTopic);
+        sb.AppendLine();
+        sb.AppendLine(ThesisMappingMarkdown());
         sb.AppendLine();
         sb.AppendLine("## 1. Критерії soft-landing");
         sb.AppendLine();
@@ -887,6 +902,8 @@ public static class ResearchExporter
         sb.AppendLine("# Порівняння алгоритмів GNC (Monte-Carlo)");
         sb.AppendLine();
         sb.AppendLine("**Середовище:** Earth LZ · **Об'єкт:** first stage · **Фаза:** landing after separation.");
+        sb.AppendLine();
+        sb.AppendLine(ThesisMappingMarkdown());
         sb.AppendLine();
         sb.AppendLine("Один експеримент: кожен алгоритм (PID / Fuzzy / Neural / Hybrid) на **ділянці посадки 1-го ступеня** (N разів).");
         sb.AppendLine("**Paired seeds** — trial `i` має однакові збурення для всіх алгоритмів (чесне порівняння).");

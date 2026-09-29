@@ -78,10 +78,11 @@ public class RocketPhysics : MonoBehaviour
     const float InertiaFactor = 55f;
     const float MaxOmega = 0.85f; // rad/s
     const float MaxOmegaTerminal = 0.32f; // rad/s — швидше гасити rock перед pad
-    // Lumped Cd*S = booster body + 4 grid fins (F9-class analogue). Product unchanged.
-    const float Cd = 0.85f;
-    const float RefArea = 8.5f;
+    const float Cd = 1.05f;
+    const float RefArea = 10.5f; // π (Ø 3.66/2)² body
     const float G0 = 9.80665f;
+    const float ThrottleSlewFracPerSec = 0.65f;
+    const float GimbalRateDegPerSec = 12f;
 
     void Start()
     {
@@ -363,7 +364,10 @@ public class RocketPhysics : MonoBehaviour
         gCmd.x = Mathf.Clamp(gCmd.x, -gLim, gLim);
         gCmd.y = 0f;
         gCmd.z = Mathf.Clamp(gCmd.z, -gLim, gLim);
-        state.thrustDirection = (Quaternion.Euler(gCmd) * Vector3.up).normalized;
+        Vector3 desiredDir = (Quaternion.Euler(gCmd) * Vector3.up).normalized;
+        if (desiredDir.sqrMagnitude < 1e-6f) desiredDir = Vector3.up;
+        Vector3 fromDir = state.thrustDirection.sqrMagnitude > 0.01f
+            ? state.thrustDirection.normalized : Vector3.up;
 
         // Бічне mid-course; нижче ~35 м — upright (алгоритми різняться через lat scale)
         if (tilt < 28f && h > 35f)
@@ -375,10 +379,27 @@ public class RocketPhysics : MonoBehaviour
                 if (h < 100f) lat *= 0.55f;
             }
             ApplyLateralGuidance(lat, in ctx);
+            if (state.thrustDirection.sqrMagnitude > 0.01f)
+                desiredDir = state.thrustDirection.normalized;
         }
 
-        state.currentThrust = Mathf.Clamp(thrustCmd, 0f, state.maxThrust);
-        if (state.currentFuelMass <= 0f) state.currentThrust = 0f;
+        if (idealLike)
+            state.thrustDirection = desiredDir;
+        else
+        {
+            state.thrustDirection = Vector3.RotateTowards(
+                fromDir, desiredDir, GimbalRateDegPerSec * Mathf.Deg2Rad * dt, 0f).normalized;
+        }
+
+        float thrustTarget = Mathf.Clamp(thrustCmd, 0f, state.maxThrust);
+        if (state.currentFuelMass <= 0f) thrustTarget = 0f;
+        if (idealLike)
+            state.currentThrust = thrustTarget;
+        else
+        {
+            float slew = Mathf.Max(1f, state.maxThrust) * ThrottleSlewFracPerSec;
+            state.currentThrust = Mathf.MoveTowards(state.currentThrust, thrustTarget, slew * dt);
+        }
     }
 
     /// <summary>
@@ -421,10 +442,11 @@ public class RocketPhysics : MonoBehaviour
         // Steady wind: тримати lean проти дрейфу навіть при малому miss
         if (!ideal && vh > 2.5f && h > 50f) kVel *= 1.15f;
 
-        float lim = ideal ? 3.2f : 4.5f;
-        if (h < 200f) lim = ideal ? 2.6f : 3.6f;
-        if (h < 100f) lim = ideal ? 1.8f : 2.6f;
-        if (h < 55f)  lim = ideal ? 1.1f : 1.8f;
+        float lim = ideal ? 3.2f : 4.2f;
+        if (h < 200f) lim = ideal ? 2.6f : 3.4f;
+        if (h < 100f) lim = ideal ? 1.8f : 2.5f;
+        if (h < 55f)  lim = ideal ? 1.1f : 1.7f;
+        lim *= Mathf.Clamp(scale, 0.55f, 1.25f);
         if (tilt > 10f) lim *= Mathf.Lerp(1f, 0.5f, (tilt - 10f) / 12f);
 
         float gx = Mathf.Clamp(+(kPos * pz + kVel * vz), -lim, lim);
@@ -496,23 +518,22 @@ public class RocketPhysics : MonoBehaviour
         float mass = Mathf.Max(1f, state.TotalMass);
         acc += thrustWorld / mass;
 
-        // опір відносно повітря (вкл. вітер)
-        Vector3 airRel = vel - (applyContinuousWind ? windVelocity : Vector3.zero);
+        Vector3 wind = EffectiveWind();
+        Vector3 airRel = vel - wind;
         float density = AtmosphereModel.GetDensity(pos.y);
         float dragMag = 0.5f * density * airRel.sqrMagnitude * Cd * RefArea;
         if (airRel.sqrMagnitude > 0.01f)
             acc -= airRel.normalized * (dragMag / mass);
 
-        // Grid fins: помірний aero-damp Vh (не «безкоштовний» soft-landing, не нуль)
-        // Ефективність ∝ ρ; нижче ~60 м fins на посадці майже складені
+        // Grid fins: сила по air-relative (зносить за вітром). Нижче ~60 м складені.
         float hAgl = pos.y - EnvironmentBuilder.PadSurfaceY;
         if (hAgl > 60f && hAgl < 2200f)
         {
             float fin = density / 1.225f;
-            float deploy = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((hAgl - 60f) / 100f));
-            float kFin = (0.055f + 0.05f * fin) * deploy;
-            acc.x -= vel.x * kFin;
-            acc.z -= vel.z * kFin;
+            float deploy = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((hAgl - 60f) / 80f));
+            float kFin = (0.09f + 0.08f * fin) * deploy;
+            Vector3 airH = new Vector3(airRel.x, 0f, airRel.z);
+            acc -= airH * kFin;
         }
 
         return acc;
@@ -553,7 +574,7 @@ public class RocketPhysics : MonoBehaviour
             string algorithm = controlMode switch
             {
                 ControlMode.Fuzzy => "Fuzzy Logic (Sugeno-0)",
-                ControlMode.Neural => "Neural Network (ES 1+λ)",
+                ControlMode.Neural => "Neural Network (ES 1+1)",
                 ControlMode.Hybrid => "Hybrid Neuro-Fuzzy",
                 _ => "PID"
             };
@@ -611,6 +632,8 @@ public class RocketPhysics : MonoBehaviour
 
         SyncFixedTimestep();
         InitializeSimulation();
+        if (!batchDrivenTicks && neuralController != null)
+            neuralController.BeginEpisode();
         if (!batchDrivenTicks)
         {
             if (logger != null) logger.Initialize();
@@ -672,8 +695,7 @@ public class RocketPhysics : MonoBehaviour
             float yaw = SimRng.Range(0f, Mathf.PI * 2f);
             float wMag = windStrength * SimRng.Range(0.85f, 1.0f);
             windVelocity = new Vector3(Mathf.Cos(yaw) * wMag, 0f, Mathf.Sin(yaw) * wMag);
-            // Короткий порив ~15% швидкості вітру (не 0.45× повного діапазону)
-            state.velocity += windVelocity * 0.15f;
+            state.velocity += windVelocity * 0.32f;
             applyContinuousWind = true;
         }
         else
@@ -682,24 +704,63 @@ public class RocketPhysics : MonoBehaviour
             applyContinuousWind = false;
         }
 
-        if (pendingRandomize)
+        if (pendingMassVar > 0.05f)
         {
             float massNoise = 1f + SimRng.Range(-pendingMassVar, pendingMassVar) / 100f;
             state.currentFuelMass = Mathf.Max(500f, state.currentFuelMass * massNoise);
+        }
 
+        if (pendingAngleVar > 0.05f)
+        {
             float ax = SimRng.Range(-pendingAngleVar, pendingAngleVar);
             float az = SimRng.Range(-pendingAngleVar, pendingAngleVar);
             state.rotation = Quaternion.Normalize(state.rotation * Quaternion.Euler(ax, 0f, az));
+        }
 
-            if (pendingJitter > 0.1f)
-            {
-                state.position.x += SimRng.Range(-pendingJitter, pendingJitter);
-                state.position.z += SimRng.Range(-pendingJitter, pendingJitter);
-            }
+        if (pendingRandomize && pendingJitter > 0.1f)
+        {
+            state.position.x += SimRng.Range(-pendingJitter, pendingJitter);
+            state.position.z += SimRng.Range(-pendingJitter, pendingJitter);
         }
 
         SyncTransformWithState();
         AlignNavigationToTruth();
+    }
+
+    Vector3 EffectiveWind()
+    {
+        if (!applyContinuousWind || windVelocity.sqrMagnitude < 1e-4f)
+            return Vector3.zero;
+        if (IdealLandingPresets.Active)
+            return windVelocity;
+        float t = state.time;
+        float a = 0.30f * windVelocity.magnitude;
+        Vector3 along = windVelocity.normalized;
+        Vector3 side = Vector3.Cross(along, Vector3.up);
+        if (side.sqrMagnitude < 1e-6f) side = Vector3.forward;
+        else side.Normalize();
+        return windVelocity
+            + along * (a * Mathf.Sin(t * 0.85f))
+            + side * (a * 0.75f * Mathf.Sin(t * 1.37f + 0.6f));
+    }
+
+    /// <summary>Живе оновлення вітру зі слайдера (під час польоту).</summary>
+    public void ApplyLiveWind(float windStrength)
+    {
+        windStrength = Mathf.Max(0f, windStrength);
+        applyContinuousWind = windStrength > 0.05f;
+        if (!applyContinuousWind)
+        {
+            windVelocity = Vector3.zero;
+            return;
+        }
+        if (windVelocity.sqrMagnitude < 0.01f)
+        {
+            float yaw = SimRng.Range(0f, Mathf.PI * 2f);
+            windVelocity = new Vector3(Mathf.Cos(yaw) * windStrength, 0f, Mathf.Sin(yaw) * windStrength);
+        }
+        else
+            windVelocity = windVelocity.normalized * windStrength;
     }
 
     /// <summary>Лише вибір режиму — без старту. Показує пакет на pad (idle Stack visual).</summary>

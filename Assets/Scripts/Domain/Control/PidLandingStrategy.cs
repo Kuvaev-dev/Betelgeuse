@@ -60,8 +60,7 @@ public sealed class PidLandingStrategy : ILandingController
         float maxT = ctx.MaxThrust > 0.1f ? ctx.MaxThrust : hover * 3f;
         thrust = Mathf.Clamp(thrust, hover * 0.15f, maxT);
 
-        // Профіль лише біля pad (інакше PID ≈ ідеальний soft-landing завжди)
-        if (h < 30f)
+        if (h < 30f && IdealLandingPresets.Active)
         {
             float profile = SoftLandingGuidance.ProfileThrust(h, ctx.VerticalVelocity, mass);
             float t = 1f - Mathf.Clamp01(h / 30f);

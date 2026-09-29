@@ -2,20 +2,20 @@ using UnityEngine;
 using System.IO;
 
 /// <summary>
-/// Режим C — MLP 5→8→2 + ES(1+λ). Ваги: BestWeights_Neural.json.
+/// Режим C — MLP 5→8→2 + ES(1+1) онлайн (λ масштабує σ). Ваги: BestWeights_Neural.json.
 /// Реалізує <see cref="ILandingController"/>.
 /// </summary>
 public class NeuralController : MonoBehaviour, ILandingController
 {
     public RocketPhysics.ControlMode Mode => RocketPhysics.ControlMode.Neural;
-    public string DisplayName => "Neural ES";
+    public string DisplayName => "Neural ES(1+1)";
     public bool IsAvailable => isActive && enabled;
 
     public const int InputSize = 5;
     public const int HiddenSize = 8;
     public const int OutputSize = 2;
 
-    [Header("Neural Network (ES 1+λ)")]
+    [Header("Neural Network (ES 1+1)")]
     public bool isActive = true;
     /// <summary>ES online-мутація після посадки. Off за замовч. — стабільне демо; увімкнути для дослідження навчання.</summary>
     public bool enableTraining = false;
@@ -31,6 +31,20 @@ public class NeuralController : MonoBehaviour, ILandingController
     [Header("Стан навчання")]
     public int generation;
     public float bestCost = float.MaxValue;
+    /// <summary>false у тестах — не писати BestWeights_Neural.json.</summary>
+    public bool persistTrainedWeights = true;
+    public EsTrainStep LastStep { get; private set; }
+    public static event System.Action<EsTrainStep> Trained;
+
+    public struct EsTrainStep
+    {
+        public int Generation;
+        public float Cost;
+        public float BestCost;
+        public float Sigma;
+        public bool Improved;
+        public bool Applied;
+    }
 
     float[] wIH; // прихований × вхід
     float[] bH;
@@ -221,15 +235,45 @@ public class NeuralController : MonoBehaviour, ILandingController
     }
 
     /// <summary>
-    /// ES(1+1) online після епізоду: оцінити поточні ваги → еліта / відкат → мутація на наступний політ.
-    /// Повний (1+λ) турнір потребує λ паралельних симуляцій; λ тут лише масштабує σ.
+    /// Старт епізоду: offspring від еліти. Викликається з ResetSimulation, якщо навчання увімкнено.
+    /// </summary>
+    public void BeginEpisode()
+    {
+        if (!enableTraining || IdealLandingPresets.Active) return;
+        float sigmaScale = 1f + 0.08f * Mathf.Max(0, lambda - 1);
+        MutateFromBest(mutationSigma * sigmaScale);
+    }
+
+    public string StatusLine(bool uk)
+    {
+        string costStr = bestCost < 1e20f ? bestCost.ToString("F2") : "—";
+        if (!enableTraining)
+            return uk
+                ? $"NN MLP 5→8→2 · gen {generation} · навчання ВИМК"
+                : $"NN MLP 5→8→2 · gen {generation} · training OFF";
+        return uk
+            ? $"ES(1+1): кожна посадка = спроба. gen={generation} cost={costStr} σ={mutationSigma:F3}"
+            : $"ES(1+1): each landing = trial. gen={generation} cost={costStr} σ={mutationSigma:F3}";
+    }
+
+    /// <summary>
+    /// ES(1+1) після епізоду: оцінити поточні ваги → еліта / відкат.
+    /// Наступна мутація — у <see cref="BeginEpisode"/>. λ лише масштабує σ.
     /// </summary>
     public void Train(float touchdownVelocity, float angleError, float fuelRemaining,
         float horizontalMiss = 0f, bool timedOut = false)
     {
-        if (!enableTraining) return;
-        // Ideal-демо не змінює ваги
-        if (IdealLandingPresets.Active) return;
+        if (!enableTraining || IdealLandingPresets.Active)
+        {
+            LastStep = new EsTrainStep
+            {
+                Applied = false,
+                Generation = generation,
+                BestCost = bestCost,
+                Sigma = mutationSigma
+            };
+            return;
+        }
 
         float vGate = LandingCriteria.DefaultMaxTouchdownVelocity;
         float aGate = LandingCriteria.DefaultMaxLandingAngle;
@@ -245,11 +289,12 @@ public class NeuralController : MonoBehaviour, ILandingController
                    + (horizontalMiss >= mGate ? 10f : 0f)
                    + (timedOut ? 25f : 0f);
 
-        if (cost < bestCost)
+        bool improved = cost < bestCost;
+        if (improved)
         {
             bestCost = cost;
             SnapshotBest();
-            SaveBestWeights();
+            if (persistTrainedWeights) SaveBestWeights();
             mutationSigma = Mathf.Max(0.02f, mutationSigma * 0.97f);
             Debug.Log($"[NN-ES] gen={generation} NEW best cost={bestCost:F3} σ={mutationSigma:F3}");
         }
@@ -259,12 +304,17 @@ public class NeuralController : MonoBehaviour, ILandingController
             mutationSigma = Mathf.Min(0.25f, mutationSigma / sigmaDecay);
         }
 
-        // Наступний епізод — offspring від еліти (1+1)
-        float sigmaScale = 1f + 0.08f * Mathf.Max(0, lambda - 1);
-        MutateFromBest(mutationSigma * sigmaScale);
-        for (int k = 1; k < lambda; k++)
-            mutationSigma = Mathf.Max(0.02f, mutationSigma * 0.998f);
         generation++;
+        LastStep = new EsTrainStep
+        {
+            Applied = true,
+            Improved = improved,
+            Generation = generation,
+            Cost = cost,
+            BestCost = bestCost,
+            Sigma = mutationSigma
+        };
+        Trained?.Invoke(LastStep);
     }
 
     // Зворотна сумісність
