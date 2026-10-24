@@ -135,9 +135,14 @@ public class SimulationIntegrationTests
             logger.Log(state);
         }
         Assert.Greater(logger.SampleCount, 0);
+        // Без каталогу запуску лог лишається в пам’яті (його збирає ResearchExporter)
         logger.Save();
+        Assert.IsNull(logger.LastFilePath);
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "betelgeuse_log_test");
+        System.IO.Directory.CreateDirectory(dir);
+        logger.Save(dir);
         Assert.IsTrue(System.IO.File.Exists(logger.LastFilePath));
-        try { System.IO.File.Delete(logger.LastFilePath); } catch { /* ignore */ }
+        try { System.IO.Directory.Delete(dir, true); } catch { /* ignore */ }
         Object.Destroy(go);
         yield return null;
     }

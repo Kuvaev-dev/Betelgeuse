@@ -49,8 +49,12 @@ public class RocketPhysics : MonoBehaviour
     void Awake()
     {
         logger = GetComponent<DataLogger>();
+        if (logger != null) logger.Initialize();
         ReloadWeights();
-        PrepareMode(controlMode);
+        // Лише стан ядра: камера/UI ще не ініціалізовані (повний PrepareMode викликає SceneBootstrap)
+        simulation.Controller = controllers.Get(controlMode);
+        simulation.Reset(CurrentSetup(), LandingScenario.Nominal());
+        SyncTransformWithState();
     }
 
     /// <summary>Перечитати навчені ваги з диска (після навчання ES).</summary>
@@ -162,7 +166,6 @@ public class RocketPhysics : MonoBehaviour
         if (finishHandled) return;
         finishHandled = true;
         SyncTransformWithState();
-        if (logger != null) logger.Save();
         metrics.PrintResults(GetModeDisplayName());
         Visualizer()?.OnSimulationFinished(metrics.isSuccessfulLanding);
         FindAnyObjectByType<CameraFollow>()?.StayOnRocketAfterAbort();

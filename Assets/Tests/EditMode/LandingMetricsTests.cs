@@ -63,7 +63,7 @@ public class LandingMetricsTests
         };
         string s = m.BuildUserSummary(true);
         StringAssert.Contains("УСПІШНО", s);
-        StringAssert.Contains("2.1", s);
+        Assert.IsTrue(s.Contains("2.1") || s.Contains("2,1"), s); // десятковий роздільник залежить від культури ОС
     }
 
     [Test]

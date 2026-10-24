@@ -6,17 +6,31 @@ using UnityEngine;
 /// </summary>
 public class MonteCarloFairnessTests
 {
+    /// <summary>Помірні умови (вітер 5 м/с): усі алгоритми мають сідати.</summary>
     static readonly DisturbanceSettings Protocol = new DisturbanceSettings
     {
-        WindStrength = DefenseBaseline.WindStrength,
+        WindStrength = 5f,
         ContinuousWind = true,
+        MassVariationPercent = 5f,
+        AngleVariationDeg = 4f,
+        PositionJitterMeters = 10f,
+        NavNoiseScale = DisturbanceSettings.DefaultNavNoise
+    };
+
+    static LandingSetup Setup => LandingSetup.FromInitialConditions(1600f, 60f, 2f);
+
+    /// <summary>Протокол захисту v15 (сильний вітер).</summary>
+    static readonly DisturbanceSettings Defense = new DisturbanceSettings
+    {
+        WindStrength = DefenseBaseline.WindStrength,
+        ContinuousWind = DefenseBaseline.ContinuousWind,
         MassVariationPercent = DefenseBaseline.MassVariationPercent,
         AngleVariationDeg = DefenseBaseline.AngleVariationDegrees,
         PositionJitterMeters = DefenseBaseline.PositionJitterMeters,
         NavNoiseScale = DisturbanceSettings.DefaultNavNoise
     };
 
-    static LandingSetup Setup => LandingSetup.FromInitialConditions(
+    static LandingSetup DefenseSetup => LandingSetup.FromInitialConditions(
         DefenseBaseline.StartHeight, DefenseBaseline.StartDescentSpeed, DefenseBaseline.StartTiltDeg);
 
     [Test]
@@ -67,6 +81,27 @@ public class MonteCarloFairnessTests
         Assert.AreEqual(1f, set.Get(ControlMode.Fuzzy).Evaluate(ctx).LateralScale);
         // Нейтральна (ненавчена) мережа не змінює спільне наведення
         Assert.AreEqual(1f, set.Get(ControlMode.Neural).Evaluate(ctx).LateralScale, 1e-6f);
+    }
+
+    /// <summary>
+    /// Регресія навчання: ваги з BestWeights_*.json (каталог проєкту) у протоколі v15 дають
+    /// не гірший результат, ніж фіксовані закони A і B, і ≥ 95 % успіхів.
+    /// </summary>
+    [Test]
+    public void TrainedWeights_ProtocolV15_OutperformFixedLaws()
+    {
+        var set = new ControllerSet();
+        set.LoadWeights(System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..")));
+        if (!set.neural.policy.IsTrained || !set.hybrid.policy.IsTrained)
+            Assert.Ignore("BestWeights_*.json not found — train first (Tools/HeadlessSim run.cmd train)");
+        float S(ControlMode m) => LandingExperiment.SuccessRate(
+            LandingExperiment.RunPaired(DefenseSetup, set, m, Defense, DefenseBaseline.Seed, 40));
+        float pid = S(ControlMode.PID), fuzzy = S(ControlMode.Fuzzy);
+        float neural = S(ControlMode.Neural), hybrid = S(ControlMode.Hybrid);
+        Assert.GreaterOrEqual(neural, 0.95f, "Neural");
+        Assert.GreaterOrEqual(hybrid, 0.95f, "Hybrid");
+        Assert.GreaterOrEqual(neural, pid);
+        Assert.GreaterOrEqual(hybrid, fuzzy);
     }
 
     [Test]
