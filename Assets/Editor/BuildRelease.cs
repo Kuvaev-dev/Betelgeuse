@@ -91,8 +91,8 @@ public static class BuildRelease
 
         // Sidecar-файли поруч з exe (runtime-шляхи через Application.dataPath/..)
         string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-        CopyIfExists(Path.Combine(projectRoot, "BestWeights_Neural.json"),
-            Path.Combine(outputDirectory, "BestWeights_Neural.json"));
+        foreach (var f in new[] { "BestWeights_Neural.json", "BestWeights_Hybrid.json" })
+            CopyIfExists(Path.Combine(projectRoot, f), Path.Combine(outputDirectory, f));
         CopyIfExists(Path.Combine(projectRoot, "HOW_TO_RUN.md"),
             Path.Combine(outputDirectory, "HOW_TO_RUN.md"));
         CopyIfExists(Path.Combine(projectRoot, "README.md"),
@@ -121,16 +121,16 @@ public static class BuildRelease
     {
         string path = Path.Combine(dir, "00_START_HERE.txt");
         File.WriteAllText(path,
-            "Betelgeuse v1.2.0 — GNC-симулятор автономної посадки ракети\r\n" +
-            "============================================================\r\n\r\n" +
-            "Запуск:  Betelgeuse.exe\r\n\r\n" +
+            "Betelgeuse v2.0 — інтелектуальна система автономної посадки 1-го ступеня\r\n" +
+            "=========================================================================\r\n\r\n" +
+            "Запуск:  Betelgeuse.exe (ваги MLP — BestWeights_*.json поруч з exe)\r\n\r\n" +
             "Швидке демо для захисту:\r\n" +
-            "  D  — Демо захисту (Hybrid + Ideal + Start)\r\n" +
-            "  P  — Порівняти алгоритми (Monte-Carlo)\r\n" +
-            "  E  — Експорт звітів  →  SimulationLogs/ поруч з exe\r\n" +
-            "  F1 — Довідка\r\n" +
+            "  M  — демо: Hybrid у номінальних умовах\r\n" +
+            "  B  — протокол захисту v15, далі P — Monte-Carlo A–D\r\n" +
+            "  E  — експорт звітів  →  SimulationLogs/ поруч з exe\r\n" +
+            "  F1 — довідка\r\n" +
             "  1-4 — PID / Fuzzy / Neural / Hybrid\r\n" +
-            "  Space — Старт посадки\r\n\r\n" +
+            "  Space — старт посадки\r\n\r\n" +
             "Див. HOW_TO_RUN.md і RELEASE.md для повних нотаток.\r\n");
     }
 }
