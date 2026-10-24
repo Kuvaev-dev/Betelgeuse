@@ -317,11 +317,11 @@ public static class UILocale
             "A PID — класичний еталон.\n" +
             "B Fuzzy — Sugeno-0: дві бази 5×5 (тяга h×|Vy|, орієнтація e×ė).\n" +
             "C Neural — профіль + MLP 5→8→2 residual; ваги навчені ES(1+λ) офлайн.\n" +
-            "D Hybrid ★ — закон B + окремо навчений MLP residual. Residual OFF ⇒ D ≡ B (ablation).",
+            "D Hybrid — закон B + окремо навчений MLP residual. Residual OFF → D ≡ B (ablation).",
             "A PID — classical baseline.\n" +
             "B Fuzzy — Sugeno-0: two 5×5 rule bases (thrust h×|Vy|, attitude e×ė).\n" +
             "C Neural — profile + MLP 5→8→2 residual; weights trained offline by ES(1+λ).\n" +
-            "D Hybrid ★ — law B + separately trained MLP residual. Residual OFF ⇒ D ≡ B (ablation)."),
+            "D Hybrid — law B + separately trained MLP residual. Residual OFF → D ≡ B (ablation)."),
         ["help_sec_controls"] = new("КЕРУВАННЯ", "CONTROLS"),
         ["help_sec_landing"] = new("SOFT-LANDING (STAGE-1)", "SOFT-LANDING (STAGE-1)"),
         ["help_sec_research"] = new("ДОСЛІДЖЕННЯ", "RESEARCH"),
