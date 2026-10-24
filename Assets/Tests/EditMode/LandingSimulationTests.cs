@@ -1,97 +1,71 @@
 using NUnit.Framework;
 using UnityEngine;
 
-/// <summary>
-/// Soft-landing профіль реально садить апарат (усі A/B/C/D базуються на ньому).
-/// 1D-симуляція без Unity physics — швидка перевірка критерію |Vy|&lt;3.5.
-/// </summary>
+/// <summary>Ядро <see cref="LandingSimulation"/>: номінальна посадка A–D, детермінізм, timeout, витрата палива.</summary>
 public class LandingSimulationTests
 {
-    const float Mass = 39600f;
-    const float MaxThrust = 845000f;
+    static LandingSetup Nominal => LandingSetup.FromInitialConditions(
+        IdealLandingPresets.StartHeight, IdealLandingPresets.StartDescentSpeed, IdealLandingPresets.StartTiltDeg);
 
-    [Test]
-    public void Profile_IdealStart_TouchdownBelow3_5()
+    [TestCase(ControlMode.PID)]
+    [TestCase(ControlMode.Fuzzy)]
+    [TestCase(ControlMode.Neural)]
+    [TestCase(ControlMode.Hybrid)]
+    public void NominalConditions_SoftLanding(ControlMode mode)
     {
-        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
-            startH: IdealLandingPresets.StartHeight,
-            startVy: IdealLandingPresets.StartVy,
-            mass: Mass, maxThrust: MaxThrust);
-        Assert.Less(vTouch, 3.5f, $"Touchdown |Vy|={vTouch:F2} м/с");
-        Assert.Less(vTouch, 1.5f, "Ideal should be very soft");
+        var m = LandingExperiment.RunTrial(Nominal, new ControllerSet().Get(mode), LandingScenario.Nominal());
+        Assert.IsFalse(m.timedOut);
+        Assert.IsTrue(m.isSuccessfulLanding,
+            $"{mode}: Vy={m.touchdownVelocity:F2} tilt={m.landingAngleError:F2} miss={m.horizontalMiss:F1} Vh={m.horizontalSpeed:F2}");
     }
 
     [Test]
-    public void Profile_HardNominal_StillSoftIn1D()
+    public void SameScenario_SameResult()
     {
-        // 1D профіль справляється і з жорсткішим стартом (3D attitude — окремо)
-        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
-            startH: 1800f, startVy: -72f, mass: Mass, maxThrust: MaxThrust);
-        Assert.Less(vTouch, 3.5f, $"Hard |Vy|={vTouch:F2}");
+        var set = new ControllerSet();
+        var sc = LandingScenario.Sample(new DisturbanceSettings { WindStrength = 7f, ContinuousWind = true,
+            AngleVariationDeg = 3f, PositionJitterMeters = 12f, NavNoiseScale = 0.35f }, 99);
+        var a = LandingExperiment.RunTrial(Nominal, set.Get(ControlMode.PID), sc);
+        var b = LandingExperiment.RunTrial(Nominal, set.Get(ControlMode.PID), sc);
+        Assert.AreEqual(a.touchdownVelocity, b.touchdownVelocity);
+        Assert.AreEqual(a.horizontalMiss, b.horizontalMiss);
     }
 
     [Test]
-    public void Profile_IdealPresetStart_VerySoft()
+    public void ShortMaxTime_TimesOutAndFails()
     {
-        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
-            IdealLandingPresets.StartHeight, IdealLandingPresets.StartVy,
-            IdealLandingPresets.DryMass + IdealLandingPresets.FuelMass,
-            IdealLandingPresets.MaxThrust);
-        Assert.Less(vTouch, 2.0f, $"Ideal |Vy|={vTouch:F2}");
+        var setup = Nominal;
+        setup.MaxTime = 2f;
+        var m = LandingExperiment.RunTrial(setup, new ControllerSet().Get(ControlMode.Fuzzy), LandingScenario.Nominal());
+        Assert.IsTrue(m.timedOut);
+        Assert.IsFalse(m.isSuccessfulLanding);
+        Assert.AreEqual(0f, m.SuccessScore);
     }
 
     [Test]
-    public void Profile_HighStart_StillSoft()
+    public void Landing_BurnsFuel_AndEndsOnPad()
     {
-        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
-            startH: 2500f, startVy: -100f, mass: Mass, maxThrust: MaxThrust);
-        Assert.Less(vTouch, 3.5f, $"High start |Vy|={vTouch:F2}");
+        var sim = new LandingSimulation { Controller = new ControllerSet().Get(ControlMode.Hybrid) };
+        sim.Reset(Nominal, LandingScenario.Nominal());
+        var m = sim.RunToEnd();
+        Assert.Less(m.fuelRemaining, Nominal.FuelMass);
+        Assert.Greater(m.fuelRemaining, 0f);
+        Assert.AreEqual(LandingSimulation.PadSurfaceY, sim.State.position.y, 1e-4f);
     }
 
     [Test]
-    public void Profile_LegacyStart_StillSoft()
+    public void ThrustDirection_IsRateLimited()
     {
-        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
-            startH: 1800f, startVy: -70f, mass: Mass, maxThrust: MaxThrust);
-        Assert.Less(vTouch, 3.5f, $"Legacy |Vy|={vTouch:F2}");
-    }
-
-    [Test]
-    public void Profile_LowFuelMass_StillSoft()
-    {
-        float mass = 25600f + 5000f;
-        float vTouch = SoftLandingGuidance.SimulateVerticalLanding(
-            startH: 1600f, startVy: -60f, mass: mass, maxThrust: MaxThrust);
-        Assert.Less(vTouch, 3.5f, $"Light mass |Vy|={vTouch:F2}");
-    }
-
-    [Test]
-    public void MaxThrust_ExceedsHover()
-    {
-        float hover = Mass * AtmosphereModel.GetGravity(0f);
-        Assert.Greater(MaxThrust, hover * 1.5f);
-    }
-
-    [Test]
-    public void TargetRate_MonotonicWithHeight()
-    {
-        float prev = 0f;
-        for (float h = 5f; h <= 500f; h += 20f)
+        var sim = new LandingSimulation { Controller = new ControllerSet().Get(ControlMode.PID) };
+        var sc = LandingScenario.Nominal();
+        sc.TiltXDeg = 20f;
+        sim.Reset(Nominal, sc);
+        Vector3 prev = sim.State.thrustDirection;
+        for (int i = 0; i < 200; i++)
         {
-            float speed = Mathf.Abs(SoftLandingGuidance.TargetDescentRate(h));
-            Assert.GreaterOrEqual(speed, prev - 0.01f);
-            prev = speed;
+            sim.Step();
+            Assert.LessOrEqual(Vector3.Angle(prev, sim.State.thrustDirection), 12f * 0.005f + 0.05f);
+            prev = sim.State.thrustDirection;
         }
-    }
-
-    [Test]
-    public void AttitudeGimbal_FiniteAndBounded()
-    {
-        var rot = Quaternion.Euler(8f, 0f, -5f);
-        Vector3 g = SoftLandingGuidance.AttitudeGimbal(rot, Vector3.zero);
-        Assert.IsFalse(float.IsNaN(g.x));
-        Assert.IsFalse(float.IsNaN(g.z));
-        Assert.LessOrEqual(Mathf.Abs(g.x), 20f);
-        Assert.LessOrEqual(Mathf.Abs(g.z), 20f);
     }
 }

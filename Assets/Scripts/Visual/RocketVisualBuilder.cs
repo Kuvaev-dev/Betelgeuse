@@ -8,21 +8,10 @@ public static class RocketVisualBuilder
 {
     public const float Height = 28f; // compact visual proxy of F9 first stage ~42.6 m; short stage-1 stand-in
     public const float Radius = 1.83f;
-    public const string UpperStackName = "UpperStack";
 
     public static void Build(RocketPhysics rocket)
     {
         LunarTerrainMesh.Drain(BuildRoutine(rocket));
-    }
-
-    /// <summary>SetUpperStackVisible</summary>
-    public static void SetUpperStackVisible(Transform rocketRoot, bool visible, bool animateAway = false)
-    {
-        if (rocketRoot == null) return;
-        var t = rocketRoot.Find(UpperStackName);
-        if (t != null) Object.Destroy(t.gameObject);
-        var orphan = GameObject.Find(UpperStackName);
-        if (orphan != null) Object.Destroy(orphan);
     }
 
     /// <summary>BuildRoutine</summary>
@@ -47,7 +36,6 @@ public static class RocketVisualBuilder
 
         var existing = root.Find("Visual");
         if (existing != null) Object.Destroy(existing.gameObject);
-        DestroyChild(root, UpperStackName);
         DestroyChild(root, "EngineFlame");
         DestroyChild(root, "EngineSmoke");
         DestroyChild(root, "EngineLight");

@@ -57,25 +57,19 @@ public class ExperimentDashboard : MonoBehaviour
             return;
         }
 
-        if (btnRunPID) btnRunPID.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.PID));
-        if (btnRunFuzzy) btnRunFuzzy.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.Fuzzy));
-        if (btnRunNeural) btnRunNeural.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.Neural));
-        if (btnRunHybrid) btnRunHybrid.onClick.AddListener(() => RunSingleTest(RocketPhysics.ControlMode.Hybrid));
+        if (btnRunPID) btnRunPID.onClick.AddListener(() => RunSingleTest(ControlMode.PID));
+        if (btnRunFuzzy) btnRunFuzzy.onClick.AddListener(() => RunSingleTest(ControlMode.Fuzzy));
+        if (btnRunNeural) btnRunNeural.onClick.AddListener(() => RunSingleTest(ControlMode.Neural));
+        if (btnRunHybrid) btnRunHybrid.onClick.AddListener(() => RunSingleTest(ControlMode.Hybrid));
         if (btnRunFullTest) btnRunFullTest.onClick.AddListener(RunFullExperiment);
         if (btnReset) btnReset.onClick.AddListener(ResetSimulation);
 
         if (testsCountInput && simulationManager != null)
             testsCountInput.text = simulationManager.testsPerAlgorithm.ToString();
 
-        if (enableNeuralTrainingToggle != null && rocketPhysics != null && rocketPhysics.neuralController != null)
-        {
-            enableNeuralTrainingToggle.isOn = rocketPhysics.neuralController.enableTraining;
-            enableNeuralTrainingToggle.onValueChanged.AddListener(v =>
-            {
-                if (rocketPhysics.neuralController != null)
-                    rocketPhysics.neuralController.enableTraining = v;
-            });
-        }
+        // Навчання MLP — офлайн ES(1+λ) (головна панель / меню Editor), не онлайн-тогл legacy-панелі
+        if (enableNeuralTrainingToggle != null)
+            enableNeuralTrainingToggle.gameObject.SetActive(false);
 
         // Підписи, якщо порожні
         SetIfEmpty(pidStatsText, "PID     —");
@@ -90,7 +84,7 @@ public class ExperimentDashboard : MonoBehaviour
         if (t != null && string.IsNullOrWhiteSpace(t.text)) t.text = value;
     }
 
-    void RunSingleTest(RocketPhysics.ControlMode mode)
+    void RunSingleTest(ControlMode mode)
     {
         if (rocketPhysics == null) return;
         rocketPhysics.controlMode = mode;

@@ -1,102 +1,33 @@
-using UnityEngine;
-
 /// <summary>
-/// Режим D — Neuro-Fuzzy (тема МКР): сирий Sugeno + MLP residual → один BlendThrust.
-/// Біля землі (h&lt;50 м) α,β→0. Реалізує <see cref="ILandingController"/>.
+/// Режим D — гібрид Neuro-Fuzzy: повний нечіткий закон режиму B (тяга + орієнтація)
+/// плюс окремо навчений MLP-residual (поправка тяги та масштаб бічного наведення).
+/// Ваги — BestWeights_Hybrid.json (навчені ES(1+λ) саме поверх нечіткого закону).
+/// Ablation: <see cref="useNeuralResidual"/> = false ⇒ D ≡ B.
 /// </summary>
-public class HybridController : MonoBehaviour, ILandingController
+[System.Serializable]
+public sealed class HybridController : ILandingController
 {
-    public RocketPhysics.ControlMode Mode => RocketPhysics.ControlMode.Hybrid;
+    public ControlMode Mode => ControlMode.Hybrid;
     public string DisplayName => "Hybrid Neuro-Fuzzy";
-    public bool IsAvailable => isActive && enabled;
 
-    [Header("Hybrid Neuro-Fuzzy")]
-    public bool isActive = true;
-    /// <summary>Ablation: false = чистий Sugeno (без MLP residual) — leave-one-out для тези.</summary>
+    public const string WeightsFileName = "BestWeights_Hybrid.json";
+    public const string BaseLaw = "fuzzy";
+
     public bool useNeuralResidual = true;
-    [Range(0f, 0.5f)] public float neuralThrustBlend = 0.25f;
-    [Range(0f, 0.45f)] public float neuralGimbalBlend = 0.2f;
-    [Range(0.05f, 0.6f)] public float maxResidualMult = 0.3f;
-    /// <summary>Вага smart (fuzzy/nn) vs чистий soft-landing профіль.</summary>
-    [Range(0.2f, 0.8f)] public float smartWeight = 0.5f;
-    [Range(0.2f, 0.9f)] public float maxDevFrac = 0.4f;
+    public MlpPolicy policy = MlpPolicy.CreateNeutral(BaseLaw);
+    /// <summary>Нечіткий закон (спільний екземпляр із режимом B, без стану).</summary>
+    [System.NonSerialized] public FuzzyLandingController fuzzy;
 
-    public FuzzyLandingController fuzzy;
-    public NeuralController neural;
+    public HybridController(FuzzyLandingController fuzzy) { this.fuzzy = fuzzy; }
 
-    void Awake()
-    {
-        if (fuzzy == null) fuzzy = GetComponent<FuzzyLandingController>();
-        if (neural == null) neural = GetComponent<NeuralController>();
-    }
-
-    public void CalculateControl(
-        float height, float verticalVelocity, float mass, float currentThrust,
-        float pitchError, float yawError, float pitchRate, float yawRate, float horizSpeed,
-        out float thrust, out Vector3 gimbalEuler)
-    {
-        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
-        float profile = SoftLandingGuidance.ProfileThrust(height, verticalVelocity, mass);
-
-        if (!isActive || fuzzy == null)
-        {
-            thrust = profile;
-            gimbalEuler = SoftLandingGuidance.AttitudeGimbal(pitchError, yawError, pitchRate, yawRate);
-            return;
-        }
-
-        // Сирі виходи (без внутрішнього blend) — blend лише один раз нижче
-        float fuzzyThrust = fuzzy.EvaluateSugenoThrust(height, verticalVelocity, mass);
-        Vector3 fuzzyGimbal = fuzzy.CalculateGimbal(pitchError, yawError, pitchRate, yawRate);
-
-        float nnThrust = fuzzyThrust;
-        Vector3 nnGimbal = fuzzyGimbal;
-        bool residual = useNeuralResidual && neural != null && neural.isActive;
-        if (residual)
-        {
-            neural.CalculateControl(height, verticalVelocity, mass, currentThrust,
-                pitchError, yawError, horizSpeed, blendWithProfile: false,
-                out nnThrust, out nnGimbal);
-        }
-
-        float alpha = residual ? neuralThrustBlend : 0f;
-        float beta = residual ? neuralGimbalBlend : 0f;
-        // Біля землі — пріоритет fuzzy (інтерпретовані правила)
-        if (height < 50f)
-        {
-            float t = Mathf.Clamp01(height / 50f);
-            alpha *= t;
-            beta *= t;
-        }
-
-        float smart = Mathf.Lerp(fuzzyThrust, nnThrust, alpha);
-        // Обмежити NN-residual відносно fuzzy ДО blend (не після — інакше
-        // cap може «перебити» термінал soft-landing h&lt;25 м).
-        float maxRes = mass * g * maxResidualMult;
-        smart = Mathf.Clamp(smart, fuzzyThrust - maxRes, fuzzyThrust + maxRes);
-        thrust = SoftLandingGuidance.BlendThrust(profile, smart, smartWeight, mass, height, maxDevFrac);
-
-        gimbalEuler = Vector3.Lerp(fuzzyGimbal, nnGimbal, beta);
-        gimbalEuler.x = Mathf.Clamp(gimbalEuler.x, -18f, 18f);
-        gimbalEuler.y = 0f;
-        gimbalEuler.z = Mathf.Clamp(gimbalEuler.z, -18f, 18f);
-    }
-
-    public void ResetSession()
-    {
-        // Стан Neural ES — на рівні епізоду; сам hybrid без стану на тік
-    }
+    public void ResetSession() => fuzzy?.ResetSession();
 
     public ControlCommand Evaluate(in ControlContext ctx)
     {
-        CalculateControl(
-            ctx.Height, ctx.VerticalVelocity, ctx.Mass, ctx.CurrentThrust,
-            ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg, ctx.HorizSpeed,
-            out float thrust, out Vector3 gimbal);
-        // Hybrid: найсильніший hold проти вітру (тема ≥ Fuzzy/PID), без overshoot-lim
-        float lat = IdealLandingPresets.Active ? 0.70f : 1.2f;
-        float gb = IdealLandingPresets.Active ? 0.15f : 0.14f;
-        // Ideal: lower blend/scale so upright PD owns terminal (anti-rock)
-        return new ControlCommand(thrust, gimbal, lateralScale: lat, gimbalBlend: gb);
+        var baseCmd = fuzzy.Evaluate(in ctx);
+        return useNeuralResidual ? policy.ApplyResidual(in ctx, in baseCmd) : baseCmd;
     }
+
+    public HybridController Clone(FuzzyLandingController fuzzyClone)
+        => new HybridController(fuzzyClone) { useNeuralResidual = useNeuralResidual, policy = policy.Clone() };
 }

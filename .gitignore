@@ -115,3 +115,6 @@ TestLog-*.txt
 
 # Simulation logs
 SimulationLogs/
+
+# Headless-стенд (збирається Tools/HeadlessSim/build.cmd)
+/Tools/HeadlessSim/bin/

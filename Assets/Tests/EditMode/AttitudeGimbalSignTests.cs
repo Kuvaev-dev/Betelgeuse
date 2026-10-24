@@ -2,100 +2,66 @@ using NUnit.Framework;
 using UnityEngine;
 
 /// <summary>
-/// Регресія: quaternion-AttitudeGimbal має давати restoring torque
-/// (узгоджено з error-based API та моделлю TVC τ∝(−td.z, td.x)).
+/// Єдина конвенція знаків орієнтації: помилки по осях корпусу розв’язані, а PD/нечіткий/PID
+/// закони дають відновлювальний момент у моделі <see cref="LandingSimulation"/>.
 /// </summary>
 public class AttitudeGimbalSignTests
 {
+    static ControlContext Ctx(Quaternion rot, Vector3 desiredUp)
+        => ControlContext.Create(new Vector3(0, 800, 0), new Vector3(0, -30, 0), rot, Vector3.zero,
+            35000f, 400000f, Stage1Vehicle.LandingThrustN, desiredUp, 0.005f);
+
     [Test]
-    public void QuaternionGimbal_RestoresPositiveZTilt()
+    public void PureTiltAboutX_GivesOnlyPitchError()
     {
-        // Euler Z > 0: корпус нахиляється, axisBody.z > 0 ⇒ cmdZ > 0 ⇒ td.x < 0 ⇒ τz < 0
-        var rot = Quaternion.Euler(0f, 0f, 8f);
-        Vector3 g = SoftLandingGuidance.AttitudeGimbal(rot, Vector3.zero);
-        Assert.Greater(g.z, 0.5f, "cmdZ must be >0 for +Z tilt (restoring TVC)");
+        var c = Ctx(Quaternion.Euler(6f, 0f, 0f), Vector3.up);
+        Assert.AreEqual(6f, Mathf.Abs(c.PitchErrorDeg), 0.05f);
+        Assert.AreEqual(0f, c.YawErrorDeg, 0.05f);
+        Assert.AreEqual(6f, c.TiltDeg, 0.05f);
     }
 
     [Test]
-    public void QuaternionGimbal_RestoresNegativeZTilt()
+    public void PureTiltAboutZ_GivesOnlyYawError()
     {
-        var rot = Quaternion.Euler(0f, 0f, -8f);
-        Vector3 g = SoftLandingGuidance.AttitudeGimbal(rot, Vector3.zero);
-        Assert.Less(g.z, -0.5f, "cmdZ must be <0 for −Z tilt");
+        var c = Ctx(Quaternion.Euler(0f, 0f, -4f), Vector3.up);
+        Assert.AreEqual(0f, c.PitchErrorDeg, 0.05f);
+        Assert.AreEqual(4f, Mathf.Abs(c.YawErrorDeg), 0.05f);
     }
 
     [Test]
-    public void QuaternionGimbal_MatchesErrorApi_Sign_IndependentAxes()
+    public void TrackingDesiredAxis_ZeroError()
     {
-        // Лише pitch tip (Euler X)
-        {
-            float tip = 10f;
-            var rot = Quaternion.Euler(tip, 0f, 0f);
-            Vector3 bodyUp = rot * Vector3.up;
-            float pitchErr = Vector3.SignedAngle(bodyUp, Vector3.up, Vector3.right);
-            var fromErr = SoftLandingGuidance.AttitudeGimbal(pitchErr, 0f, 0f, 0f);
-            var fromQuat = SoftLandingGuidance.AttitudeGimbal(rot, Vector3.zero);
-            Assert.AreEqual(Mathf.Sign(fromErr.x), Mathf.Sign(fromQuat.x),
-                "Pitch channel signs must agree");
-        }
-        // Лише yaw tip (Euler Z)
-        {
-            float tip = -8f;
-            var rot = Quaternion.Euler(0f, 0f, tip);
-            Vector3 bodyUp = rot * Vector3.up;
-            float yawErr = Vector3.SignedAngle(bodyUp, Vector3.up, Vector3.forward);
-            var fromErr = SoftLandingGuidance.AttitudeGimbal(0f, yawErr, 0f, 0f);
-            var fromQuat = SoftLandingGuidance.AttitudeGimbal(rot, Vector3.zero);
-            Assert.AreEqual(Mathf.Sign(fromErr.z), Mathf.Sign(fromQuat.z),
-                "Yaw channel signs must agree");
-        }
+        var rot = Quaternion.Euler(5f, 0f, 3f);
+        var c = Ctx(rot, rot * Vector3.up);
+        Assert.AreEqual(0f, c.PitchErrorDeg, 0.05f);
+        Assert.AreEqual(0f, c.YawErrorDeg, 0.05f);
+        Assert.AreEqual(c.TiltDeg, c.DesiredTiltDeg, 0.05f);
     }
 
     [Test]
-    public void RateDamping_OpposesOmega()
+    public void PdGimbal_PositiveErrorAndRate_PositiveCommand()
     {
-        var upright = Quaternion.identity;
-        Vector3 gPos = SoftLandingGuidance.AttitudeGimbal(upright, new Vector3(0.4f, 0f, 0f));
-        Vector3 gNeg = SoftLandingGuidance.AttitudeGimbal(upright, new Vector3(-0.4f, 0f, 0f));
-        Assert.Greater(gPos.x, 0f);
-        Assert.Less(gNeg.x, 0f);
+        var g = SoftLandingGuidance.AttitudeGimbal(4f, -3f, 1f, -1f);
+        Assert.Greater(g.x, 0f);
+        Assert.Less(g.z, 0f);
+        Assert.AreEqual(0f, g.y);
     }
 
-    [Test]
-    public void LateralTvc_SignsPullTowardOrigin()
+    [TestCase(ControlMode.PID)]
+    [TestCase(ControlMode.Fuzzy)]
+    [TestCase(ControlMode.Neural)]
+    [TestCase(ControlMode.Hybrid)]
+    public void EveryStrategy_RestoresTiltedBody(ControlMode mode)
     {
-        // PD: x>0 ⇒ gz<0 ⇒ td.x>0 ⇒ τz>0 ⇒ lean to −X (toward pad)
-        const float kPos = 0.22f;
-        float px = 40f, pz = 0f;
-        float gx = +(kPos * pz);
-        float gz = -(kPos * px);
-        Assert.Less(gz, 0f, "x>0 must command gz<0 (tail TVC toward pad)");
-
-        Vector3 td = (Quaternion.Euler(gx, 0f, gz) * Vector3.up).normalized;
-        Assert.Greater(td.x, 0f, "gz<0 ⇒ td.x>0 ⇒ τz>0 ⇒ lean to −X");
-
-        // z>0 ⇒ gx>0 ⇒ td.z>0 ⇒ τx=-td.z<0 ⇒ lean to −Z
-        float gxZ = +(kPos * 40f);
-        Assert.Greater(gxZ, 0f, "z>0 must command gx>0");
-        Vector3 tdZ = (Quaternion.Euler(gxZ, 0f, 0f) * Vector3.up).normalized;
-        Assert.Greater(tdZ.z, 0f, "gx>0 ⇒ td.z>0 ⇒ lean to −Z");
-    }
-
-    [Test]
-    public void IdealPreset_ProfileSoft()
-    {
-        Assert.IsTrue(IdealLandingPresets.ProfileGuaranteesSoftLanding(out float v),
-            $"Ideal profile |Vy|={v:F2} must be < 3.5");
-        Assert.Less(v, 2f);
-    }
-
-    [Test]
-    public void TvC_TorqueSign_FromPositiveCmdZ()
-    {
-        // cmdZ > 0 → td.x < 0 → τz = T·L·td.x < 0
-        Vector3 td = (Quaternion.Euler(0f, 0f, 10f) * Vector3.up).normalized;
-        Assert.Less(td.x, 0f);
-        float tauZ = td.x;
-        Assert.Less(tauZ, 0f);
+        var setup = LandingSetup.FromInitialConditions(1500f, 50f, 0f);
+        var sc = LandingScenario.Nominal(3);
+        sc.TiltXDeg = 8f;
+        sc.TiltZDeg = -6f;
+        var sim = new LandingSimulation { Controller = new ControllerSet().Get(mode) };
+        sim.Reset(setup, sc);
+        float tilt0 = Vector3.Angle(sim.State.rotation * Vector3.up, Vector3.up);
+        for (int i = 0; i < 1600; i++) sim.Step(); // 8 с
+        float tilt1 = Vector3.Angle(sim.State.rotation * Vector3.up, Vector3.up);
+        Assert.Less(tilt1, tilt0 * 0.6f, $"{mode}: tilt {tilt0:F1}° → {tilt1:F1}°");
     }
 }

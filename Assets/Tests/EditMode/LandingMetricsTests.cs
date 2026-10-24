@@ -61,7 +61,7 @@ public class LandingMetricsTests
             horizontalSpeed = 1f,
             fuelRemaining = 2000f
         };
-        string s = m.BuildUserSummary();
+        string s = m.BuildUserSummary(true);
         StringAssert.Contains("УСПІШНО", s);
         StringAssert.Contains("2.1", s);
     }
@@ -78,17 +78,17 @@ public class LandingMetricsTests
             horizontalMiss = 50f,
             horizontalSpeed = 12f
         };
-        string s = m.BuildUserSummary(3.5f, 7f, 25f, 5f);
+        string s = m.BuildUserSummary(true, 3.5f, 7f, 25f, 5f);
         StringAssert.Contains("НЕВДАЛА", s);
         StringAssert.Contains("Причини", s);
-        Assert.IsTrue(s.Contains("швидке") || s.Contains("Занадто"), s);
+        StringAssert.Contains("Швидкість", s);
     }
 
     [Test]
     public void BuildUserSummary_Timeout_MentionsTime()
     {
         var m = new LandingMetrics { isSuccessfulLanding = false, timedOut = true };
-        string s = m.BuildUserSummary();
+        string s = m.BuildUserSummary(true);
         StringAssert.Contains("Час", s);
     }
 }

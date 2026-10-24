@@ -4,6 +4,13 @@ using UnityEngine;
 /// <summary>Бортова навігація: pipeline існує, zero-noise трекає істину, шум не розвалюється.</summary>
 public class NavigationEstimatorTests
 {
+    static ControlContext Ctx(NavigationEstimator nav, RocketState truth, float dt)
+    {
+        var s = nav.Current;
+        return ControlContext.Create(s.position, s.velocity, s.rotation, s.angularVelocity,
+            truth.TotalMass, truth.currentThrust, truth.maxThrust, Vector3.up, dt);
+    }
+
     RocketState MakeTruth()
     {
         return new RocketState
@@ -39,7 +46,7 @@ public class NavigationEstimatorTests
         Assert.IsTrue(nav.Current.valid);
         Assert.Less(nav.Current.heightResid, 0.25f, "zero-noise height residual");
         Assert.Less(nav.Current.horizResid, 0.35f, "zero-noise horiz residual");
-        var ctx = nav.ToContext(truth, dt);
+        var ctx = Ctx(nav, truth, dt);
         Assert.AreEqual(truth.TotalMass, ctx.Mass, 0.01f);
         Assert.IsFalse(float.IsNaN(ctx.Height));
         Assert.Greater(ctx.Height, 100f);
@@ -63,7 +70,7 @@ public class NavigationEstimatorTests
         Assert.IsTrue(nav.Current.valid);
         Assert.Less(nav.Current.heightResid, 8f);
         Assert.Less(nav.Current.horizResid, 12f);
-        var ctx = nav.ToContext(truth, dt);
+        var ctx = Ctx(nav, truth, dt);
         Assert.IsFalse(float.IsNaN(ctx.VerticalVelocity));
         Assert.IsFalse(float.IsNaN(ctx.PitchErrorDeg));
         Assert.Less(Mathf.Abs(ctx.TiltDeg), 35f);
@@ -90,7 +97,7 @@ public class NavigationEstimatorTests
         var t = MakeTruth();
         var nav = new NavigationEstimator();
         nav.Reset(t, 1);
-        var ctx = nav.ToContext(t, 0.005f);
+        var ctx = Ctx(nav, t, 0.005f);
         Assert.AreEqual(t.position.x, ctx.PositionX, 0.01f);
         Assert.AreEqual(t.position.z, ctx.PositionZ, 0.01f);
         Assert.AreEqual(t.velocity.x, ctx.VelX, 0.01f);

@@ -19,16 +19,6 @@ MonoBehaviour:
   fuelMass: 14000
   maxThrust: 845000
   isp: 282
-  stackStartPosition: {x: 0, y: 45, z: 0}
-  stackStartVelocity: {x: 0, y: 35, z: 0}
-  stackStartEulerAngles: {x: 0, y: 0, z: 0}
-  stackDryMass: 110000
-  stackFuelMass: 280000
-  stackMaxThrust: 7600000
-  separationAltitude: 2400
-  separationTime: 18
-  snapToLandingIcOnSeparation: 1
-
   fixedTimeStep: 0.005
   maxSimulationTime: 400
   maxTouchdownVelocity: 3.5

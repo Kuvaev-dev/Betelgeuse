@@ -50,13 +50,13 @@ public class LandingMetrics
     /// <summary>Текстовий висновок UA/EN для експорту та діалогів.</summary>
     /// <param name="includeTitle">false — якщо заголовок уже в UI</param>
     public string BuildUserSummary(
+        bool uk,
         float maxV = LandingCriteria.DefaultMaxTouchdownVelocity,
         float maxA = LandingCriteria.DefaultMaxLandingAngle,
         float maxM = LandingCriteria.DefaultMaxHorizontalMiss,
         float maxH = LandingCriteria.DefaultMaxHorizontalSpeed,
         bool includeTitle = true)
     {
-        bool uk = UILocale.IsUK;
         var sb = new StringBuilder();
         if (isSuccessfulLanding)
         {

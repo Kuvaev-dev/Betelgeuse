@@ -4,6 +4,8 @@ using UnityEngine;
 /// Бортова навігація 1-го ступеня (автономна система, не god-mode).
 /// Сенсори: IMU (акселерометр + гіроскоп), радіовисотомір, GPS-подібний.
 /// Оцінювач: complementary filter (IMU predict + GNSS/висотомір correct).
+/// Орієнтація — інтегрування гіроскопа (акселерометр не використовується для крену:
+/// під час роботи двигуна питома сила спрямована вздовж тяги, а не проти g).
 /// Фізичний plant лишається істинним <see cref="RocketState"/>; GNC споживає оцінку.
 /// Це не industrial Kalman/INS — дипломний замкнений контур.
 /// </summary>
@@ -41,7 +43,6 @@ public sealed class NavigationEstimator
     const float GpsPosAlpha = 0.12f;
     const float AltAlpha = 0.18f;
     const float GpsVelAlpha = 0.10f;
-    const float AccelTiltAlpha = 0.04f;
 
     public void Reset(RocketState truth, uint seed = 1)
     {
@@ -103,32 +104,7 @@ public sealed class NavigationEstimator
         pos.y = Mathf.Lerp(pos.y, altMeas, AltAlpha);
         vel = Vector3.Lerp(vel, gpsVel, GpsVelAlpha);
 
-        // Легка корекція крену акселерометром, коли |f| ≈ g (мала тяга)
-        float specMag = specBody.magnitude;
-        if (specMag > 1f && Mathf.Abs(specMag - g) < g * 0.28f)
-        {
-            Vector3 accUpWorld = att * specBody.normalized;
-            Quaternion delta = Quaternion.FromToRotation(accUpWorld, Vector3.up);
-            att = Quaternion.Slerp(att, delta * att, AccelTiltAlpha);
-        }
-
         Current = MakeSnapshot(truth);
-    }
-
-    public ControlContext ToContext(RocketState truth, float dt)
-    {
-        Vector3 up = att * Vector3.up;
-        float pitchError = Vector3.SignedAngle(up, Vector3.up, Vector3.right);
-        float yawError = Vector3.SignedAngle(up, Vector3.up, Vector3.forward);
-        float pitchRate = omega.x * Mathf.Rad2Deg;
-        float yawRate = omega.z * Mathf.Rad2Deg;
-        float horizSpeed = new Vector2(vel.x, vel.z).magnitude;
-        float tilt = Vector3.Angle(up, Vector3.up);
-        return new ControlContext(
-            pos.y, vel.y, truth.TotalMass, truth.currentThrust, truth.maxThrust,
-            pitchError, yawError, pitchRate, yawRate, horizSpeed, tilt, dt,
-            att, omega,
-            pos.x, pos.z, vel.x, vel.z);
     }
 
     Snapshot MakeSnapshot(RocketState truth)

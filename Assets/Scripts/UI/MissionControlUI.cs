@@ -39,7 +39,7 @@ public class MissionControlUI : MonoBehaviour
     // Тексти підписів метрик (для оновлення мови)
     readonly List<TMP_Text> metricLabels = new();
 
-    Slider windSlider, testsSlider, timeScaleSlider, liveSpeedSlider, seedSlider;
+    Slider windSlider, testsSlider, jitterSlider, liveSpeedSlider, seedSlider;
     Slider heightSlider, descentSlider, tilt0Slider, massNoiseSlider, angleNoiseSlider;
     Toggle noiseToggle, trainToggle, residualToggle;
     Image thrBarFill, fuelBarFill, tiltBarFill, statusDot, progressFill, resultPanelBg;
@@ -61,8 +61,8 @@ public class MissionControlUI : MonoBehaviour
     TMP_Text txtGraphDetailTitle;
     TMP_Text txtGraphDetailHint;
     Coroutine defenseDemoCo;
-    /// <summary>&gt;0 після B (DefenseBaseline): ApplySettings/P не перетирають protocol jitter.</summary>
-    float protocolJitterOverride = -1f;
+    /// <summary>Фонове навчання MLP (тогл «Навчання NN»).</summary>
+    readonly NeuralTrainingJob trainingJob = new NeuralTrainingJob();
     TMP_Text txtSeedVal;
     TMP_Text txtNnStatus;
     TMP_Text txtHideBtn;
@@ -175,8 +175,6 @@ public class MissionControlUI : MonoBehaviour
         WireLegacyDashboard();
         LoadUserSettingsIntoUi();
         WireSettingsPersistence();
-        NeuralController.Trained -= OnNeuralTrained;
-        NeuralController.Trained += OnNeuralTrained;
         built = true;
     }
 
@@ -193,7 +191,7 @@ public class MissionControlUI : MonoBehaviour
         SaveUserSettingsFromUi();
         UILocale.OnLanguageChanged -= OnLanguageChanged;
         UiTheme.OnThemeChanged -= OnThemeChanged;
-        NeuralController.Trained -= OnNeuralTrained;
+        trainingJob.Cancel();
         if (Instance == this) Instance = null;
     }
 
@@ -344,7 +342,7 @@ public class MissionControlUI : MonoBehaviour
             if (input == null) return;
             input.SetTextWithoutNotify(Mathf.RoundToInt(s.value).ToString());
         }
-        Sync(windSlider); Sync(testsSlider); Sync(timeScaleSlider); Sync(liveSpeedSlider);
+        Sync(windSlider); Sync(testsSlider); Sync(jitterSlider); Sync(liveSpeedSlider);
         Sync(seedSlider); Sync(heightSlider); Sync(descentSlider); Sync(tilt0Slider);
         Sync(massNoiseSlider); Sync(angleNoiseSlider);
     }
@@ -896,10 +894,10 @@ public class MissionControlUI : MonoBehaviour
         loadingSettings = true;
         if (windSlider != null) windSlider.value = UserSettings.Wind;
         if (testsSlider != null) testsSlider.value = UserSettings.Tests;
-        if (timeScaleSlider != null) timeScaleSlider.value = UserSettings.TimeScale;
+        if (jitterSlider != null) jitterSlider.value = UserSettings.Jitter;
         if (liveSpeedSlider != null) liveSpeedSlider.value = UserSettings.LiveTimeScale;
         if (noiseToggle != null) noiseToggle.isOn = UserSettings.Noise;
-        if (trainToggle != null) trainToggle.isOn = UserSettings.Train;
+        if (trainToggle != null) trainToggle.isOn = trainingJob.IsRunning;
 
         trajVisible = UserSettings.TrajectoryVisible;
         panelsHidden = UserSettings.PanelsHidden;
@@ -911,7 +909,7 @@ public class MissionControlUI : MonoBehaviour
 
         if (rocket != null)
         {
-            var mode = (RocketPhysics.ControlMode)UserSettings.ControlMode;
+            var mode = (ControlMode)UserSettings.ControlMode;
             rocket.controlMode = mode;
             SelectModeVisualOnly(mode);
         }
@@ -933,14 +931,14 @@ public class MissionControlUI : MonoBehaviour
         loadingSettings = false;
     }
 
-    void SelectModeVisualOnly(RocketPhysics.ControlMode mode)
+    void SelectModeVisualOnly(ControlMode mode)
     {
         // Оновити mode pill + кольори кнопок без PrepareMode/reset
         if (txtMode != null)
             txtMode.text = UILocale.ModeNameShort(mode);
         for (int i = 0; i < modeButtons.Count && i < modeButtonImages.Count; i++)
         {
-            var m = (RocketPhysics.ControlMode)i;
+            var m = (ControlMode)i;
             bool active = m == mode;
             Color bg = active ? C_BtnActive : C_Btn;
             if (modeButtonImages[i] != null)
@@ -987,10 +985,10 @@ public class MissionControlUI : MonoBehaviour
             testsSlider.onValueChanged.RemoveListener(OnTestsChanged);
             testsSlider.onValueChanged.AddListener(OnTestsChanged);
         }
-        if (timeScaleSlider != null)
+        if (jitterSlider != null)
         {
-            timeScaleSlider.onValueChanged.RemoveListener(OnTimeScaleChangedPersist);
-            timeScaleSlider.onValueChanged.AddListener(OnTimeScaleChangedPersist);
+            jitterSlider.onValueChanged.RemoveListener(OnJitterChanged);
+            jitterSlider.onValueChanged.AddListener(OnJitterChanged);
         }
         if (liveSpeedSlider != null)
         {
@@ -1036,7 +1034,6 @@ public class MissionControlUI : MonoBehaviour
     void UserEditedConditions()
     {
         if (loadingSettings) return;
-        protocolJitterOverride = -1f;
         if (IdealLandingPresets.Active)
         {
             IdealLandingPresets.ClearActive();
@@ -1133,13 +1130,13 @@ public class MissionControlUI : MonoBehaviour
         ApplySettings();
     }
 
-    void OnTimeScaleChangedPersist(float v)
+    void OnJitterChanged(float v)
     {
         if (loadingSettings) return;
-        UserSettings.TimeScale = v;
+        UserEditedConditions();
+        UserSettings.Jitter = v;
         UserSettings.Save();
-        if (sim != null)
-            sim.experimentTimeScale = v;
+        ApplySettings();
     }
 
     void OnLiveSpeedChanged(float v)
@@ -1161,42 +1158,67 @@ public class MissionControlUI : MonoBehaviour
         ApplySettings();
     }
 
+    /// <summary>Скільки поколінь ES на режим при навчанні з UI (повне навчання — Tools/HeadlessSim або меню Editor).</summary>
+    const int UiTrainingGenerations = 80;
+
     void OnTrainChanged(bool on)
     {
         if (loadingSettings) return;
-        UserEditedConditions();
-        UserSettings.Train = on;
-        UserSettings.Save();
-        ApplySettings();
+        if (on && !trainingJob.IsRunning)
+        {
+            if (rocket == null) return;
+            trainingJob.Start(rocket.controllers, RocketPhysics.WeightsDirectory, UiTrainingGenerations);
+            NotifyInfo(UILocale.T("msg_train_on"));
+        }
+        else if (!on && trainingJob.IsRunning)
+        {
+            trainingJob.Cancel();
+            NotifyInfo(UILocale.T("msg_train_off"));
+        }
         RefreshNnStatus();
-        NotifyInfo(on ? UILocale.T("msg_train_on") : UILocale.T("msg_train_off"));
     }
 
-    void OnNeuralTrained(NeuralController.EsTrainStep step)
+    /// <summary>Опитування фонового навчання: прогрес у статусі, по завершенні — перезавантаження ваг.</summary>
+    void PollTrainingJob()
     {
-        if (!step.Applied) return;
+        if (trainingJob.IsRunning)
+        {
+            RefreshNnStatus();
+            return;
+        }
+        if (!trainingJob.Finished) return;
+        trainingJob.Acknowledge();
+        if (rocket != null && !trainingJob.Cancelled && trainingJob.Error == null)
+        {
+            rocket.ReloadWeights();
+            NotifyInfo(string.Format(UILocale.T("msg_train_done"), trainingJob.Status));
+        }
+        else if (trainingJob.Error != null)
+            NotifyInfo("ES: " + trainingJob.Error);
+        if (trainToggle != null) trainToggle.SetIsOnWithoutNotify(false);
         RefreshNnStatus();
-        NotifyInfo(step.Improved
-            ? string.Format(UILocale.T("msg_nn_better"), step.Generation, step.Cost, step.Sigma)
-            : string.Format(UILocale.T("msg_nn_worse"), step.Generation, step.Cost, step.BestCost));
     }
 
     void RefreshNnStatus()
     {
         if (txtNnStatus == null) return;
-        var nn = rocket != null ? rocket.neuralController : null;
-        bool on = nn != null ? nn.enableTraining : (trainToggle != null && trainToggle.isOn);
-        txtNnStatus.text = nn != null
-            ? nn.StatusLine(UILocale.IsUK)
-            : UILocale.T(on ? "nn_status_on" : "nn_status_off");
-        txtNnStatus.color = on ? C_Amber : C_Muted;
+        if (trainingJob.IsRunning)
+        {
+            txtNnStatus.text = $"ES(1+λ) {trainingJob.Progress01:P0} · {trainingJob.Status}";
+            txtNnStatus.color = C_Amber;
+            return;
+        }
+        txtNnStatus.text = rocket != null && !string.IsNullOrEmpty(rocket.WeightsInfo)
+            ? rocket.WeightsInfo
+            : UILocale.T("nn_status_off");
+        txtNnStatus.color = C_Muted;
     }
 
     void SaveUserSettingsFromUi()
     {
         if (windSlider != null) UserSettings.Wind = windSlider.value;
         if (testsSlider != null) UserSettings.Tests = Mathf.RoundToInt(testsSlider.value);
-        if (timeScaleSlider != null) UserSettings.TimeScale = timeScaleSlider.value;
+        if (jitterSlider != null) UserSettings.Jitter = jitterSlider.value;
         if (liveSpeedSlider != null) UserSettings.LiveTimeScale = liveSpeedSlider.value;
         if (seedSlider != null) UserSettings.ExperimentSeed = Mathf.RoundToInt(seedSlider.value);
         if (heightSlider != null) UserSettings.StartHeight = heightSlider.value;
@@ -1205,7 +1227,6 @@ public class MissionControlUI : MonoBehaviour
         if (massNoiseSlider != null) UserSettings.MassNoise = massNoiseSlider.value;
         if (angleNoiseSlider != null) UserSettings.AngleNoise = angleNoiseSlider.value;
         if (noiseToggle != null) UserSettings.Noise = noiseToggle.isOn;
-        if (trainToggle != null) UserSettings.Train = trainToggle.isOn;
         if (residualToggle != null) UserSettings.HybridResidual = residualToggle.isOn;
         UserSettings.TrajectoryVisible = trajVisible;
         UserSettings.PanelsHidden = panelsHidden;
@@ -2262,13 +2283,13 @@ public class MissionControlUI : MonoBehaviour
 
         // Modes 1-4
         if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1))
-            SelectMode(RocketPhysics.ControlMode.PID);
+            SelectMode(ControlMode.PID);
         if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
-            SelectMode(RocketPhysics.ControlMode.Fuzzy);
+            SelectMode(ControlMode.Fuzzy);
         if (Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3))
-            SelectMode(RocketPhysics.ControlMode.Neural);
+            SelectMode(ControlMode.Neural);
         if (Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4))
-            SelectMode(RocketPhysics.ControlMode.Hybrid);
+            SelectMode(ControlMode.Hybrid);
 
         if (Input.GetKeyDown(KeyCode.P)) OnStartCompare();
         if (Input.GetKeyDown(KeyCode.X)) OnCancelCompare();
@@ -2277,7 +2298,7 @@ public class MissionControlUI : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.F11)) BorderlessWindow.ToggleFullscreen();
     }
 
-    void SelectMode(RocketPhysics.ControlMode mode)
+    void SelectMode(ControlMode mode)
     {
         if (rocket == null) return;
         if (sim != null && sim.IsExperimentRunning) return;
@@ -2288,8 +2309,6 @@ public class MissionControlUI : MonoBehaviour
         ResolveCamera()?.SetMode(CameraFollow.ViewMode.Follow);
         // Зміна режиму: робочі GNC + номінальні IC, не «залиплий» ідеал
         IdealLandingPresets.ClearActive();
-        IdealLandingPresets.ApplyDefaultControllerTuning(
-            rocket, rocket.fuzzyController, rocket.neuralController, rocket.hybridController);
         RestoreNominalInitialConditions();
         rocket.PrepareMode(mode);
         RefreshCamLabel();
@@ -2613,15 +2632,15 @@ public class MissionControlUI : MonoBehaviour
         float halfW = (inner - gap) * 0.5f;
         float row0 = y;
         modeButtons.Add(ModeButtonAt(root, pad, row0, cellW, cellH,
-            UILocale.T("mode_btn_a"), UILocale.T("mode_sub_a"), RocketPhysics.ControlMode.PID));
+            UILocale.T("mode_btn_a"), UILocale.T("mode_sub_a"), ControlMode.PID));
         modeButtons.Add(ModeButtonAt(root, pad + cellW + gap, row0, cellW, cellH,
-            UILocale.T("mode_btn_b"), UILocale.T("mode_sub_b"), RocketPhysics.ControlMode.Fuzzy));
+            UILocale.T("mode_btn_b"), UILocale.T("mode_sub_b"), ControlMode.Fuzzy));
         y -= cellH + gap;
         float row1 = y;
         modeButtons.Add(ModeButtonAt(root, pad, row1, cellW, cellH,
-            UILocale.T("mode_btn_c"), UILocale.T("mode_sub_c"), RocketPhysics.ControlMode.Neural));
+            UILocale.T("mode_btn_c"), UILocale.T("mode_sub_c"), ControlMode.Neural));
         modeButtons.Add(ModeButtonAt(root, pad + cellW + gap, row1, cellW, cellH,
-            UILocale.T("mode_btn_d"), UILocale.T("mode_sub_d"), RocketPhysics.ControlMode.Hybrid));
+            UILocale.T("mode_btn_d"), UILocale.T("mode_sub_d"), ControlMode.Hybrid));
         y -= cellH + 8f;
 
         // ── 2–3. Умови (persistent-секція — NumFields ніколи не знищуються) ──
@@ -2738,59 +2757,22 @@ public class MissionControlUI : MonoBehaviour
         UpdateViewButtonVisual();
         ApplySettings();
         ApplyExperimentInitialConditions();
-        // Ideal [I]: перед стартом знову ideal GNC (ApplySettings міг перезаписати residual/gains)
-        if (IdealLandingPresets.Active)
-            IdealLandingPresets.ReapplyModeIdeal(rocket);
-        // Детерміновані збурення одиночного запуску з поточного seed
+        // Один детермінований сценарій збурень із поточного seed (той самий генератор, що в Monte-Carlo)
         int seed = sim != null ? sim.experimentSeed : UserSettings.ExperimentSeed;
-        SimRng.Reseed(seed);
-        rocket.batchDrivenTicks = false; // гарантувати FixedUpdate + trajectory
-        rocket.skipStackPhase = true; // Stage-1 landing only (Ideal / демо / single)
-        rocket.NavSeed = (uint)Mathf.Max(1, seed);
-        rocket.ResetSimulation();
+        var disturbances = sim != null && !IdealLandingPresets.Active
+            ? sim.CurrentDisturbances()
+            : DisturbanceSettings.None;
+        rocket.StartLanding(disturbances, LandingExperiment.TrialSeed(seed, 0));
         UpdatePauseButtonVisual();
         var tv = EnsureTrajectoryVisualizer();
         tv?.Clear();
         tv?.SetVisible(trajVisible);
-
-        // Вітер/шум — лише після відділення (ApplyFlightDisturbances відкладає на Stack)
-        float wind = windSlider != null ? windSlider.value : 0f;
-        bool noise = noiseToggle != null && noiseToggle.isOn;
-        float massVar = massNoiseSlider != null ? massNoiseSlider.value : UserSettings.MassNoise;
-        float angVar = angleNoiseSlider != null ? angleNoiseSlider.value : UserSettings.AngleNoise;
-        // Ideal clean: jitter/маса/кут = 0
-        if (IdealLandingPresets.Active)
-        {
-            wind = 0f;
-            noise = false;
-            massVar = 0f;
-            angVar = 0f;
-        }
-        // NAV noise лише при увімкненому шумі (Ideal = 0)
-        rocket.NavNoiseScale = noise ? 0.35f : 0f;
-        // Бічний offset IC: реалістичний розкид точки входу (не Ideal)
-        float jitter = 0f;
-        if (noise && !IdealLandingPresets.Active)
-            jitter = Mathf.Clamp(wind * 1.15f + angVar * 0.9f, 0f, 35f);
-        if (sim != null)
-        {
-            sim.windStrength = wind;
-            sim.enableNoise = noise;
-            sim.massVariationPercent = massVar;
-            sim.angleVariationDegrees = angVar;
-            sim.positionJitterMeters = jitter;
-        }
-        rocket.ApplyFlightDisturbances(wind, noise, massVar, angVar, positionJitterMeters: jitter);
+        float wind = disturbances.WindStrength;
 
         float h0 = rocket.state.position.y;
         string dist = UILocale.IsUK
             ? $"Earth LZ · 1-й ступінь · h={h0:F0} м · вітер≈{wind:F0}"
             : $"Earth LZ · first stage · h={h0:F0} m · wind≈{wind:F0}";
-        bool trainOn = rocket.neuralController != null && rocket.neuralController.enableTraining
-            && (rocket.controlMode == RocketPhysics.ControlMode.Neural
-                || rocket.controlMode == RocketPhysics.ControlMode.Hybrid);
-        if (trainOn)
-            dist += "\n" + UILocale.T("msg_train_flight");
         NotifyInfo(string.Format(UILocale.T("msg_started"), UILocale.ModeName(rocket.controlMode)) + "\n" + dist);
         RefreshNnStatus();
     }
@@ -2808,7 +2790,6 @@ public class MissionControlUI : MonoBehaviour
             return;
         }
 
-        protocolJitterOverride = -1f;
         IdealLandingPresets.Apply(rocket, sim, out string uk, out string en);
         string msg = UILocale.IsUK ? uk : en;
 
@@ -2819,10 +2800,8 @@ public class MissionControlUI : MonoBehaviour
         if (tilt0Slider) tilt0Slider.value = IdealLandingPresets.StartTiltDeg;
         if (windSlider) windSlider.value = 0f;
         if (noiseToggle) noiseToggle.isOn = false;
-        if (trainToggle) trainToggle.isOn = false;
         if (massNoiseSlider) massNoiseSlider.value = 0f;
         if (angleNoiseSlider) angleNoiseSlider.value = 0f;
-        if (residualToggle) residualToggle.isOn = true; // Hybrid Ideal потребує residual
         loadingSettings = false;
         UserSettings.StartHeight = IdealLandingPresets.StartHeight;
         UserSettings.StartDescentSpeed = IdealLandingPresets.StartDescentSpeed;
@@ -2831,12 +2810,8 @@ public class MissionControlUI : MonoBehaviour
         UserSettings.Noise = false;
         UserSettings.MassNoise = 0f;
         UserSettings.AngleNoise = 0f;
-        UserSettings.HybridResidual = true;
-        UserSettings.Train = false;
         UserSettings.Save();
         ApplySettings();
-        // ApplySettings міг скинути residual/GNC з toggle — повернути ideal GNC
-        IdealLandingPresets.ReapplyModeIdeal(rocket);
 
         HideLandingResult();
         ClearGraphs();
@@ -3116,7 +3091,7 @@ public class MissionControlUI : MonoBehaviour
 
         var export = new ResearchExporter.LandingExportData
         {
-            algorithm = FriendlyMode(rocket != null ? rocket.controlMode : RocketPhysics.ControlMode.PID),
+            algorithm = FriendlyMode(rocket != null ? rocket.controlMode : ControlMode.PID),
             timestamp = ResearchExporter.Stamp(),
             metrics = m,
             maxTouchdownVelocity = maxV > 0 ? maxV : (p != null ? p.maxTouchdownVelocity : LandingCriteria.DefaultMaxTouchdownVelocity),
@@ -3176,8 +3151,7 @@ public class MissionControlUI : MonoBehaviour
         sampleTimer = 0f;
         ResetFlightPeaks();
         // Умови порівняння = поточні слайдери/тогли користувача (не DefenseBaseline)
-        IdealLandingPresets.ClearActive(); // Ideal soft-GNC не має «текти» в MC
-        if (trainToggle) trainToggle.isOn = false; // ES mid-pack ламає paired fairness
+        IdealLandingPresets.ClearActive(); // номінальні умови [I] не переносяться в MC
         ApplySettings();
         PersistCompareSettingsFromUi();
         sim.RequestFullExperiment();
@@ -3196,9 +3170,8 @@ public class MissionControlUI : MonoBehaviour
         if (heightSlider) UserSettings.StartHeight = heightSlider.value;
         if (descentSlider) UserSettings.StartDescentSpeed = descentSlider.value;
         if (tilt0Slider) UserSettings.StartTilt = tilt0Slider.value;
-        if (timeScaleSlider) UserSettings.TimeScale = timeScaleSlider.value;
+        if (jitterSlider) UserSettings.Jitter = jitterSlider.value;
         if (residualToggle) UserSettings.HybridResidual = residualToggle.isOn;
-        UserSettings.Train = false;
         UserSettings.Save();
     }
 
@@ -3216,12 +3189,12 @@ public class MissionControlUI : MonoBehaviour
         if (descentSlider) descentSlider.value = DefenseBaseline.StartDescentSpeed;
         if (tilt0Slider) tilt0Slider.value = DefenseBaseline.StartTiltDeg;
         if (residualToggle) residualToggle.isOn = DefenseBaseline.HybridResidualOn;
-        if (trainToggle) trainToggle.isOn = false;
+        if (jitterSlider) jitterSlider.value = DefenseBaseline.PositionJitterMeters;
         loadingSettings = false;
         PersistCompareSettingsFromUi();
     }
 
-    /// <summary>B / кнопка: фіксований протокол захисту (seed 42, v14) → слайдери + sim.</summary>
+    /// <summary>B / кнопка: фіксований протокол захисту (DefenseBaseline) → слайдери + sim.</summary>
     void OnApplyDefenseBaseline()
     {
         if (sim != null && sim.IsExperimentRunning)
@@ -3230,7 +3203,6 @@ public class MissionControlUI : MonoBehaviour
             return;
         }
         IdealLandingPresets.ClearActive();
-        protocolJitterOverride = DefenseBaseline.PositionJitterMeters;
         SyncUiFromDefenseBaseline();
         DefenseBaseline.ApplyTo(sim);
         ApplySettings();
@@ -3258,11 +3230,10 @@ public class MissionControlUI : MonoBehaviour
         SetHelpVisible(false);
         HideLandingResult();
 
-        // Hybrid + повний Ideal (GNC + clean IC). SelectMode скидає Ideal — Apply після нього.
-        SelectMode(RocketPhysics.ControlMode.Hybrid);
+        // Hybrid + номінальні умови Ideal. SelectMode скидає Ideal — Apply після нього.
+        SelectMode(ControlMode.Hybrid);
         yield return null;
         OnApplyIdealPresets();
-        rocket.skipStackPhase = true;
         yield return null;
         ApplyLiveTimeScale(Mathf.Max(1f, Time.timeScale));
         OnStartLanding();
@@ -4174,6 +4145,7 @@ public class MissionControlUI : MonoBehaviour
     {
         if (!built) return;
 
+        PollTrainingJob();
         HandleHotkeys();
         UpdateUiFocusHighlight();
 
@@ -4307,8 +4279,6 @@ public class MissionControlUI : MonoBehaviour
                 SetStatusVisual(ok ? "st_success" : "st_fail", ok ? C_Ok : C_Alert);
                 Write(txtScore, $"{rocket.metrics.SuccessScore:F0}", ok ? C_Ok : C_Alert);
             }
-            else if (rocket.simulationArmed && rocket.phase == RocketPhysics.FlightPhase.Stack)
-                SetStatusVisual("st_stack", C_Amber);
             else if (rocket.simulationArmed && s.time > 0.05f)
                 SetStatusVisual("st_descent", C_Cyan);
             else if (rocket.simulationArmed)
@@ -4449,7 +4419,7 @@ public class MissionControlUI : MonoBehaviour
         return C_Muted;
     }
 
-    static string FriendlyMode(RocketPhysics.ControlMode m) => UILocale.ModeName(m);
+    static string FriendlyMode(ControlMode m) => UILocale.ModeName(m);
 
     static string Arrow(float d)
     {
@@ -4469,8 +4439,6 @@ public class MissionControlUI : MonoBehaviour
             else sim.windStrength = UserSettings.Wind;
             if (noiseToggle) sim.enableNoise = noiseToggle.isOn;
             else sim.enableNoise = UserSettings.Noise;
-            if (timeScaleSlider) sim.experimentTimeScale = timeScaleSlider.value;
-            else sim.experimentTimeScale = UserSettings.TimeScale;
             if (seedSlider) sim.experimentSeed = Mathf.RoundToInt(seedSlider.value);
             else sim.experimentSeed = UserSettings.ExperimentSeed;
             if (massNoiseSlider) sim.massVariationPercent = massNoiseSlider.value;
@@ -4484,24 +4452,10 @@ public class MissionControlUI : MonoBehaviour
             if (tilt0Slider) sim.startTiltDeg = tilt0Slider.value;
             else sim.startTiltDeg = UserSettings.StartTilt;
 
-            // Jitter: protocol B override, інакше від вітру + шуму кута
-            float w = Mathf.Max(0f, sim.windStrength);
-            float ang = Mathf.Max(0f, sim.angleVariationDegrees);
-            if (protocolJitterOverride >= 0f)
-                sim.positionJitterMeters = protocolJitterOverride;
-            else
-            {
-                sim.positionJitterMeters = sim.enableNoise
-                    ? Mathf.Clamp(w * 1.1f + ang * 0.8f, 0f, 40f)
-                    : Mathf.Clamp(w * 0.35f, 0f, 12f);
-            }
-            sim.continuousWind = w > 0.05f;
+            sim.positionJitterMeters = jitterSlider ? jitterSlider.value : UserSettings.Jitter;
+            sim.continuousWind = sim.windStrength > 0.05f;
             sim.includeHybrid = true;
         }
-        if (trainToggle && rocket?.neuralController != null)
-            rocket.neuralController.enableTraining = trainToggle.isOn;
-        else if (rocket?.neuralController != null)
-            rocket.neuralController.enableTraining = UserSettings.Train;
         if (rocket?.hybridController != null)
         {
             bool res = residualToggle != null ? residualToggle.isOn : UserSettings.HybridResidual;
@@ -4531,12 +4485,8 @@ public class MissionControlUI : MonoBehaviour
         tilt = Mathf.Clamp(tilt, 0f, 12f);
 
         var p = rocket.parameters;
-        p.startPosition = new Vector3(0f, h0, 0f);
-        p.startVelocity = new Vector3(0f, -vy, 0f);
-        p.startEulerAngles = new Vector3(0f, 0f, tilt);
-        p.dryMass = 25600f;
-        p.fuelMass = 14000f;
-        p.maxThrust = 845000f;
+        p.ApplyStage1Vehicle();
+        p.SetInitialConditions(h0, vy, tilt);
 
         if (sim != null)
         {
@@ -4546,15 +4496,7 @@ public class MissionControlUI : MonoBehaviour
         }
 
         if (!rocket.simulationArmed)
-        {
-            rocket.state.position = p.startPosition;
-            rocket.state.velocity = p.startVelocity;
-            rocket.state.rotation = Quaternion.Euler(p.startEulerAngles);
-            rocket.state.angularVelocity = Vector3.zero;
-            rocket.state.isLanded = false;
-            rocket.state.simulationFinished = false;
-            rocket.SyncTransformWithState();
-        }
+            rocket.PreviewInitialConditions();
     }
 
     /// <summary>Номінальні IC з поточних слайдерів експерименту.</summary>
@@ -4864,12 +4806,6 @@ public class MissionControlUI : MonoBehaviour
             return;
         }
 
-        if (rocket.phase == RocketPhysics.FlightPhase.Stack)
-        {
-            txtInsight.text = UILocale.T("ins_stack");
-            txtInsight.color = C_Amber;
-            return;
-        }
 
         if (s.position.y > 400f)
         {
@@ -5064,11 +5000,6 @@ public class MissionControlUI : MonoBehaviour
             key = s.time > 0.05f ? "step_stop" : "step_ready";
             col = C_Muted;
         }
-        else if (rocket.phase == RocketPhysics.FlightPhase.Stack)
-        {
-            key = "step_stack";
-            col = C_Amber;
-        }
         else if (h >= 400f) { key = "step_high"; col = C_Cyan; }
         else if (h >= 100f) { key = "step_approach"; col = C_Cyan; }
         else if (h >= 25f) { key = "step_powered"; col = C_Amber; }
@@ -5076,9 +5007,7 @@ public class MissionControlUI : MonoBehaviour
         else if (h >= 2f) { key = "step_soft"; col = C_Ok; }
         else { key = "step_touch"; col = C_Ok; }
 
-        string mode = rocket.phase == RocketPhysics.FlightPhase.Stack
-            ? "STACK"
-            : UILocale.ModeNameShort(rocket.controlMode);
+        string mode = UILocale.ModeNameShort(rocket.controlMode);
         txtStep.text = mode + "  |  " + UILocale.T(key);
         txtStep.color = col;
         var stripeTf = stepBarGo != null ? stepBarGo.transform.Find("StepAccent") : null;
@@ -5095,7 +5024,7 @@ public class MissionControlUI : MonoBehaviour
     }
 
     Button ModeButtonAt(Transform parent, float x, float y, float w, float h,
-        string title, string subtitle, RocketPhysics.ControlMode mode)
+        string title, string subtitle, ControlMode mode)
     {
         title = (title ?? "").ToUpperInvariant();
         subtitle = (subtitle ?? "").ToUpperInvariant();
@@ -5245,7 +5174,7 @@ public class MissionControlUI : MonoBehaviour
             conditionToggleBindings.Clear();
             heightSlider = descentSlider = tilt0Slider = windSlider = null;
             massNoiseSlider = angleNoiseSlider = liveSpeedSlider = null;
-            testsSlider = timeScaleSlider = seedSlider = null;
+            testsSlider = jitterSlider = seedSlider = null;
             noiseToggle = trainToggle = residualToggle = null;
             txtNnStatus = null;
         }
@@ -5278,7 +5207,7 @@ public class MissionControlUI : MonoBehaviour
                 1, 8, UserSettings.LiveTimeScale, ref ly, out liveSpeedSlider, pad, inner, "sl_live", "sl_live_u");
 
             noiseToggle = ToggleAt(sec, pad, ly, halfW, 26f, UILocale.T("tg_noise"), UserSettings.Noise, "tg_noise");
-            trainToggle = ToggleAt(sec, pad + halfW + gap, ly, halfW, 26f, UILocale.T("tg_train"), UserSettings.Train, "tg_train");
+            trainToggle = ToggleAt(sec, pad + halfW + gap, ly, halfW, 26f, UILocale.T("tg_train"), false, "tg_train");
             ly -= 32f;
 
             txtNnStatus = CreateText(sec, "", 10, C_Muted);
@@ -5291,9 +5220,9 @@ public class MissionControlUI : MonoBehaviour
 
             SectionHeader(sec, "h_mc", ref ly, pad, inner);
             txtTestsVal = SliderLine(sec, UILocale.T("sl_tests"), UILocale.T("sl_tests_u"),
-                5, 40, UserSettings.Tests, ref ly, out testsSlider, pad, inner, "sl_tests", "sl_tests_u");
-            SliderLine(sec, UILocale.T("sl_time"), UILocale.T("sl_time_u"),
-                1, 40, UserSettings.TimeScale, ref ly, out timeScaleSlider, pad, inner, "sl_time", "sl_time_u");
+                5, 200, UserSettings.Tests, ref ly, out testsSlider, pad, inner, "sl_tests", "sl_tests_u");
+            SliderLine(sec, UILocale.T("sl_jitter"), UILocale.T("sl_jitter_u"),
+                0, 40, UserSettings.Jitter, ref ly, out jitterSlider, pad, inner, "sl_jitter", "sl_jitter_u");
             txtSeedVal = SliderLine(sec, UILocale.T("sl_seed"), UILocale.T("sl_seed_u"),
                 1, 999, UserSettings.ExperimentSeed, ref ly, out seedSlider, pad, inner, "sl_seed", "sl_seed_u");
             residualToggle = ToggleAt(sec, pad, ly, inner, 26f, UILocale.T("tg_residual"), UserSettings.HybridResidual, "tg_residual");
@@ -5316,7 +5245,7 @@ public class MissionControlUI : MonoBehaviour
                 angleNoiseSlider = sliders[5];
                 liveSpeedSlider = sliders[6];
                 testsSlider = sliders[7];
-                timeScaleSlider = sliders[8];
+                jitterSlider = sliders[8];
                 seedSlider = sliders[9];
             }
             var toggles = conditionSectionGo.GetComponentsInChildren<Toggle>(true);

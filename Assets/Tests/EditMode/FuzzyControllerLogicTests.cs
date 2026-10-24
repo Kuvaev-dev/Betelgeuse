@@ -1,90 +1,57 @@
 using NUnit.Framework;
 using UnityEngine;
 
-/// <summary>
-/// Логіка фазифікації через публічний API Fuzzy (потребує GO у EditMode — створюємо тимчасово).
-/// </summary>
+/// <summary>Нечіткий регулятор Sugeno-0: розбиття термів, монотонність тяги, симетрія орієнтації.</summary>
 public class FuzzyControllerLogicTests
 {
-    FuzzyLandingController fuzzy;
-    GameObject go;
+    readonly FuzzyLandingController fuzzy = new FuzzyLandingController();
 
-    [SetUp]
-    public void SetUp()
+    [TestCase(-1f)] [TestCase(-0.7f)] [TestCase(-0.25f)] [TestCase(0f)] [TestCase(0.4f)] [TestCase(0.9f)] [TestCase(1f)]
+    public void SignedTerms_FormPartitionOfUnity(float x)
     {
-        go = new GameObject("FuzzyTest");
-        fuzzy = go.AddComponent<FuzzyLandingController>();
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        if (go != null) Object.DestroyImmediate(go);
+        float s = 0f;
+        foreach (var mu in FuzzyLandingController.SignedMembership5(x)) s += mu;
+        Assert.AreEqual(1f, s, 1e-4f);
     }
 
     [Test]
-    public void Thrust_HighSpeedLowAltitude_IsAggressive()
+    public void SugenoThrust_GrowsWithDescentSpeed()
     {
-        float hover = 30000f * AtmosphereModel.GetGravity(20f);
-        float thrust = fuzzy.CalculateThrust(20f, -40f, 30000f);
-        Assert.Greater(thrust, hover * 1.2f);
+        float m = 35000f;
+        float slow = fuzzy.EvaluateSugenoThrust(600f, -10f, m);
+        float fast = fuzzy.EvaluateSugenoThrust(600f, -70f, m);
+        Assert.Greater(fast, slow);
     }
 
     [Test]
-    public void Thrust_HighAltitudeSlow_IsNearHover()
+    public void SugenoThrust_HigherNearGroundForSameSpeed()
     {
-        float mass = 30000f;
-        float h = 2000f;
-        float g = AtmosphereModel.GetGravity(h);
-        float thrust = fuzzy.CalculateThrust(h, -15f, mass);
-        Assert.Greater(thrust, mass * g * 0.7f);
-        Assert.Less(thrust, mass * g * 3f);
+        float m = 35000f;
+        Assert.Greater(fuzzy.EvaluateSugenoThrust(100f, -40f, m), fuzzy.EvaluateSugenoThrust(2400f, -40f, m));
     }
 
     [Test]
-    public void Gimbal_ZeroError_NearZero()
+    public void AttitudeRules_ZeroAtOrigin_OddSymmetric_Restoring()
     {
-        Vector3 g = fuzzy.CalculateGimbal(0f, 0f, 0f, 0f);
-        Assert.AreEqual(0f, g.x, 0.5f);
-        Assert.AreEqual(0f, g.z, 0.5f);
+        Assert.AreEqual(0f, fuzzy.CalculateGimbal(0f, 0f, 0f, 0f).x, 1e-4f);
+        var a = fuzzy.CalculateGimbal(4f, -4f, 1f, -1f);
+        Assert.Greater(a.x, 0f);
+        Assert.AreEqual(-a.x, a.z, 1e-4f);
     }
 
     [Test]
-    public void Gimbal_LargeError_SaturatedWithinLimit()
+    public void AttitudeRules_Saturate()
     {
-        Vector3 g = fuzzy.CalculateGimbal(40f, -40f, 30f, -30f);
-        Assert.LessOrEqual(Mathf.Abs(g.x), fuzzy.maxGimbalDeg + 0.01f);
-        Assert.LessOrEqual(Mathf.Abs(g.z), fuzzy.maxGimbalDeg + 0.01f);
-        Assert.Greater(Mathf.Abs(g.x) + Mathf.Abs(g.z), 5f);
+        var g = fuzzy.CalculateGimbal(90f, 0f, 90f, 0f);
+        Assert.AreEqual(fuzzy.maxGimbalDeg, g.x, 1e-3f);
     }
 
     [Test]
-    public void Inactive_ReturnsFallbackThrust()
+    public void Thrust_StaysWithinBlendEnvelopeOfProfile()
     {
-        fuzzy.isActive = false;
-        float mass = 25000f;
-        float h = 500f;
-        float vy = -50f;
-        float thrust = fuzzy.CalculateThrust(h, vy, mass);
-        float expected = SoftLandingGuidance.ProfileThrust(h, vy, mass);
-        Assert.AreEqual(expected, thrust, 1f);
-    }
-
-    [Test]
-    public void Gimbal_OpposesPitchError_NegativeFeedback()
-    {
-        // Позитивна помилка кута → від'ємний gimbal (стабілізація)
-        Vector3 g = fuzzy.CalculateGimbal(15f, 0f, 0f, 0f);
-        Assert.Less(g.x, 0f);
-        Vector3 gNeg = fuzzy.CalculateGimbal(-15f, 0f, 0f, 0f);
-        Assert.Greater(gNeg.x, 0f);
-    }
-
-    [Test]
-    public void Thrust_NeverNegative_OrNaN()
-    {
-        float t = fuzzy.CalculateThrust(0.5f, -80f, 30000f);
-        Assert.IsFalse(float.IsNaN(t));
-        Assert.GreaterOrEqual(t, 0f);
+        float m = 35000f;
+        float profile = SoftLandingGuidance.ProfileThrust(800f, -40f, m);
+        float t = fuzzy.CalculateThrust(800f, -40f, m);
+        Assert.LessOrEqual(Mathf.Abs(t - profile), m * AtmosphereModel.GetGravity(800f) * fuzzy.maxDevFrac + 1f);
     }
 }

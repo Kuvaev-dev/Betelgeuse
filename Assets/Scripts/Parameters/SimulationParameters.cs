@@ -1,39 +1,22 @@
 using UnityEngine;
 
 /// <summary>
-/// Початкові умови та характеристики. Об'єкт керування після відділення — 1-й ступінь (Earth LZ).
-/// До відділення — спрощений підйом повного пакета (Stack); A–D лише на Stage1.
+/// Ассет параметрів ділянки посадки 1-го ступеня (Earth LZ): ПУ, апарат, крок, критерії.
+/// Перетворюється на чисту <see cref="LandingSetup"/> для ядра симуляції.
 /// </summary>
 [CreateAssetMenu(fileName = "LandingParams", menuName = "Betelgeuse/Simulation Parameters")]
 public class SimulationParameters : ScriptableObject
 {
-    [Header("Посадка 1-го ступеня (після відділення)")]
-    [Tooltip("IC ділянки посадки Stage-1 (Ideal / MC / після sep)")]
+    [Header("Початкові умови (після відділення)")]
     public Vector3 startPosition = new Vector3(0, 1600f, 0);
     public Vector3 startVelocity = new Vector3(0, -60f, 0);
     public Vector3 startEulerAngles = new Vector3(0, 0, 2f);
 
-    [Header("1-й ступінь (об'єкт GNC A–D)")]
-    public float dryMass = 25600f; // F9-class first-stage dry mass, kg
-    public float fuelMass = 14000f; // landing residual propellant (not full ascent tank)
-    public float maxThrust = 845000f; // 1x Merlin-class SL; 9 engines, landing uses center
-    public float isp = 282f; // Merlin-class SL Isp for Earth landing burn, s
-
-    [Header("Пакет Stack (до відділення, спрощений підйом)")]
-    [Tooltip("Старт пакета біля pad / низький підйом")]
-    public Vector3 stackStartPosition = new Vector3(0f, 45f, 0f);
-    public Vector3 stackStartVelocity = new Vector3(0f, 35f, 0f);
-    public Vector3 stackStartEulerAngles = Vector3.zero;
-    [Tooltip("Суха маса всього 3-ступеневого пакета (спрощено)")]
-    public float stackDryMass = 110000f;
-    [Tooltip("Паливо на підйом (спрощено; не модель орбіти)")]
-    public float stackFuelMass = 280000f;
-    public float stackMaxThrust = 7600000f;
-    [Tooltip("Висота або час відділення (що настане раніше)")]
-    public float separationAltitude = 2400f;
-    public float separationTime = 18f;
-    [Tooltip("Після sep підставити IC посадки (start*) замість поточної балістики")]
-    public bool snapToLandingIcOnSeparation = true;
+    [Header("1-й ступінь")]
+    public float dryMass = Stage1Vehicle.DryMassKg;
+    public float fuelMass = Stage1Vehicle.LandingFuelKg;
+    public float maxThrust = Stage1Vehicle.LandingThrustN;
+    public float isp = Stage1Vehicle.IspLandingS;
 
     [Header("Симуляція")]
     public float fixedTimeStep = 0.005f;
@@ -45,24 +28,40 @@ public class SimulationParameters : ScriptableObject
     public float maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
     public float maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
 
-    /// <summary>
-    /// Підстрахування для старих .asset без нових полів Stack (Unity серіалізує 0).
-    /// </summary>
-    public void EnsureStackDefaults()
+    /// <summary>Задати ПУ ділянки посадки (висота, швидкість зниження, нахил).</summary>
+    public void SetInitialConditions(float height, float descentSpeed, float tiltDeg)
     {
-        if (stackDryMass < 1000f) stackDryMass = 110000f;
-        if (stackFuelMass < 1000f) stackFuelMass = 280000f;
-        if (stackMaxThrust < 1000f) stackMaxThrust = 7600000f;
-        if (stackStartPosition.y < 1f)
-            stackStartPosition = new Vector3(0f, 45f, 0f);
-        if (stackStartVelocity.sqrMagnitude < 0.01f)
-            stackStartVelocity = new Vector3(0f, 35f, 0f);
-        if (separationAltitude < 100f) separationAltitude = 2400f;
-        if (separationTime < 1f) separationTime = 18f;
-        if (dryMass < 1000f) dryMass = Stage1Vehicle.DryMassKg;
-        if (fuelMass < 100f) fuelMass = Stage1Vehicle.LandingFuelKg;
-        if (maxThrust < 1000f) maxThrust = Stage1Vehicle.LandingThrustN;
-        if (startPosition.y < 100f) startPosition = new Vector3(0f, 1600f, 0f);
-        if (startVelocity.y > -1f) startVelocity = new Vector3(0f, -60f, 0f);
+        startPosition = new Vector3(0f, height, 0f);
+        startVelocity = new Vector3(0f, -Mathf.Abs(descentSpeed), 0f);
+        startEulerAngles = new Vector3(0f, 0f, tiltDeg);
     }
+
+    /// <summary>Номінальні характеристики Falcon 9-class (<see cref="Stage1Vehicle"/>) і стандартні критерії.</summary>
+    public void ApplyStage1Vehicle()
+    {
+        dryMass = Stage1Vehicle.DryMassKg;
+        fuelMass = Stage1Vehicle.LandingFuelKg;
+        maxThrust = Stage1Vehicle.LandingThrustN;
+        isp = Stage1Vehicle.IspLandingS;
+        fixedTimeStep = 0.005f;
+        maxSimulationTime = 400f;
+        maxTouchdownVelocity = LandingCriteria.DefaultMaxTouchdownVelocity;
+        maxLandingAngle = LandingCriteria.DefaultMaxLandingAngle;
+        maxHorizontalMiss = LandingCriteria.DefaultMaxHorizontalMiss;
+        maxHorizontalSpeed = LandingCriteria.DefaultMaxHorizontalSpeed;
+    }
+
+    public LandingSetup ToSetup() => new LandingSetup
+    {
+        DryMass = dryMass > 1000f ? dryMass : Stage1Vehicle.DryMassKg,
+        FuelMass = fuelMass > 100f ? fuelMass : Stage1Vehicle.LandingFuelKg,
+        MaxThrust = maxThrust > 1000f ? maxThrust : Stage1Vehicle.LandingThrustN,
+        Isp = isp > 10f ? isp : Stage1Vehicle.IspLandingS,
+        Dt = Mathf.Clamp(fixedTimeStep, 0.001f, 0.02f),
+        MaxTime = maxSimulationTime > 10f ? maxSimulationTime : 400f,
+        StartPosition = startPosition.y > 10f ? startPosition : new Vector3(0f, 1600f, 0f),
+        StartVelocity = startVelocity,
+        StartEulerDeg = startEulerAngles,
+        Limits = new LandingCriteria.Limits(maxTouchdownVelocity, maxLandingAngle, maxHorizontalMiss, maxHorizontalSpeed)
+    };
 }

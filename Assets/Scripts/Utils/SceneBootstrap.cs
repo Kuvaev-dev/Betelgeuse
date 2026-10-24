@@ -58,12 +58,6 @@ public class BootstrapRunner : MonoBehaviour
         yield return null;
         EnsureControllers(rocket);
 
-        IdealLandingPresets.ApplyDefaultControllerTuning(
-            rocket,
-            rocket.GetComponent<FuzzyLandingController>(),
-            rocket.GetComponent<NeuralController>(),
-            rocket.GetComponent<HybridController>());
-
         Prog(0.30f, "Модель ракетоносія…", "Building rocket…");
         yield return null;
         yield return RocketVisualBuilder.BuildRoutine(rocket);
@@ -82,27 +76,8 @@ public class BootstrapRunner : MonoBehaviour
         Prog(0.84f, "Стан симуляції…", "Simulation state…");
         yield return null;
 
-        rocket.simulationArmed = false;
-        rocket.skipStackPhase = true;
-        if (rocket.parameters != null)
-        {
-            // Idle: лише 1-й ступінь на IC посадки
-            rocket.parameters.EnsureStackDefaults();
-            rocket.state.position = rocket.parameters.startPosition;
-            rocket.state.velocity = Vector3.zero;
-            rocket.state.rotation = Quaternion.Euler(rocket.parameters.startEulerAngles);
-            rocket.state.angularVelocity = Vector3.zero;
-            rocket.state.currentThrust = 0f;
-            rocket.state.currentFuelMass = rocket.parameters.fuelMass;
-            rocket.state.dryMass = rocket.parameters.dryMass;
-            rocket.state.maxThrust = rocket.parameters.maxThrust;
-            rocket.state.isLanded = false;
-            rocket.state.simulationFinished = false;
-            rocket.state.time = 0f;
-            rocket.phase = RocketPhysics.FlightPhase.Idle;
-            RocketVisualBuilder.SetUpperStackVisible(rocket.transform, false);
-            rocket.SyncTransformWithState();
-        }
+        // Idle: 1-й ступінь у ПУ посадки, очікує запуску
+        rocket.PrepareMode(rocket.controlMode);
 
         if (Object.FindAnyObjectByType<SimulationManager>() == null)
         {
@@ -140,44 +115,13 @@ public class BootstrapRunner : MonoBehaviour
 
     static void EnsureControllers(RocketPhysics rocket)
     {
-        if (rocket.GetComponent<FuzzyLandingController>() == null)
-            rocket.gameObject.AddComponent<FuzzyLandingController>();
-        if (rocket.GetComponent<NeuralController>() == null)
-            rocket.gameObject.AddComponent<NeuralController>();
-        if (rocket.GetComponent<HybridController>() == null)
-        {
-            var h = rocket.gameObject.AddComponent<HybridController>();
-            h.fuzzy = rocket.GetComponent<FuzzyLandingController>();
-            h.neural = rocket.GetComponent<NeuralController>();
-        }
         if (rocket.GetComponent<DataLogger>() == null)
             rocket.gameObject.AddComponent<DataLogger>();
-
-        rocket.fuzzyController = rocket.GetComponent<FuzzyLandingController>();
-        rocket.neuralController = rocket.GetComponent<NeuralController>();
-        rocket.hybridController = rocket.GetComponent<HybridController>();
-
-        // Обв’язка Hybrid + стабільні ваги NN для презентації
-        if (rocket.hybridController != null)
-        {
-            rocket.hybridController.fuzzy = rocket.fuzzyController;
-            rocket.hybridController.neural = rocket.neuralController;
-        }
-        if (rocket.neuralController != null)
-        {
-            rocket.neuralController.LoadBestWeights();
-            if (rocket.neuralController.generation <= 0
-                && rocket.neuralController.bestCost >= float.MaxValue * 0.5f)
-                rocket.neuralController.InstallIdealWeights();
-            // Безпечний для демо default; UI «Train» може знову ввімкнути ES
-            if (!UserSettings.Train)
-                rocket.neuralController.enableTraining = false;
-        }
-
-        // Default mode Hybrid (тема МКР) if not overridden later by UI settings
-        if (rocket.controlMode != RocketPhysics.ControlMode.Hybrid
-            && UserSettings.ControlMode == 3)
-            rocket.controlMode = RocketPhysics.ControlMode.Hybrid;
+        // Навчені ваги MLP (BestWeights_Neural.json / BestWeights_Hybrid.json)
+        rocket.ReloadWeights();
+        // Режим за замовчуванням — Hybrid (тема МКР), якщо UI не зберіг інший
+        if (UserSettings.ControlMode == 3)
+            rocket.controlMode = ControlMode.Hybrid;
     }
 
     static void SetupCamera(RocketPhysics rocket)

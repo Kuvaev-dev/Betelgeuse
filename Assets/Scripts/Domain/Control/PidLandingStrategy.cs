@@ -1,71 +1,50 @@
 using UnityEngine;
 
 /// <summary>
-/// Режим A — класичний PID (pure class). Gains з Ideal presets / UI.
+/// Режим A — класичний PID (еталон порівняння).
+/// Тяга: hover + PID по помилці вертикальної швидкості відносно профілю v* = −√(2ah).
+/// Орієнтація: два незалежні PID по осях корпусу (помилка відносно бажаної осі від наведення,
+/// D-канал — кутова швидкість з гіроскопа).
 /// </summary>
+[System.Serializable]
 public sealed class PidLandingStrategy : ILandingController
 {
-    public RocketPhysics.ControlMode Mode => RocketPhysics.ControlMode.PID;
+    public ControlMode Mode => ControlMode.PID;
     public string DisplayName => "PID";
-    public bool IsAvailable => true;
 
-    public readonly PIDController Pitch = new PIDController { Kp = 0.55f, Ki = 0.04f, Kd = 0.48f };
-    public readonly PIDController Yaw = new PIDController { Kp = 0.55f, Ki = 0.04f, Kd = 0.48f };
-    public readonly PIDController Thrust = new PIDController { Kp = 2.8f, Ki = 0.25f, Kd = 1.4f };
+    public PIDController Thrust = new PIDController { Kp = 2.8f, Ki = 0f, Kd = 1.4f, DerivativeFilterTau = 0.15f };
+    public PIDController Pitch = new PIDController { Kp = 0.75f, Ki = 0.02f, Kd = 1.3f, IntegralLimit = 10f };
+    public PIDController Yaw = new PIDController { Kp = 0.75f, Ki = 0.02f, Kd = 1.3f, IntegralLimit = 10f };
+    /// <summary>Масштаб виходу PID тяги, Н на (м/с).</summary>
+    public float thrustGainN = 16000f;
+    public float maxGimbalDeg = 14f;
 
-    public void SetGains(float thrustKp, float thrustKi, float thrustKd,
-        float attKp, float attKi, float attKd)
+    public void SetGains(float thrustKp, float thrustKd, float attKp, float attKi, float attKd)
     {
-        // Ki=0 на тязі: I-windup на довгому спуску → hover-out of fuel
-        Thrust.Kp = thrustKp; Thrust.Ki = 0f; Thrust.Kd = thrustKd;
+        Thrust.Kp = thrustKp; Thrust.Ki = 0f; Thrust.Kd = thrustKd; // Ki=0: windup на довгому спуску
         Pitch.Kp = attKp; Pitch.Ki = attKi; Pitch.Kd = attKd;
         Yaw.Kp = attKp; Yaw.Ki = attKi; Yaw.Kd = attKd;
     }
 
     public void ResetSession()
     {
+        Thrust.Reset();
         Pitch.Reset();
         Yaw.Reset();
-        Thrust.Reset();
     }
 
     public ControlCommand Evaluate(in ControlContext ctx)
     {
-        float thrust = CalculateThrust(ctx);
-        Vector3 baseGimbal = SoftLandingGuidance.AttitudeGimbal(
-            ctx.Rotation, ctx.AngularVelocity, maxDeg: 16f, kp: 0.7f, kd: 0.92f);
-        float pc = Pitch.Calculate(0f, ctx.PitchErrorDeg, ctx.Dt);
-        float yc = Yaw.Calculate(0f, ctx.YawErrorDeg, ctx.Dt);
-        // Ideal: less PID-on-top-of-PD (was double-loop rock near pad)
-        float pidLean = IdealLandingPresets.Active ? 0.18f : 0.35f;
-        var g = new Vector3(
-            Mathf.Clamp(baseGimbal.x + pc * pidLean, -16f, 16f),
-            0f,
-            Mathf.Clamp(baseGimbal.z + yc * pidLean, -16f, 16f));
-        // Найслабше бічне — baseline; при сильному вітрі/jitter програє Hybrid
-        float lat = IdealLandingPresets.Active ? 0.55f : 0.62f;
-        float gb = IdealLandingPresets.Active ? 0.75f : 0.45f;
-        return new ControlCommand(thrust, g, lateralScale: lat, gimbalBlend: gb);
-    }
-
-    float CalculateThrust(in ControlContext ctx)
-    {
         float h = Mathf.Max(0f, ctx.Height);
-        float mass = ctx.Mass;
-        float g = AtmosphereModel.GetGravity(h);
-        float hover = mass * g;
+        float hover = ctx.Mass * ctx.Gravity;
         float target = SoftLandingGuidance.TargetDescentRate(h);
-        float pid = Thrust.Calculate(target, ctx.VerticalVelocity, ctx.Dt);
-        float thrust = hover + pid * 16000f;
+        float u = Thrust.Calculate(target, ctx.VerticalVelocity, ctx.Dt);
         float maxT = ctx.MaxThrust > 0.1f ? ctx.MaxThrust : hover * 3f;
-        thrust = Mathf.Clamp(thrust, hover * 0.15f, maxT);
+        float thrust = Mathf.Clamp(hover + u * thrustGainN, hover * 0.15f, maxT);
 
-        if (h < 30f && IdealLandingPresets.Active)
-        {
-            float profile = SoftLandingGuidance.ProfileThrust(h, ctx.VerticalVelocity, mass);
-            float t = 1f - Mathf.Clamp01(h / 30f);
-            thrust = Mathf.Lerp(thrust, profile, t * 0.75f);
-        }
-        return thrust;
+        // u = Kp·e + Ki·∫e + Kd·ω: D-канал по гіроскопу (похідна по вимірюванню, без «удару» від зміни уставки)
+        float gx = Mathf.Clamp(Pitch.CalculateWithRate(ctx.PitchErrorDeg, ctx.PitchRateDeg, ctx.Dt), -maxGimbalDeg, maxGimbalDeg);
+        float gz = Mathf.Clamp(Yaw.CalculateWithRate(ctx.YawErrorDeg, ctx.YawRateDeg, ctx.Dt), -maxGimbalDeg, maxGimbalDeg);
+        return new ControlCommand(thrust, new Vector3(gx, 0f, gz));
     }
 }

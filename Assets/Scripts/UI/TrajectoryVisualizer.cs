@@ -121,7 +121,6 @@ public class TrajectoryVisualizer : MonoBehaviour
     {
         if (rocketPhysics == null)
             rocketPhysics = FindAnyObjectByType<RocketPhysics>();
-        if (rocketPhysics != null && rocketPhysics.batchDrivenTicks) return;
         if (!visible || lineRenderer == null) return;
 
         if (InFlight())
@@ -166,7 +165,6 @@ public class TrajectoryVisualizer : MonoBehaviour
         return !finished
                && rocketPhysics != null
                && rocketPhysics.simulationArmed
-               && !rocketPhysics.batchDrivenTicks
                && !rocketPhysics.state.simulationFinished
                && !rocketPhysics.state.isLanded;
     }

@@ -35,7 +35,7 @@ public class ThesisCoverageTests
         StringAssert.Contains("Sugeno", UILocale.T("help_algo"));
         StringAssert.Contains("MLP", UILocale.T("help_algo"));
         StringAssert.Contains("Hybrid", UILocale.T("help_algo"));
-        StringAssert.Contains("1+1", UILocale.T("help_algo"));
+        StringAssert.Contains("ES(1+λ)", UILocale.T("help_algo"));
         StringAssert.Contains("ANFIS", UILocale.T("help_limits"));
         StringAssert.Contains("3.5", UILocale.T("help_landing"));
         StringAssert.Contains("40", UILocale.T("help_landing"));
@@ -61,18 +61,16 @@ public class ThesisCoverageTests
     }
 
     [Test]
-    public void SimulationParameters_StackDefaults_AreSane()
+    public void SimulationParameters_ToSetup_UsesStage1Vehicle()
     {
         var p = ScriptableObject.CreateInstance<SimulationParameters>();
-        p.stackDryMass = 0f;
-        p.stackFuelMass = 0f;
-        p.stackMaxThrust = 0f;
-        p.stackStartPosition = Vector3.zero;
-        p.EnsureStackDefaults();
-        Assert.Greater(p.stackDryMass, p.dryMass);
-        Assert.Greater(p.stackMaxThrust, p.maxThrust);
-        Assert.Greater(p.separationAltitude, 500f);
-        Assert.Greater(p.stackStartPosition.y, 1f);
+        p.ApplyStage1Vehicle();
+        p.SetInitialConditions(1700f, 65f, 3f);
+        var s = p.ToSetup();
+        Assert.AreEqual(Stage1Vehicle.DryMassKg, s.DryMass);
+        Assert.AreEqual(Stage1Vehicle.LandingThrustN, s.MaxThrust);
+        Assert.AreEqual(1700f, s.StartPosition.y);
+        Assert.AreEqual(-65f, s.StartVelocity.y);
         Object.DestroyImmediate(p);
     }
 
@@ -114,116 +112,33 @@ public class ThesisCoverageTests
     [Test]
     public void Controllers_ImplementStrategy_AndReturnFiniteCommands()
     {
-        var go = new GameObject("ThesisCtrl");
-        try
+        var set = new ControllerSet();
+        var ctx = ControlContext.FromState(new RocketState
         {
-            var fuzzy = go.AddComponent<FuzzyLandingController>();
-            var neural = go.AddComponent<NeuralController>();
-            var hybrid = go.AddComponent<HybridController>();
-            hybrid.fuzzy = fuzzy;
-            hybrid.neural = neural;
-            neural.InstallIdealWeights(persist: false);
-            neural.enableTraining = false;
-
-            ILandingController[] all =
-            {
-                new PidLandingStrategy(),
-                fuzzy,
-                neural,
-                hybrid
-            };
-
-            var ctx = new ControlContext(
-                800f, -40f, 38000f, 400000f, 845000f,
-                2f, -1f, 0f, 0f, 5f, 3f, 0.005f,
-                Quaternion.identity, Vector3.zero);
-
-            Assert.AreEqual(RocketPhysics.ControlMode.PID, all[0].Mode);
-            Assert.AreEqual(RocketPhysics.ControlMode.Fuzzy, all[1].Mode);
-            Assert.AreEqual(RocketPhysics.ControlMode.Neural, all[2].Mode);
-            Assert.AreEqual(RocketPhysics.ControlMode.Hybrid, all[3].Mode);
-
-            foreach (var c in all)
-            {
-                Assert.IsTrue(c.IsAvailable, c.DisplayName);
-                var cmd = c.Evaluate(in ctx);
-                Assert.IsFalse(float.IsNaN(cmd.Thrust), c.DisplayName + " thrust NaN");
-                Assert.IsFalse(float.IsInfinity(cmd.Thrust), c.DisplayName + " thrust Inf");
-                Assert.Greater(cmd.Thrust, 0f, c.DisplayName);
-                Assert.LessOrEqual(Mathf.Abs(cmd.GimbalEuler.x), 25f);
-                Assert.LessOrEqual(Mathf.Abs(cmd.GimbalEuler.z), 25f);
-            }
-
-            // Hybrid має реально використовувати шляхи fuzzy+neural (тяга біля hover-смуги)
-            float hover = 38000f * AtmosphereModel.GetGravity(800f);
-            var hCmd = hybrid.Evaluate(in ctx);
-            Assert.Greater(hCmd.Thrust, hover * 0.5f);
-            Assert.Less(hCmd.Thrust, hover * 3.5f);
-
-            hybrid.useNeuralResidual = false;
-            var offCmd = hybrid.Evaluate(in ctx);
-            hybrid.useNeuralResidual = true;
-            hybrid.neuralThrustBlend = 0.4f;
-            var onCmd = hybrid.Evaluate(in ctx);
-            Assert.Greater(Mathf.Abs(onCmd.Thrust - offCmd.Thrust), 1f,
-                "Hybrid residual ON must change thrust vs Fuzzy-only");
-        }
-        finally
+            position = new Vector3(15f, 700f, -8f), velocity = new Vector3(1f, -40f, 0.5f),
+            rotation = Quaternion.Euler(3f, 0f, -2f), angularVelocity = new Vector3(0.01f, 0f, 0.02f),
+            dryMass = Stage1Vehicle.DryMassKg, currentFuelMass = 9000f,
+            currentThrust = 420000f, maxThrust = Stage1Vehicle.LandingThrustN
+        }, 0.005f);
+        foreach (ControlMode mode in System.Enum.GetValues(typeof(ControlMode)))
         {
-            Object.DestroyImmediate(go);
+            var c = set.Get(mode);
+            Assert.IsNotNull(c, mode.ToString());
+            Assert.AreEqual(mode, c.Mode);
+            var cmd = c.Evaluate(ctx);
+            Assert.IsFalse(float.IsNaN(cmd.Thrust) || float.IsNaN(cmd.GimbalEuler.x) || float.IsNaN(cmd.GimbalEuler.z), mode.ToString());
+            Assert.Greater(cmd.Thrust, 0f, mode.ToString());
+            Assert.Greater(cmd.LateralScale, 0f, mode.ToString());
         }
     }
 
     [Test]
-    public void Resolver_DispatchesByMode()
+    public void ControllerSet_Clone_IsIndependent()
     {
-        var go = new GameObject("ThesisResolver");
-        try
-        {
-            var rp = go.AddComponent<RocketPhysics>();
-            var fuzzy = go.AddComponent<FuzzyLandingController>();
-            var neural = go.AddComponent<NeuralController>();
-            var hybrid = go.AddComponent<HybridController>();
-            rp.fuzzyController = fuzzy;
-            rp.neuralController = neural;
-            rp.hybridController = hybrid;
-            hybrid.fuzzy = fuzzy;
-            hybrid.neural = neural;
-
-            var pid = new PidLandingStrategy();
-            var resolver = LandingControllerResolver.CreateDefault(rp, pid);
-
-            Assert.AreEqual(RocketPhysics.ControlMode.PID, resolver.Resolve(RocketPhysics.ControlMode.PID).Mode);
-            Assert.AreEqual(RocketPhysics.ControlMode.Fuzzy, resolver.Resolve(RocketPhysics.ControlMode.Fuzzy).Mode);
-            Assert.AreEqual(RocketPhysics.ControlMode.Neural, resolver.Resolve(RocketPhysics.ControlMode.Neural).Mode);
-            Assert.AreEqual(RocketPhysics.ControlMode.Hybrid, resolver.Resolve(RocketPhysics.ControlMode.Hybrid).Mode);
-        }
-        finally
-        {
-            Object.DestroyImmediate(go);
-        }
-    }
-
-    [Test]
-    public void Sugeno_RawThrust_DiffersFromPureProfile_WhenAggressive()
-    {
-        var go = new GameObject("SugenoDiff");
-        try
-        {
-            var fuzzy = go.AddComponent<FuzzyLandingController>();
-            fuzzy.fuzzyThrustWeight = 0.7f;
-            float mass = 30000f;
-            float h = 30f;
-            float vy = -45f;
-            float profile = SoftLandingGuidance.ProfileThrust(h, vy, mass);
-            float sugeno = fuzzy.EvaluateSugenoThrust(h, vy, mass);
-            // Агресивний низький h і висока швидкість: таблиця Sugeno має штовхати вище hover-смуги профілю
-            Assert.Greater(sugeno, mass * AtmosphereModel.GetGravity(h) * 1.1f);
-            Assert.Greater(Mathf.Abs(profile - sugeno), 100f);
-        }
-        finally
-        {
-            Object.DestroyImmediate(go);
-        }
+        var a = new ControllerSet();
+        var b = a.Clone();
+        Assert.AreNotSame(a.neural.policy, b.neural.policy);
+        Assert.AreNotSame(a.pid.Thrust, b.pid.Thrust);
+        Assert.AreSame(b.fuzzy, b.hybrid.fuzzy);
     }
 }

@@ -1,5 +1,3 @@
-using UnityEngine;
-
 /// <summary>
 /// Ідентичність об'єкта керування: перший ступінь ракети-носія класу Falcon 9 Block 5
 /// (документований аналог, не сертифікована копія SpaceX).
@@ -42,13 +40,4 @@ public static class Stage1Vehicle
     public const float MaxTvcDeg = 16f;
 
     public static float LandingMassKg => DryMassKg + LandingFuelKg;
-
-    public static void ApplyTo(SimulationParameters p)
-    {
-        if (p == null) return;
-        p.dryMass = DryMassKg;
-        p.fuelMass = LandingFuelKg;
-        p.maxThrust = LandingThrustN;
-        p.isp = IspLandingS;
-    }
 }

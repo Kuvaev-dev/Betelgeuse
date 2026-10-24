@@ -1,35 +1,32 @@
 using UnityEngine;
 
 /// <summary>
-/// Вихід стратегії керування за один тік: тяга, TVC, масштаб бічного наведення.
+/// Вихід стратегії керування за один такт: тяга, кути TVC, масштаб бічного наведення.
 /// </summary>
 public readonly struct ControlCommand
 {
     /// <summary>Бажана тяга, Н.</summary>
     public readonly float Thrust;
 
-    /// <summary>Кут TVC (град), зазвичай X/Z.</summary>
+    /// <summary>Кути TVC, град (x — навколо осі X корпусу, z — навколо осі Z; y не використовується).</summary>
     public readonly Vector3 GimbalEuler;
 
-    /// <summary>Масштаб бічного наведення (слабкий у PID … сильний у Hybrid).</summary>
+    /// <summary>
+    /// Масштаб команди бічного наведення (1 = спільний закон).
+    /// Змінюють його лише навчені MLP-стратегії (C, D) — адаптивний коефіцієнт підсилення.
+    /// </summary>
     public readonly float LateralScale;
 
-    /// <summary>Змішування gimbal стратегії з захисним PD upright [0..1].</summary>
-    public readonly float GimbalBlend;
-
-    public ControlCommand(float thrust, Vector3 gimbalEuler, float lateralScale = 1f, float gimbalBlend = 0.5f)
+    public ControlCommand(float thrust, Vector3 gimbalEuler, float lateralScale = 1f)
     {
         Thrust = thrust;
         GimbalEuler = gimbalEuler;
         LateralScale = lateralScale;
-        GimbalBlend = Mathf.Clamp01(gimbalBlend);
     }
 
+    /// <summary>Резервний закон: профіль soft-landing + PD орієнтації.</summary>
     public static ControlCommand ProfileFallback(in ControlContext ctx)
-    {
-        float thrust = SoftLandingGuidance.ProfileThrust(ctx.Height, ctx.VerticalVelocity, ctx.Mass);
-        Vector3 g = SoftLandingGuidance.AttitudeGimbal(
-            ctx.Rotation, ctx.AngularVelocity, maxDeg: 16f, kp: 0.7f, kd: 0.92f);
-        return new ControlCommand(thrust, g, lateralScale: 0.55f, gimbalBlend: 0f);
-    }
+        => new ControlCommand(
+            SoftLandingGuidance.ProfileThrust(ctx.Height, ctx.VerticalVelocity, ctx.Mass),
+            SoftLandingGuidance.AttitudeGimbal(in ctx));
 }

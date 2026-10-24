@@ -1,11 +1,8 @@
-using UnityEngine;
-
 /// <summary>
-/// Критерії soft-landing (єдине джерело правди для finish path і GATE UI).
+/// Критерії soft-landing 1-го ступеня — єдине джерело правди для симуляції, UI та звітів.
 /// </summary>
 public static class LandingCriteria
 {
-    // Soft-landing 1-го ступеня (Earth LZ). Реалістичні gate — інакше «успіх за будь-яких умов».
     public const float DefaultMaxTouchdownVelocity = 3.5f;
     public const float DefaultMaxLandingAngle = 7f;
     public const float DefaultMaxHorizontalMiss = 40f;
@@ -26,14 +23,9 @@ public static class LandingCriteria
             MaxHSpeed = maxHSpeed > 0.1f ? maxHSpeed : DefaultMaxHorizontalSpeed;
         }
 
-        public static Limits FromParameters(SimulationParameters p)
-        {
-            if (p == null)
-                return new Limits(DefaultMaxTouchdownVelocity, DefaultMaxLandingAngle,
-                    DefaultMaxHorizontalMiss, DefaultMaxHorizontalSpeed);
-            return new Limits(p.maxTouchdownVelocity, p.maxLandingAngle,
-                p.maxHorizontalMiss, p.maxHorizontalSpeed);
-        }
+        public static Limits Default => new Limits(
+            DefaultMaxTouchdownVelocity, DefaultMaxLandingAngle,
+            DefaultMaxHorizontalMiss, DefaultMaxHorizontalSpeed);
     }
 
     public static bool IsSuccessful(LandingMetrics m, in Limits lim)
@@ -43,11 +35,5 @@ public static class LandingCriteria
             && m.landingAngleError < lim.MaxAngle
             && m.horizontalMiss < lim.MaxMiss
             && m.horizontalSpeed < lim.MaxHSpeed;
-    }
-
-    public static void ApplySuccessFlag(LandingMetrics m, SimulationParameters p)
-    {
-        if (m == null) return;
-        m.isSuccessfulLanding = IsSuccessful(m, Limits.FromParameters(p));
     }
 }

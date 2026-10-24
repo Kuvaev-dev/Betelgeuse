@@ -1,28 +1,33 @@
 using UnityEngine;
 
 /// <summary>
-/// Режим B — Sugeno-0 5×5 (product-AND) для тяги + fuzzy gimbal. Реалізує <see cref="ILandingController"/>.
+/// Режим B — нечіткий регулятор Sugeno нульового порядку (дві бази правил 5×5, t-норма добутку,
+/// дефазифікація зваженим середнім).
+/// • Тяга: входи — висота h і швидкість зниження |Vy|; виходи — множники до mg;
+///   результат змішується з профілем soft-landing (вага <see cref="fuzzyThrustWeight"/>).
+/// • Орієнтація (TVC): входи — помилка кута e і кутова швидкість ė (зі знаком) по кожній осі;
+///   виходи — нормовані кути TVC (нечіткий PD із насиченням).
 /// </summary>
-public class FuzzyLandingController : MonoBehaviour, ILandingController
+[System.Serializable]
+public sealed class FuzzyLandingController : ILandingController
 {
-    public RocketPhysics.ControlMode Mode => RocketPhysics.ControlMode.Fuzzy;
+    public ControlMode Mode => ControlMode.Fuzzy;
     public string DisplayName => "Fuzzy Sugeno";
-    public bool IsAvailable => isActive && enabled;
 
-    [Header("Fuzzy Logic (Sugeno 0-order)")]
-    public bool isActive = true;
-
-    [Header("Межі фазифікації")]
+    [Header("Тяга (h × |Vy|)")]
     public float heightScale = 2800f;
     public float velocityScale = 110f;
-    public float maxGimbalDeg = 18f;
-    /// <summary>Вага Sugeno vs soft-landing профіль (0=тільки профіль, 1=тільки таблиця).</summary>
-    [Range(0.1f, 0.85f)] public float fuzzyThrustWeight = 0.55f;
-    /// <summary>Макс. відхилення від профілю (частка mg).</summary>
-    [Range(0.2f, 1.0f)] public float maxDevFrac = 0.55f;
-    [Range(0f, 1f)] public float gimbalBlend = 0.5f;
+    [Range(0f, 1f)] public float fuzzyThrustWeight = 0.3f;
+    [Range(0.1f, 1f)] public float maxDevFrac = 0.3f;
 
-    // Множники до mg — рядки VL..VH висота; стовпці VS..VF |Vy|
+    [Header("Орієнтація (e × ė)")]
+    /// <summary>Помилка кута, що відповідає терму PB (центр PS = половина), град.</summary>
+    public float errorScaleDeg = 10f;
+    /// <summary>Кутова швидкість, що відповідає терму PB, град/с.</summary>
+    public float rateScaleDeg = 5f;
+    public float maxGimbalDeg = 12f;
+
+    // Рядки — висота VL..VH, стовпці — |Vy| VS..VF; множники до mg.
     static readonly float[,] ThrustTable =
     {
         { 1.12f, 1.45f, 1.95f, 2.40f, 2.75f },
@@ -32,110 +37,89 @@ public class FuzzyLandingController : MonoBehaviour, ILandingController
         { 0.92f, 1.05f, 1.22f, 1.50f, 1.90f }
     };
 
-    static readonly float[,] GimbalTable =
+    // Рядки — e: NB NS ZE PS PB; стовпці — ė: NB NS ZE PS PB; вихід у частках maxGimbalDeg.
+    static readonly float[,] AttitudeTable =
     {
-        { 0f,  4f,  9f, 14f, 18f },
-        { 2f,  7f, 12f, 16f, 20f },
-        { 5f, 10f, 15f, 18f, 22f },
-        { 8f, 13f, 17f, 20f, 24f },
-        { 11f, 16f, 19f, 22f, 26f }
+        { -1.00f, -1.00f, -0.67f, -0.33f,  0.00f },
+        { -1.00f, -0.67f, -0.33f,  0.00f,  0.33f },
+        { -0.67f, -0.33f,  0.00f,  0.33f,  0.67f },
+        { -0.33f,  0.00f,  0.33f,  0.67f,  1.00f },
+        {  0.00f,  0.33f,  0.67f,  1.00f,  1.00f }
     };
 
-    public float CalculateThrust(float height, float verticalVelocity, float mass)
-    {
-        float profile = SoftLandingGuidance.ProfileThrust(height, verticalVelocity, mass);
-        if (!isActive) return profile;
-
-        float fuzzyThrust = EvaluateSugenoThrust(height, verticalVelocity, mass);
-        return SoftLandingGuidance.BlendThrust(profile, fuzzyThrust, fuzzyThrustWeight, mass, height, maxDevFrac);
-    }
-
-    /// <summary>
-    /// «Сирий» вихід Sugeno (без blend з soft-landing).
-    /// Hybrid викликає саме його, щоб не робити подвійний BlendThrust.
-    /// </summary>
-    public float EvaluateSugenoThrust(float height, float verticalVelocity, float mass)
-    {
-        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
-        float h = Mathf.Clamp01(height / Mathf.Max(1f, heightScale));
-        float v = Mathf.Clamp(Mathf.Abs(Mathf.Min(0f, verticalVelocity)) / Mathf.Max(1f, velocityScale), 0f, 1.5f);
-
-        float[] muH = Membership5(h, 0f, 0.12f, 0.28f, 0.50f, 0.72f, 1f);
-        float[] muV = Membership5(Mathf.Clamp01(v), 0f, 0.15f, 0.35f, 0.55f, 0.78f, 1f);
-
-        float sumW = 0f, sumY = 0f;
-        for (int i = 0; i < 5; i++)
-        {
-            if (muH[i] <= 0f) continue;
-            for (int j = 0; j < 5; j++)
-            {
-                if (muV[j] <= 0f) continue;
-                float w = muH[i] * muV[j]; // t-норма добутку (product)
-                sumW += w;
-                sumY += w * ThrustTable[i, j];
-            }
-        }
-
-        float mult = sumW > 1e-6f ? sumY / sumW : 1.15f;
-        return mass * g * Mathf.Clamp(mult, 0.85f, 2.9f);
-    }
-
-    public Vector3 CalculateGimbal(float pitchErrorDeg, float yawErrorDeg, float pitchRateDeg = 0f, float yawRateDeg = 0f)
-    {
-        Vector3 pd = SoftLandingGuidance.AttitudeGimbal(pitchErrorDeg, yawErrorDeg, pitchRateDeg, yawRateDeg, maxGimbalDeg);
-        if (!isActive) return pd;
-
-        float pitch = FuzzyAxis(pitchErrorDeg, pitchRateDeg);
-        float yaw = FuzzyAxis(yawErrorDeg, yawRateDeg);
-        float b = Mathf.Clamp01(gimbalBlend);
-        return new Vector3(
-            Mathf.Clamp(Mathf.Lerp(pd.x, pitch, b), -maxGimbalDeg, maxGimbalDeg),
-            0f,
-            Mathf.Clamp(Mathf.Lerp(pd.z, yaw, b), -maxGimbalDeg, maxGimbalDeg));
-    }
-
-    public Vector3 CalculateGimbal(float pitchError, float yawError)
-        => CalculateGimbal(pitchError, yawError, 0f, 0f);
-
-    public void ResetSession() { /* Sugeno без стану */ }
+    public void ResetSession() { /* без внутрішнього стану */ }
 
     public ControlCommand Evaluate(in ControlContext ctx)
     {
         float thrust = CalculateThrust(ctx.Height, ctx.VerticalVelocity, ctx.Mass);
-        Vector3 gimbal = CalculateGimbal(
-            ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg);
-        float lat = IdealLandingPresets.Active ? 0.75f : 0.95f;
-        float gb = IdealLandingPresets.Active ? 0.18f : 0.22f;
-        return new ControlCommand(thrust, gimbal, lateralScale: lat, gimbalBlend: gb);
+        Vector3 gimbal = CalculateGimbal(ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg);
+        return new ControlCommand(thrust, gimbal);
     }
+
+    /// <summary>Тяга режиму B: профіль ⊕ Sugeno (вага fuzzyThrustWeight).</summary>
+    public float CalculateThrust(float height, float verticalVelocity, float mass)
+    {
+        float profile = SoftLandingGuidance.ProfileThrust(height, verticalVelocity, mass);
+        float fuzzy = EvaluateSugenoThrust(height, verticalVelocity, mass);
+        return SoftLandingGuidance.BlendThrust(profile, fuzzy, fuzzyThrustWeight, mass, height, maxDevFrac);
+    }
+
+    /// <summary>«Сирий» вихід бази правил тяги, Н.</summary>
+    public float EvaluateSugenoThrust(float height, float verticalVelocity, float mass)
+    {
+        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
+        float h = Mathf.Clamp01(height / Mathf.Max(1f, heightScale));
+        float v = Mathf.Clamp01(Mathf.Abs(Mathf.Min(0f, verticalVelocity)) / Mathf.Max(1f, velocityScale));
+        float mult = Infer(ThrustTable, Membership5(h, 0f, 0.12f, 0.28f, 0.50f, 0.72f, 1f),
+                                         Membership5(v, 0f, 0.15f, 0.35f, 0.55f, 0.78f, 1f), 1.15f);
+        return mass * g * Mathf.Clamp(mult, 0.85f, 2.9f);
+    }
+
+    /// <summary>Кути TVC за нечіткою базою правил орієнтації, град.</summary>
+    public Vector3 CalculateGimbal(float errXDeg, float errZDeg, float rateXDeg, float rateZDeg)
+        => new Vector3(FuzzyAxis(errXDeg, rateXDeg), 0f, FuzzyAxis(errZDeg, rateZDeg));
 
     float FuzzyAxis(float errorDeg, float rateDeg)
     {
-        float e = Mathf.Clamp01(Mathf.Abs(errorDeg) / 35f);
-        float r = Mathf.Clamp01(Mathf.Abs(rateDeg) / 40f);
-        float[] muE = Membership5(e, 0f, 0.12f, 0.30f, 0.50f, 0.72f, 1f);
-        float[] muR = Membership5(r, 0f, 0.15f, 0.35f, 0.55f, 0.75f, 1f);
+        float e = Mathf.Clamp(errorDeg / Mathf.Max(0.1f, errorScaleDeg), -1f, 1f);
+        float r = Mathf.Clamp(rateDeg / Mathf.Max(0.1f, rateScaleDeg), -1f, 1f);
+        float u = Infer(AttitudeTable, SignedMembership5(e), SignedMembership5(r), 0f);
+        return Mathf.Clamp(u, -1f, 1f) * maxGimbalDeg;
+    }
 
+    /// <summary>Sugeno-0: Σ μᵢ(a)·μⱼ(b)·yᵢⱼ / Σ μᵢ(a)·μⱼ(b).</summary>
+    static float Infer(float[,] table, float[] muA, float[] muB, float fallback)
+    {
         float sumW = 0f, sumY = 0f;
         for (int i = 0; i < 5; i++)
         {
-            if (muE[i] <= 0f) continue;
+            if (muA[i] <= 0f) continue;
             for (int j = 0; j < 5; j++)
             {
-                if (muR[j] <= 0f) continue;
-                float w = muE[i] * muR[j];
+                if (muB[j] <= 0f) continue;
+                float w = muA[i] * muB[j];
                 sumW += w;
-                sumY += w * GimbalTable[i, j];
+                sumY += w * table[i, j];
             }
         }
-
-        float mag = sumW > 1e-6f ? sumY / sumW : 0f;
-        float rateDamp = Mathf.Clamp(rateDeg * 0.28f, -10f, 10f);
-        // Негативний FB: проти помилки кута
-        return -Mathf.Sign(errorDeg) * mag - rateDamp;
+        return sumW > 1e-6f ? sumY / sumW : fallback;
     }
 
-    static float[] Membership5(float x, float p0, float p1, float p2, float p3, float p4, float p5)
+    /// <summary>П’ять термів на [−1;1]: NB, NS, ZE, PS, PB (трикутні, крайні — трапеції).</summary>
+    public static float[] SignedMembership5(float x)
+    {
+        return new[]
+        {
+            Trap(x, -1.01f, -1f, -1f, -0.5f),
+            Tri(x, -1f, -0.5f, 0f),
+            Tri(x, -0.5f, 0f, 0.5f),
+            Tri(x, 0f, 0.5f, 1f),
+            Trap(x, 0.5f, 1f, 1f, 1.01f)
+        };
+    }
+
+    /// <summary>П’ять термів на [0;1] з центрами p1..p4 (тяга: h і |Vy|).</summary>
+    public static float[] Membership5(float x, float p0, float p1, float p2, float p3, float p4, float p5)
     {
         return new[]
         {
@@ -150,7 +134,6 @@ public class FuzzyLandingController : MonoBehaviour, ILandingController
     static float Tri(float x, float a, float b, float c)
     {
         if (x <= a || x >= c) return 0f;
-        if (Mathf.Approximately(x, b)) return 1f;
         return x < b ? (x - a) / Mathf.Max(1e-6f, b - a) : (c - x) / Mathf.Max(1e-6f, c - b);
     }
 
@@ -161,4 +144,6 @@ public class FuzzyLandingController : MonoBehaviour, ILandingController
         if (x < b) return (x - a) / Mathf.Max(1e-6f, b - a);
         return (d - x) / Mathf.Max(1e-6f, d - c);
     }
+
+    public FuzzyLandingController Clone() => (FuzzyLandingController)MemberwiseClone();
 }

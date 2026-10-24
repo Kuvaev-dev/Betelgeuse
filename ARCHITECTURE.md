@@ -1,93 +1,75 @@
 # Betelgeuse — архітектура
 
-**Версія:** 1.3.5  
-**Стек:** Unity 6000 URP · C#  
-**Середовище:** Earth LZ · об'єкт GNC — **1-й ступінь** (Falcon 9-class analogue)
+**Версія:** 2.0 · **Стек:** Unity 6000 URP · C# · **Об'єкт GNC:** 1-й ступінь (Falcon 9-class) · Earth LZ
 
-## Цілі
+## Принцип
 
-- Демо захисту: посадка Stage-1 алгоритмами A–D на Earth LZ.
-- SOLID: новий контролер = реєстрація стратегії, без правки фізики.
-- DRY: спільні пресети, критерії, візуальні палітри в одному місці.
-- Автономія: GNC читає `NavigationEstimator`, а не god-mode plant.
-
-## Фази місії
-
-```
-Idle ──Start──► [Stack опційно] ──sep──► Stage1 ──touchdown──► Finished
-                                      │
-                                      │ NavigationEstimator → ILandingController A–D
-                                      │ stage1 mass + fuel
-```
-
-Презентація за замовчуванням: `skipStackPhase=true` → одразу **Stage1**.
-
-| Фаза | Власник фізики | Керування | Візуал |
-|------|----------------|-----------|--------|
-| **Idle** | — | — | Stage-1 на landing IC (типово) |
-| **Stack** | `UpdateStackControl` | open-loop | (якщо увімкнено) |
-| **Stage1** | `UpdateControl` + RK4 | **A–D** via Resolver, state from NAV | 1-й ступінь |
-
-Monte-Carlo і Ideal `[I]` — **Stage1** only.
+Уся фізика і GNC живуть у **чистому ядрі** `LandingSimulation` без залежностей від сцени Unity.
+Те саме ядро виконує: політ у грі (`RocketPhysics` → `FixedUpdate`), Monte-Carlo (`SimulationManager`,
+фонові потоки), навчання нейромережі (`EsTrainer`) і headless-стенд (`Tools/HeadlessSim`, .NET).
+Тому результати порівняння, навчання й демонстрації завжди отримані на одній і тій самій моделі.
 
 ## Шари
 
 ```
-Presentation     UI/ · Visual/ (Earth LZ, booster) · Camera
-       ↓
-Application      Control/* (Fuzzy/Neural/Hybrid) · IdealLandingPresets
-       ↓
-Domain           ILandingController · Context/Command · Resolver · Criteria
-       ↓
-Core             RocketPhysics · NavigationEstimator · SimulationManager · Export
-Parameters       SimulationParameters / Stage1Vehicle
+Presentation   UI/ · Visual/ · CameraFollow · RocketPhysics (обгортка: трансформ, лог, камера, UI)
+      ↓
+Application    SimulationManager (MC A–D) · IdealLandingPresets · NeuralTrainingJob · Editor/NeuralTrainingMenu
+      ↓
+Control        PidLandingStrategy · FuzzyLandingController · NeuralController · HybridController
+               MlpPolicy · EsTrainer · ControllerSet · SoftLandingGuidance · LateralGuidance
+      ↓
+Domain         ControlMode · ILandingController · ControlContext · ControlCommand · LandingCriteria · Resolver
+      ↓
+Core           LandingSimulation (RK4 + TVC) · NavigationEstimator · LandingScenario/Setup · LandingExperiment
+Parameters     SimulationParameters (ассет) · Stage1Vehicle (константи апарата)
 ```
 
-## SOLID
+## Такт GNC (`LandingSimulation.Step`, dt = 5 мс)
 
-| | |
-|--|--|
-| **S** | PID у `PidLandingStrategy`; gate у `LandingCriteria`; NAV ≠ plant; візуал ≠ фізика |
-| **O** | Новий режим → `ILandingController` + `Register` |
-| **L** | Усі стратегії → `ControlCommand`; safety envelope спільний |
-| **I** | Mode / Evaluate / Reset / IsAvailable |
-| **D** | `RocketPhysics` → resolver, не конкретні Fuzzy/NN |
+1. **Навігація** — `NavigationEstimator`: IMU (гіроскоп + акселерометр) → прогноз; GPS і радіовисотомір → корекція
+   (complementary filter). Орієнтація — інтегрування гіроскопа.
+2. **Наведення (спільне для A–D)** — `LateralGuidance`: PID по горизонтальній позиції/швидкості →
+   бажане горизонтальне прискорення → бажана вісь корпусу (нахил ≤ 12°; термінальна зона — лише гасіння Vh,
+   нижче 6 м — вертикаль). Вертикальний профіль `SoftLandingGuidance.TargetDescentRate`: v* = −√(2ah).
+3. **Стратегія A–D** — `ILandingController.Evaluate(ControlContext)` → `ControlCommand` (тяга, кути TVC,
+   масштаб бічного наведення). `ControlContext` містить помилку орієнтації відносно **бажаної** осі,
+   розкладену по осях корпусу (єдина конвенція знаків для всіх алгоритмів).
+4. **Safety (спільний)** — компенсація cos(нахилу), аварійне вирівнювання при нахилі > 28°, ліміти TVC,
+   інерційність приводів: TVC 12°/с, дроселювання 65 % Tmax/с.
+5. **Інтегрування** — RK4 поступального руху (гравітація g(h), тяга, опір ρ(h)·Cd·S відносно повітря,
+   grid fins), обертання від моменту TVC з демпфуванням.
+6. **Торкання** — `LandingMetrics` на **істинному** стані за `LandingCriteria`.
 
-## Патерни
+## Стратегії (Strategy + Resolver)
 
-| Патерн | Де |
-|--------|-----|
-| **Strategy** | `ILandingController` + Resolver |
-| **Facade** | `EnvironmentBuilder`, `RocketVisualBuilder` |
-| **Factory / static builder** | `SmoothMesh`, `VisualMaterials`, `NatureLibrary` |
-| **Template scatter** | `NaturalPoint` у `BuildNatureProps` (єдиний розкид) |
+| | Тяга | Орієнтація (TVC) | Масштаб наведення |
+|--|------|------------------|-------------------|
+| **A PID** | hover + PID(v* − Vy) | PID по помилці, D — гіроскоп | 1 |
+| **B Fuzzy** | профіль ⊕ Sugeno 5×5 (h × \|Vy\|) | Sugeno 5×5 (e × ė) | 1 |
+| **C Neural** | профіль + MLP ΔT | PD | MLP k |
+| **D Hybrid** | закон B + MLP ΔT | закон B | MLP k |
 
-## DRY (візуал)
+`ControllerSet` — composition root: один набір налаштувань, `Clone()` для потоків.
 
-| Відповідальність | Клас |
-|------------------|------|
-| Палітра / текстури | `EnvironmentTextures` |
-| Світло + Сонце (одна позиція) | `EnvironmentBuilder.SunWorldPosition` |
-| Висота рельєфу | `LunarTerrainMesh.SampleSurfaceY` (+ MeshCollider) |
-| Посадка props | `NatureLibrary.PlantOnGround` |
-| Матеріали URP | `VisualMaterials` |
-| Ідентичність 1-го ступеня | `Stage1Vehicle` |
+## Навчання MLP (офлайн)
 
-## Потік FixedUpdate
+`EsTrainer` — ES(1+λ) з правилом 1/5: на кожному поколінні батько і λ нащадків оцінюються на одному
+міні-батчі рандомізованих сценаріїв; найкращий за валідацією зберігається в `BestWeights_*.json`.
+Навчальні, валідаційні й тестові (MC, seed 42) сценарії мають різні seed. У польоті та MC ваги заморожені.
 
-1. (Опційно Stack) open-loop → sep  
-2. Stage1: `navigation.Step` (IMU/GPS/alt) → `ControlContext` → `resolver.Evaluate` → lateral (оцінка x,z) → RK4  
-3. Touchdown → `LandingCriteria` на **істинному** plant (оцінка лише для закону)
+Точки запуску (один і той самий код): `Tools/HeadlessSim` (`run.cmd train`), меню
+**Betelgeuse → Train MLP (ES 1+λ)**, тогл «Навчання NN» у застосунку (`NeuralTrainingJob`, фоновий потік).
 
-## Візуальний конвеєр (старт)
+## Відтворюваність
 
-1. `SetupLighting` (напрям = від `SunWorldPosition`)  
-2. `LunarTerrainMesh.CreateRoutine` + collider  
-3. `BuildNatureProps` (Kenney FBX, natural scatter)  
-4. Pad / approach beacons  
-5. Sky dome + cloud quads + sun disc  
+- `LandingScenario.Sample(settings, seed)` — власний ГПВЧ на кожен сценарій, без глобального стану.
+- Monte-Carlo: trial `i` має seed `DeriveSeed(experimentSeed, i)` для всіх алгоритмів (paired).
+- Шум навігації детермінований від (seed, такт, канал).
+- Результат не залежить від кількості потоків (перевіряє `MonteCarloFairnessTests`).
 
 ## Тести
 
-- EditMode / PlayMode у `Assets/Tests/`  
-- Не запускати batchmode, якщо Editor тримає lock проєкту  
+`Assets/Tests/EditMode` — ядро, конвенція знаків, нечіткі правила, MLP, ES, чесність MC, експорт.
+`Assets/Tests/PlayMode` — компонент `RocketPhysics`, камера, логер.
+`Tools/HeadlessSim run.cmd selftest` — швидка перевірка ключових інваріантів без Unity.

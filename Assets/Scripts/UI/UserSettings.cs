@@ -15,18 +15,17 @@ public static class UserSettings
 
     public static int Tests
     {
-        get => PlayerPrefs.GetInt(P + "Tests", 15);
-        set => PlayerPrefs.SetInt(P + "Tests", Mathf.Clamp(value, 5, 40));
+        get => PlayerPrefs.GetInt(P + "Tests", 100);
+        set => PlayerPrefs.SetInt(P + "Tests", Mathf.Clamp(value, 5, 200));
     }
 
-    /// <summary>Множник burst Monte-Carlo (Порівняти).</summary>
-    public static float TimeScale
+    /// <summary>± розкид точки входу (м), застосовується при увімкненому шумі.</summary>
+    public static float Jitter
     {
-        get => PlayerPrefs.GetFloat(P + "TimeScale", 12f);
-        set => PlayerPrefs.SetFloat(P + "TimeScale", Mathf.Clamp(value, 1f, 40f));
+        get => PlayerPrefs.GetFloat(P + "Jitter", 10f);
+        set => PlayerPrefs.SetFloat(P + "Jitter", Mathf.Clamp(value, 0f, 40f));
     }
 
-    /// <summary>Time.timeScale живого польоту (одиночний Start).</summary>
     public static float LiveTimeScale
     {
         get => PlayerPrefs.GetFloat(P + "LiveTS", 1f);
@@ -80,14 +79,6 @@ public static class UserSettings
         set => PlayerPrefs.SetInt(P + "Noise", value ? 1 : 0);
     }
 
-    public static bool Train
-    {
-        // За замовчуванням вимкнено: стабільна презентація; увімкнути для ES research-демо
-        get => PlayerPrefs.GetInt(P + "Train", 0) != 0;
-        set => PlayerPrefs.SetInt(P + "Train", value ? 1 : 0);
-    }
-
-    /// <summary>Hybrid MLP residual увімк (false = лише Fuzzy; за замовч. вимк).</summary>
     public static bool HybridResidual
     {
         // Ключ v2: старий HybRes за замовч. був 1 і лишав residual завжди увімкненим

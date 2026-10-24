@@ -69,6 +69,8 @@ public static class ResearchExporter
         public int protocolVersion = DefenseBaseline.ProtocolVersion;
         public bool pairedSeeds = true;
         public bool hybridResidual = true;
+        /// <summary>Опис навчених ваг MLP, використаних у пакеті.</summary>
+        public string weightsInfo = "";
         public float startHeight = 1800f;
         public float startDescentSpeed = 72f;
         public float startTiltDeg = 3.5f;
@@ -431,10 +433,12 @@ public static class ResearchExporter
         return
             "**Відповідність темі МКР**\n\n" +
             "- **Автономія:** `NavigationEstimator` (IMU + радіовисотомір + GPS-подібний, complementary) → " +
-            "`SoftLandingGuidance` → `ILandingController` A–D. Закон читає оцінку NAV.\n" +
-            "- **Нечітка логіка:** Sugeno-0 5×5 (`FuzzyLandingController`).\n" +
-            "- **Машинне навчання:** MLP 5→8→2 + ES(1+1) онлайн (`NeuralController`; λ масштабує σ, не паралельна популяція).\n" +
-            "- **Інтелектуальна система:** Hybrid Neuro-Fuzzy residual (`HybridController`; OFF = ablation Fuzzy-only).\n" +
+            "спільне наведення (`SoftLandingGuidance`, `LateralGuidance`) → `ILandingController` A–D. Закон читає оцінку NAV.\n" +
+            "- **Нечітка логіка:** Sugeno-0, дві бази правил 5×5: тяга (h × |Vy|) і орієнтація (e × ė) (`FuzzyLandingController`).\n" +
+            "- **Машинне навчання:** MLP 5→8→2 (`MlpPolicy`), ваги навчені офлайн ES(1+λ) на рандомізованих сценаріях " +
+            "(`EsTrainer`), у польоті та MC заморожені; виходи — поправка тяги і масштаб бічного наведення.\n" +
+            "- **Інтелектуальна система:** Hybrid Neuro-Fuzzy = нечіткий закон B + окремо навчений MLP-residual " +
+            "(`HybridController`; residual OFF ⇒ D ≡ B, ablation).\n" +
             "- **Об'єкт:** 1-й ступінь F9-class (25.6 т, Ø 3.66 м, 9 РРД / посадка 1, 4 fins, 4 ноги), Earth LZ, після відділення.\n" +
             "- **Не моделюється:** орбіта, 2/3 ступені, Місяць, industrial Kalman/INS, CFD, сертифікація. Гібрид ≠ ANFIS.";
     }
@@ -492,7 +496,7 @@ public static class ResearchExporter
         sb.AppendLine("## 3. Пояснення");
         sb.AppendLine();
         sb.AppendLine("```");
-        sb.AppendLine(m.BuildUserSummary(d.maxTouchdownVelocity, d.maxLandingAngle, d.maxHorizontalMiss, d.maxHorizontalSpeed));
+        sb.AppendLine(m.BuildUserSummary(true, d.maxTouchdownVelocity, d.maxLandingAngle, d.maxHorizontalMiss, d.maxHorizontalSpeed));
         sb.AppendLine("```");
         sb.AppendLine();
         sb.AppendLine("## 4. Графіки");
@@ -907,7 +911,7 @@ public static class ResearchExporter
         sb.AppendLine();
         sb.AppendLine("Один експеримент: кожен алгоритм (PID / Fuzzy / Neural / Hybrid) на **ділянці посадки 1-го ступеня** (N разів).");
         sb.AppendLine("**Paired seeds** — trial `i` має однакові збурення для всіх алгоритмів (чесне порівняння).");
-        sb.AppendLine("Вітер/шум застосовуються після відділення (MC стартує вже у фазі Stage1).");
+        sb.AppendLine("Шум навігації (IMU/GPS/висотомір, 0.35σ) вмикається разом з «шумом»; ваги MLP під час пакета не змінюються.");
         sb.AppendLine();
         sb.AppendLine($"| | |");
         sb.AppendLine($"|--|--|");
@@ -919,6 +923,7 @@ public static class ResearchExporter
         sb.AppendLine($"| **Seed** | `{d.experimentSeed}` |");
         sb.AppendLine($"| **Protocol** | v{d.protocolVersion} · paired={(d.pairedSeeds ? "yes" : "no")} |");
         sb.AppendLine($"| **Hybrid residual** | {(d.hybridResidual ? "ON (Neuro-Fuzzy)" : "OFF = Fuzzy-only ablation")} |");
+        sb.AppendLine($"| **Ваги MLP (заморожені)** | {(string.IsNullOrEmpty(d.weightsInfo) ? "—" : d.weightsInfo)} |");
         sb.AppendLine($"| **h₀** | {d.startHeight:F0} м |");
         sb.AppendLine($"| **|Vy|₀** | {d.startDescentSpeed:F0} м/с |");
         sb.AppendLine($"| **нахил₀** | {d.startTiltDeg:F1}° |");

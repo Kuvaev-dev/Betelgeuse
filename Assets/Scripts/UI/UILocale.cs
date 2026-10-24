@@ -53,27 +53,27 @@ public static class UILocale
         return current == Lang.UK ? pair.uk : pair.en;
     }
 
-    public static string ModeName(RocketPhysics.ControlMode m) => m switch
+    public static string ModeName(ControlMode m) => m switch
     {
-        RocketPhysics.ControlMode.Fuzzy => T("mode_fuzzy"),
-        RocketPhysics.ControlMode.Neural => T("mode_neural"),
-        RocketPhysics.ControlMode.Hybrid => T("mode_hybrid"),
+        ControlMode.Fuzzy => T("mode_fuzzy"),
+        ControlMode.Neural => T("mode_neural"),
+        ControlMode.Hybrid => T("mode_hybrid"),
         _ => T("mode_pid")
     };
 
-    public static string ModeNameShort(RocketPhysics.ControlMode m) => m switch
+    public static string ModeNameShort(ControlMode m) => m switch
     {
-        RocketPhysics.ControlMode.Fuzzy => T("mode_short_fuzzy"),
-        RocketPhysics.ControlMode.Neural => T("mode_short_neural"),
-        RocketPhysics.ControlMode.Hybrid => T("mode_short_hybrid"),
+        ControlMode.Fuzzy => T("mode_short_fuzzy"),
+        ControlMode.Neural => T("mode_short_neural"),
+        ControlMode.Hybrid => T("mode_short_hybrid"),
         _ => T("mode_short_pid")
     };
 
-    public static string ModeExplain(RocketPhysics.ControlMode m) => m switch
+    public static string ModeExplain(ControlMode m) => m switch
     {
-        RocketPhysics.ControlMode.Fuzzy => T("explain_b"),
-        RocketPhysics.ControlMode.Neural => T("explain_c"),
-        RocketPhysics.ControlMode.Hybrid => T("explain_d"),
+        ControlMode.Fuzzy => T("explain_b"),
+        ControlMode.Neural => T("explain_c"),
+        ControlMode.Hybrid => T("explain_d"),
         _ => T("explain_a")
     };
 
@@ -125,7 +125,6 @@ public static class UILocale
         ["st_stop"] = new("ЗУПИНЕНО", "STOPPED"),
         ["st_pause"] = new("ПАУЗА", "PAUSED"),
         ["st_batch"] = new("АВТО-ТЕСТ STAGE-1", "STAGE-1 AUTO-TEST"),
-        ["st_stack"] = new("ПІДЙОМ ПАКЕТА", "STACK ASCENT"),
         ["st_sep"] = new("ВІДДІЛЕННЯ", "SEPARATION"),
 
         // Modes
@@ -150,8 +149,7 @@ public static class UILocale
             "Baseline: hover + PID on v=−√(2ah). No intelligence — the reference."),
         ["explain_b"] = new("Нечітка логіка: Sugeno-0, база 5×5 (висота × |Vy|) → тяга/TVC.",
             "Fuzzy logic: Sugeno-0, 5×5 rule base (height × |Vy|) → thrust/TVC."),
-        ["explain_c"] = new("МН: MLP 5→8→2 (h, Vy, маса, нахил, Vh). «Навчання NN» = ES(1+1) після посадки.",
-            "ML: MLP 5→8→2 (h, Vy, mass, tilt, Vh). Train NN = ES(1+1) after landing."),
+        ["explain_c"] = new("МН: MLP 5→8→2 (h, Vy, маса, нахил, Vh) поверх профілю soft-landing; ваги навчені офлайн ES(1+λ), у польоті заморожені.", "ML: MLP 5→8→2 (h, Vy, mass, tilt, Vh) on top of the soft-landing profile; weights trained offline by ES(1+λ), frozen in flight."),
         ["explain_d"] = new("Тема: Hybrid Neuro-Fuzzy = Sugeno + MLP residual. OFF = ablation Fuzzy-only.",
             "Topic: Hybrid Neuro-Fuzzy = Sugeno + MLP residual. OFF = Fuzzy-only ablation."),
 
@@ -260,7 +258,7 @@ public static class UILocale
         // Слайдери — що змінюється + одиниця в колонці значення
         ["sl_tests"] = new("Запусків на алгоритм", "Runs per algorithm"),
         ["sl_wind"] = new("Швидкість вітру", "Wind speed"),
-        ["sl_time"] = new("Прискорення MC", "MC speed"),
+        ["sl_jitter"] = new("Розкид точки входу ±", "Entry point spread ±"),
         ["sl_live"] = new("Швидкість симуляції", "Simulation speed"),
         ["sl_seed"] = new("Seed (відтворюваність)", "Seed (reproducible)"),
         ["sl_h0"] = new("Початкова висота h₀", "Start altitude h₀"),
@@ -270,7 +268,7 @@ public static class UILocale
         ["sl_angn"] = new("Шум кута ±", "Angle noise ±"),
         ["sl_tests_u"] = new("зап.", "runs"),
         ["sl_wind_u"] = new("м/с", "m/s"),
-        ["sl_time_u"] = new("x", "x"),
+        ["sl_jitter_u"] = new("м", "m"),
         ["sl_live_u"] = new("x", "x"),
         ["sl_seed_u"] = new("#", "#"),
         ["sl_h0_u"] = new("м", "m"),
@@ -279,27 +277,17 @@ public static class UILocale
         ["sl_massn_u"] = new("%", "%"),
         ["sl_angn_u"] = new("°", "°"),
         ["tg_noise"] = new("Шум маси/кута", "Mass/angle noise"),
-        ["tg_train"] = new("Навчання NN (ES)", "Train NN (ES)"),
+        ["tg_train"] = new("Навчання NN (ES 1+λ)", "Train NN (ES 1+λ)"),
         ["tg_residual"] = new("Hybrid residual NN (ON = Neuro-Fuzzy)", "Hybrid residual NN (ON = Neuro-Fuzzy)"),
         ["msg_residual_on"] = new("Hybrid Neuro-Fuzzy: Sugeno + MLP residual ON", "Hybrid Neuro-Fuzzy: Sugeno + MLP residual ON"),
         ["msg_residual_off"] = new("Ablation: Hybrid = Fuzzy-only (residual OFF)",
             "Ablation: Hybrid = Fuzzy-only (residual OFF)"),
         ["msg_ideal_cleared"] = new("Ідеальний режим скинуто — діють слайдери правої панелі.",
             "Ideal mode cleared — right-panel sliders now apply."),
-        ["msg_train_on"] = new("Навчання NN УВІМК. Режим C або D → ЗАПУСТИТИ кілька разів.\nПісля кожної посадки ES оцінює ваги: краще — зберегти, гірше — відкат + мутація.",
-            "NN training ON. Mode C or D → START several times.\nAfter each landing ES scores weights: keep if better, else rollback + mutate."),
-        ["msg_train_off"] = new("Навчання NN ВИМК. Ваги з BestWeights_Neural.json не змінюються.",
-            "NN training OFF. Weights from BestWeights_Neural.json stay frozen."),
-        ["msg_train_flight"] = new("ES: цей політ — спроба. Після посадки ваги оновляться.",
-            "ES: this flight is a trial. Weights update after landing."),
-        ["msg_nn_better"] = new("NN-ES gen {0}: cost {1:F2} — краще, ваги збережено (σ={2:F3}). ЗАПУСТИТИ ще раз.",
-            "NN-ES gen {0}: cost {1:F2} — improved, weights saved (σ={2:F3}). START again."),
-        ["msg_nn_worse"] = new("NN-ES gen {0}: cost {1:F2} > best {2:F2} — відкат до еліти. ЗАПУСТИТИ ще раз.",
-            "NN-ES gen {0}: cost {1:F2} > best {2:F2} — rolled back to elite. START again."),
-        ["nn_status_on"] = new("ES(1+1) онлайн: кожна посадка = спроба; λ масштабує σ.",
-            "ES(1+1) online: each landing = trial; λ scales σ."),
-        ["nn_status_off"] = new("NN: навчання вимкнено. Увімкніть «Навчання NN (ES)».",
-            "NN: training off. Enable “Train NN (ES)”."),
+        ["msg_train_on"] = new("Навчання ES(1+λ) запущено у фоні: Neural, потім Hybrid (рандомізовані сценарії).\nПольоти та MC до завершення використовують попередні ваги.", "ES(1+λ) training started in background: Neural, then Hybrid (randomized scenarios).\nFlights and MC use the previous weights until it finishes."),
+        ["msg_train_off"] = new("Навчання NN скасовано. Ваги не змінено.", "NN training cancelled. Weights unchanged."),
+        ["msg_train_done"] = new("Навчання завершено, ваги збережено і завантажено.\n{0}", "Training finished; weights saved and loaded.\n{0}"),
+        ["nn_status_off"] = new("NN: навчені ваги не знайдено — нейтральна мережа (ΔT=0).", "NN: no trained weights — neutral network (ΔT=0)."),
         ["msg_demo_start"] = new("Демо: Hybrid · посадка 1-го ступеня (Earth LZ)…",
             "Demo: Hybrid · first-stage landing (Earth LZ)…"),
         ["msg_demo_flight"] = new("Демо: Hybrid садить 1-й ступінь на Earth LZ.",
@@ -319,36 +307,36 @@ public static class UILocale
         ["help_sec_gnc"] = new("АВТОНОМНИЙ GNC", "AUTONOMOUS GNC"),
         ["help_gnc"] = new(
             "Navigation: IMU + радіовисотомір + GPS-подібний, complementary filter (не Kalman).\n" +
-            "Guidance: soft-landing v=−√(2ah) до pad.\n" +
-            "Control: TVC + throttle. Закон читає оцінку NAV; критерії — по істинному plant.",
+            "Guidance (спільне для A–D): v*=−√(2ah) по вертикалі; бічне — PID позиції → бажаний нахил корпусу ≤12°.\n" +
+            "Control: алгоритм A–D задає тягу і TVC за оцінкою NAV; критерії — по істинному стану.",
             "Navigation: IMU + radar altimeter + GPS-like, complementary filter (not Kalman).\n" +
-            "Guidance: soft-landing v=−√(2ah) to pad.\n" +
-            "Control: TVC + throttle. The law reads the NAV estimate; gates use the true plant."),
+            "Guidance (shared by A–D): v*=−√(2ah) vertically; lateral PID → desired body tilt ≤12°.\n" +
+            "Control: algorithm A–D sets thrust and TVC from the NAV estimate; gates use the true state."),
         ["help_sec_algo"] = new("МЕТОДИ A–D", "METHODS A–D"),
         ["help_algo"] = new(
             "A PID — класичний еталон.\n" +
-            "B Fuzzy — Sugeno-0 5×5.\n" +
-            "C Neural — MLP 5→8→2 (h, Vy, маса, нахил, Vh) + ES(1+1) онлайн; λ лише масштабує σ.\n" +
-            "D Hybrid ★ — Sugeno + MLP residual (інтелектуальна система теми). Residual OFF = ablation.",
+            "B Fuzzy — Sugeno-0: дві бази 5×5 (тяга h×|Vy|, орієнтація e×ė).\n" +
+            "C Neural — профіль + MLP 5→8→2 residual; ваги навчені ES(1+λ) офлайн.\n" +
+            "D Hybrid ★ — закон B + окремо навчений MLP residual. Residual OFF ⇒ D ≡ B (ablation).",
             "A PID — classical baseline.\n" +
-            "B Fuzzy — Sugeno-0 5×5.\n" +
-            "C Neural — MLP 5→8→2 (h, Vy, mass, tilt, Vh) + ES(1+1) online; λ only scales σ.\n" +
-            "D Hybrid ★ — Sugeno + MLP residual (the intelligent system). Residual OFF = ablation."),
+            "B Fuzzy — Sugeno-0: two 5×5 rule bases (thrust h×|Vy|, attitude e×ė).\n" +
+            "C Neural — profile + MLP 5→8→2 residual; weights trained offline by ES(1+λ).\n" +
+            "D Hybrid ★ — law B + separately trained MLP residual. Residual OFF ⇒ D ≡ B (ablation)."),
         ["help_sec_controls"] = new("КЕРУВАННЯ", "CONTROLS"),
         ["help_sec_landing"] = new("SOFT-LANDING (STAGE-1)", "SOFT-LANDING (STAGE-1)"),
         ["help_sec_research"] = new("ДОСЛІДЖЕННЯ", "RESEARCH"),
         ["help_sec_limits"] = new("ОБМЕЖЕННЯ (ЧЕСНО)", "LIMITS (HONEST)"),
         ["help_limits"] = new(
             "Немає: орбіта, 2/3 ступені, Місяць, industrial INS, CFD, сертифікація. Гібрид ≠ ANFIS.\n" +
-            "Візуал ~28 м при натурних масі/Ø/тязі. Ideal [I] — чистий номінал; з вітром відмови очікувані.",
+            "Візуал ~28 м при натурних масі/Ø/тязі. MLP навчена на вітрі 0–18 м/с; поза цим діапазоном якість падає.",
             "Not modelled: orbit, stages 2/3, Moon, industrial INS, CFD, certification. Hybrid ≠ ANFIS.\n" +
-            "Visual ~28 m with full-scale mass/Ø/thrust. Ideal [I] is a clean nominal; wind failures are expected."),
+            "Visual ~28 m with full-scale mass/Ø/thrust. MLP trained on wind 0–18 m/s; quality drops outside this range."),
         ["help_sec_defense"] = new("СЦЕНАРІЙ ЗАХИСТУ", "DEFENSE SCRIPT"),
         ["help_defense"] = new(
-            "M — Hybrid Ideal. 1–4 + I + Space — кожен метод. B — протокол (seed 42) → P — MC A–D.\n" +
-            "E — експорт SimulationLogs/. Residual OFF — ablation Hybrid≈Fuzzy. F1 — ця картка.",
-            "M — Hybrid Ideal. 1–4 + I + Space — each method. B — protocol (seed 42) → P — MC A–D.\n" +
-            "E — export SimulationLogs/. Residual OFF — Hybrid≈Fuzzy ablation. F1 — this card."),
+            "M — Hybrid, номінал. 1–4 + I + Space — кожен метод. B — протокол (вітер 15 м/с, seed 42) → P — MC A–D.\n" +
+            "E — експорт SimulationLogs/. Residual OFF — ablation (D ≡ B). F1 — ця картка.",
+            "M — Hybrid, nominal. 1–4 + I + Space — each method. B — protocol (wind 15 m/s, seed 42) → P — MC A–D.\n" +
+            "E — export SimulationLogs/. Residual OFF — ablation (D ≡ B). F1 — this card."),
         ["help_k_modes"] = new("PID / Fuzzy / Neural / Hybrid (GNC лише Stage-1)",
             "PID / Fuzzy / Neural / Hybrid (GNC on Stage-1 only)"),
         ["help_k_run"] = new("старт · стоп", "start · stop"),
@@ -364,11 +352,11 @@ public static class UILocale
             "|Vy|<3.5 m/s · tilt<7° · miss<40 m · |Vh|<6.5 m/s"),
         ["help_research"] = new(
             "P — Monte-Carlo A–D, paired seeds (trial i однаковий для всіх).\n" +
-            "B — DefenseBaseline v14 (seed 42, N=15, вітер 5 м/с). Слайдери діють на START; вітер — і в польоті.\n" +
-            "Навчання NN: тогл ES · C або D · кілька посадок. MC навчання ВИМК (чесність).",
+            "B — протокол v15 (seed 42, N=100, вітер 15 м/с, розкид 25 м, шум NAV). Слайдери діють на START; вітер — і в польоті.\n" +
+            "Навчання NN: тогл запускає ES(1+λ) у фоні; у польоті і MC ваги заморожені.",
             "P — Monte-Carlo A–D, paired seeds (trial i identical for all).\n" +
-            "B — DefenseBaseline v14 (seed 42, N=15, wind 5 m/s). Sliders apply on START; wind also live.\n" +
-            "Train NN: ES toggle · C or D · several landings. MC training OFF (fairness)."),
+            "B — protocol v15 (seed 42, N=100, wind 15 m/s, spread 25 m, NAV noise). Sliders apply on START; wind also live.\n" +
+            "Train NN: toggle runs ES(1+λ) in background; weights are frozen in flight and MC."),
         ["help_body"] = new(
             "ТЕМА: інтелектуальна автономна посадка 1-го ступеня (нечітка логіка + МН)\n\n" +
             "КЕРУВАННЯ\n" +
@@ -380,10 +368,10 @@ public static class UILocale
             "SOFT-LANDING (Stage-1)\n" +
             "  |Vy|<3.5 м/с · нахил<7° · промах<40 м · |Vh|<6.5\n\n" +
             "ДОСЛІДЖЕННЯ\n" +
-            "  B — DefenseBaseline v14 (seed 42) · P — MC paired seeds\n" +
+            "  B — протокол v15 (seed 42, вітер 15 м/с) · P — MC paired seeds\n" +
             "  NAV: IMU + висотомір + GPS complementary\n" +
             "  Слайдери справа діють з наступного START (вітер — і в польоті)\n" +
-            "  Навчання NN: тогл ES · режим C/D · кілька посадок",
+            "  Навчання NN: тогл → ES(1+λ) у фоні (ваги → BestWeights_*.json)",
             "TOPIC: intelligent autonomous first-stage landing (fuzzy + ML)\n\n" +
             "CONTROLS\n" +
             "  1–4  PID / Fuzzy / Neural / Hybrid\n" +
@@ -394,15 +382,13 @@ public static class UILocale
             "SOFT-LANDING (Stage-1)\n" +
             "  |Vy|<3.5 m/s · tilt<7° · miss<40 m · |Vh|<6.5\n\n" +
             "RESEARCH\n" +
-            "  B — DefenseBaseline v14 (seed 42) · P — MC paired seeds\n" +
+            "  B — protocol v15 (seed 42, wind 15 m/s) · P — MC paired seeds\n" +
             "  NAV: IMU + altimeter + GPS complementary\n" +
             "  Right-panel sliders apply on next START (wind also live)\n" +
-            "  Train NN: ES toggle · mode C/D · several landings"),
+            "  Train NN: toggle → ES(1+λ) in background (weights → BestWeights_*.json)"),
 
         // Смуга фази польоту (низ)
         ["step_ready"] = new("Крок: готовність | 1-й ступінь на Earth LZ", "Step: ready | first stage on Earth LZ"),
-        ["step_stack"] = new("Крок: підйом пакета | до відділення", "Step: stack ascent | before separation"),
-        ["step_sep"] = new("Крок: відділення | далі лише 1-й ступінь", "Step: separation | first stage only"),
         ["step_high"] = new("Крок: високий спуск Stage-1 | профіль", "Step: Stage-1 high descent | profile"),
         ["step_approach"] = new("Крок: підхід | гальмування + вирівнювання", "Step: approach | brake + upright"),
         ["step_powered"] = new("Крок: активне гальмування | T/W > 1", "Step: powered descent | T/W > 1"),
@@ -439,8 +425,6 @@ public static class UILocale
             "MC on Stage-1 landing segment (after sep). Paired A–D."),
         ["ins_ok"] = new("Посадку 1-го ступеня виконано. Score {0:F0}/100.",
             "First-stage landing complete. Score {0:F0}/100."),
-        ["ins_stack"] = new("Підйом 3-ступеневого пакета. A–D ще не активні.",
-            "Three-stage stack ascent. A–D not active yet."),
         ["ins_sep"] = new("Відділення: далі лише 1-й ступінь + GNC A–D.",
             "Separation: first stage only + GNC A–D."),
         ["ins_high_low_twr"] = new("Високий спуск: тяга нижче зависання — гальмування ближче до землі.",

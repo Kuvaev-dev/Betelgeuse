@@ -1,12 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// Спільний soft-landing профіль v_target=−√(2ah) + PD; TVC upright; BlendThrust.
-/// База для всіх режимів і термінал h&lt;~25 м.
+/// Спільні закони вертикального наведення та орієнтації, які використовують усі режими A–D:
+/// профіль зниження v* = −√(2ah), тяга профілю, PD орієнтації (TVC), змішування тяги.
 /// </summary>
 public static class SoftLandingGuidance
 {
-    /// <summary>Цільова вертикальна швидкість (від’ємна = вниз).</summary>
+    /// <summary>Цільова вертикальна швидкість (від’ємна = вниз), м/с.</summary>
     public static float TargetDescentRate(float height)
     {
         float h = Mathf.Max(0f, height);
@@ -18,8 +18,8 @@ public static class SoftLandingGuidance
     }
 
     /// <summary>
-    /// Тяга профілю, Н. Баланс soft-touchdown + запас палива (~60 с з h₀=1600).
-    /// Агресивний catch-up спалював бак за ~130 с → Vy~22 після dry-out.
+    /// Тяга профілю soft-landing, Н: hover·(1 + a/g) + P-корекція по помилці швидкості
+    /// + термінальні обмеження (h &lt; 25 м) для м’якого контакту.
     /// </summary>
     public static float ProfileThrust(float height, float verticalVelocity, float mass)
     {
@@ -35,7 +35,7 @@ public static class SoftLandingGuidance
         float aUp = h < 8f ? 0.35f : (h < 80f ? 1.05f : 1.2f);
         float mult = 1f + aUp / Mathf.Max(0.1f, g);
 
-        float err = target - v; // >0 when descending too fast
+        float err = target - v; // > 0 — знижуємось надто швидко
         float kp = h < 80f ? 0.055f : 0.04f;
         mult += Mathf.Clamp(err * kp, -0.4f, 0.9f);
 
@@ -62,40 +62,29 @@ public static class SoftLandingGuidance
         return hover * Mathf.Clamp(mult, 0.15f, 2.5f);
     }
 
-    /// <summary>
-    /// TVC-стабілізація: τ ∝ (−td.z, td.x), td = R(cmd)·up.
-    /// Cross(worldUp, bodyUp) &gt; 0 ⇒ cmd &gt; 0 (відновлювальний момент).
-    /// </summary>
-    public static Vector3 AttitudeGimbal(
-        Quaternion rotation, Vector3 angularVelocityBody,
-        float maxDeg = 14f, float kp = 0.72f, float kd = 0.95f)
-    {
-        Vector3 bodyUp = rotation * Vector3.up;
-        Vector3 axisWorld = Vector3.Cross(Vector3.up, bodyUp);
-        Vector3 axisBody = Quaternion.Inverse(rotation) * axisWorld;
-
-        float cmdX = axisBody.x * kp + angularVelocityBody.x * kd;
-        float cmdZ = axisBody.z * kp + angularVelocityBody.z * kd;
-
-        return new Vector3(
-            Mathf.Clamp(cmdX * Mathf.Rad2Deg, -maxDeg, maxDeg),
-            0f,
-            Mathf.Clamp(cmdZ * Mathf.Rad2Deg, -maxDeg, maxDeg));
-    }
-
-    /// <summary>PD по SignedAngle-помилках (градуси) + rate damp.</summary>
-    public static Vector3 AttitudeGimbal(float pitchErrorDeg, float yawErrorDeg,
-        float pitchRateDeg = 0f, float yawRateDeg = 0f, float maxDeg = 14f)
-    {
-        return new Vector3(
-            Mathf.Clamp(-pitchErrorDeg * 0.55f - pitchRateDeg * 0.65f, -maxDeg, maxDeg),
-            0f,
-            Mathf.Clamp(-yawErrorDeg * 0.55f - yawRateDeg * 0.65f, -maxDeg, maxDeg));
-    }
+    /// <summary>Типові коефіцієнти PD орієнтації (град TVC на град помилки / на град/с).</summary>
+    public const float AttitudeKp = 0.72f;
+    public const float AttitudeKd = 1.6f;
+    public const float AttitudeMaxDeg = 14f;
 
     /// <summary>
-    /// Знижує тягу лише при великому нахилі (не різати burn на 10–25°).
+    /// PD орієнтації: δ = Kp·e + Kd·ω (однакова конвенція знаків для всіх режимів,
+    /// додатні e/ω ⇒ додатний δ створює відновлювальний момент).
     /// </summary>
+    public static Vector3 AttitudeGimbal(float errXDeg, float errZDeg, float rateXDeg, float rateZDeg,
+        float kp = AttitudeKp, float kd = AttitudeKd, float maxDeg = AttitudeMaxDeg)
+    {
+        return new Vector3(
+            Mathf.Clamp(kp * errXDeg + kd * rateXDeg, -maxDeg, maxDeg),
+            0f,
+            Mathf.Clamp(kp * errZDeg + kd * rateZDeg, -maxDeg, maxDeg));
+    }
+
+    public static Vector3 AttitudeGimbal(in ControlContext ctx,
+        float kp = AttitudeKp, float kd = AttitudeKd, float maxDeg = AttitudeMaxDeg)
+        => AttitudeGimbal(ctx.PitchErrorDeg, ctx.YawErrorDeg, ctx.PitchRateDeg, ctx.YawRateDeg, kp, kd, maxDeg);
+
+    /// <summary>Зменшення тяги лише при аварійному нахилі (&gt; 28°).</summary>
     public static float UprightThrustScale(float tiltDeg)
     {
         if (tiltDeg < 28f) return 1f;
@@ -104,46 +93,37 @@ public static class SoftLandingGuidance
     }
 
     /// <summary>
-    /// Змішує профіль і «розумну» тягу.
-    /// Біля землі (h&lt;25 м) smartWeight → 0 — гарантія soft contact.
+    /// Змішує тягу профілю з «розумною» тягою з вагою w та обмеженням відхилення від профілю.
+    /// Біля землі (h &lt; 25 м) вага плавно зменшується до 38 % — гарантія м’якого контакту.
     /// </summary>
     public static float BlendThrust(float profileThrust, float smartThrust, float smartWeight,
         float mass, float height, float maxDevFrac = 0.45f)
     {
         float w = Mathf.Clamp01(smartWeight);
-        bool ideal = IdealLandingPresets.Active;
         if (height < 25f)
-        {
-            float floor = ideal ? 0f : 0.38f;
-            w *= Mathf.Lerp(floor, 1f, Mathf.Clamp01(height / 25f));
-        }
+            w *= Mathf.Lerp(0.38f, 1f, Mathf.Clamp01(height / 25f));
 
         float blended = Mathf.Lerp(profileThrust, smartThrust, w);
-        float g = AtmosphereModel.GetGravity(Mathf.Max(0f, height));
-        float hover = mass * g;
+        float hover = mass * AtmosphereModel.GetGravity(Mathf.Max(0f, height));
         float maxDev = hover * Mathf.Clamp(maxDevFrac, 0.1f, 1.2f);
         if (height < 30f)
-            maxDev = Mathf.Min(maxDev, hover * (ideal ? 0.22f : 0.42f));
+            maxDev = Mathf.Min(maxDev, hover * 0.42f);
         return Mathf.Clamp(blended, profileThrust - maxDev, profileThrust + maxDev);
     }
 
-    /// <summary>1D симуляція для EditMode-тестів. Повертає |Vy| на touchdown.</summary>
+    /// <summary>1D-симуляція вертикального каналу (EditMode-тести профілю). Повертає |Vy| на touchdown.</summary>
     public static float SimulateVerticalLanding(
         float startH, float startVy, float mass, float maxThrust,
         float dt = 0.005f, float maxTime = 200f)
     {
-        float h = startH;
-        float v = startVy;
-        float t = 0f;
+        float h = startH, v = startVy, t = 0f;
         while (h > 0.05f && t < maxTime)
         {
             float g = AtmosphereModel.GetGravity(Mathf.Max(0f, h));
             float thrust = Mathf.Min(ProfileThrust(h, v, mass), maxThrust);
-            float a = thrust / Mathf.Max(1f, mass) - g;
-            v += a * dt;
+            v += (thrust / Mathf.Max(1f, mass) - g) * dt;
             h += v * dt;
             t += dt;
-            if (h < 0f) { h = 0f; break; }
         }
         return Mathf.Abs(v);
     }
